@@ -28,7 +28,7 @@ const SCHEMA = `
  * Bumped whenever the stored PullRequest shape changes. A snapshot in an older format is
  * dropped on open: it is only a cache, and the poller refetches it right away.
  */
-const SNAPSHOT_FORMAT = 4;
+const SNAPSHOT_FORMAT = 5;
 
 /** Opens (and creates if needed) the SQLite file that holds the latest snapshot. */
 export function openStore(path: string): SnapshotStore {

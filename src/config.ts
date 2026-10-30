@@ -1,12 +1,14 @@
 import { readFileSync, statSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import type { JiraConfig } from "./domain/jira.js";
 
 export type Config = {
   github: { tokenEnv: string; pollIntervalMs: number };
   repos: string[];
   team: string[];
   review: { requiredApprovals: number };
+  jira: JiraConfig;
 };
 
 export class ConfigError extends Error {
@@ -41,6 +43,12 @@ const schema = z
         required_approvals: z.number().int().min(1).default(1),
       })
       .prefault({}),
+    jira: z
+      .object({
+        base_url: z.url().nullable().default(null),
+        project_keys: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/, 'expected a project key such as "ABC"')).default([]),
+      })
+      .prefault({}),
   })
   .transform(
     (raw): Config => ({
@@ -48,6 +56,7 @@ const schema = z
       repos: raw.repos,
       team: raw.team,
       review: { requiredApprovals: raw.review.required_approvals },
+      jira: { baseUrl: raw.jira.base_url, projectKeys: raw.jira.project_keys },
     }),
   );
 

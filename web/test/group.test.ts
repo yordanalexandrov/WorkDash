@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
 import { groupByRepo } from "../src/group.js";
 
-const a1 = pullRequest({ repo: "my-org/repo-a", number: 1 });
-const a2 = pullRequest({ repo: "my-org/repo-a", number: 2 });
-const b1 = pullRequest({ repo: "my-org/repo-b", number: 1 });
-const c1 = pullRequest({ repo: "my-org/repo-c", number: 1 });
+const a1 = { ...pullRequest({ repo: "my-org/repo-a", number: 1 }), jira: [] };
+const a2 = { ...pullRequest({ repo: "my-org/repo-a", number: 2 }), jira: [] };
+const b1 = { ...pullRequest({ repo: "my-org/repo-b", number: 1 }), jira: [] };
+const c1 = { ...pullRequest({ repo: "my-org/repo-c", number: 1 }), jira: [] };
 
 describe("groupByRepo", () => {
   it("gives each repo one card holding its PRs by section, most urgent repo first", () => {

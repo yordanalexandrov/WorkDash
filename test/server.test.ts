@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import { type ClassifyRules, SECTIONS } from "../src/domain/classify.js";
+import type { JiraConfig } from "../src/domain/jira.js";
 import { buildServer } from "../src/server.js";
 import { pullRequest } from "./fixtures.js";
 
@@ -25,8 +26,49 @@ describe("GET /api/prs", () => {
       pollIntervalMs: 60_000,
       error: null,
       configError: null,
-      sections: [{ section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed" }] }, ...emptySections.slice(1)],
+      sections: [{ section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed", jira: [] }] }, ...emptySections.slice(1)],
     });
+  });
+
+  it("links each PR to the Jira tickets it names", async () => {
+    const store = openStore(":memory:");
+    const jiraPr = pullRequest({ headRefName: "feature/ABC-1-login", title: "ABC-1: Add login", body: "See XYZ-9" });
+    store.saveSnapshot({ viewer: "me", pullRequests: [jiraPr] }, new Date("2026-10-30T10:00:00Z"));
+    const server = buildServer({
+      store,
+      rules: () => rules,
+      jira: () => ({ baseUrl: "https://example.atlassian.net/browse/", projectKeys: ["ABC"] }),
+      pollIntervalMs: () => 60_000,
+      lastPollError: () => null,
+      configError: () => null,
+    });
+
+    const response = await server.inject("/api/prs");
+
+    const [served] = response.json().sections.flatMap((s: { pullRequests: unknown[] }) => s.pullRequests);
+    expect(served.jira).toEqual([{ key: "ABC-1", url: "https://example.atlassian.net/browse/ABC-1" }]);
+  });
+
+  it("links PRs with the Jira settings in effect now", async () => {
+    const store = openStore(":memory:");
+    store.saveSnapshot({ viewer: "me", pullRequests: [pullRequest({ title: "ABC-1: Add login" })] }, new Date());
+    let jira: JiraConfig = { baseUrl: null, projectKeys: [] };
+    const server = buildServer({
+      store,
+      rules: () => rules,
+      jira: () => jira,
+      pollIntervalMs: () => 60_000,
+      lastPollError: () => null,
+      configError: () => null,
+    });
+    const servedJira = async () =>
+      (await server.inject("/api/prs")).json().sections.flatMap((s: { pullRequests: { jira: unknown }[] }) => s.pullRequests)[0].jira;
+    const before = await servedJira();
+
+    jira = { baseUrl: "https://example.atlassian.net/browse/", projectKeys: ["ABC"] };
+
+    expect(before).not.toEqual([{ key: "ABC-1", url: "https://example.atlassian.net/browse/ABC-1" }]);
+    expect(await servedJira()).toEqual([{ key: "ABC-1", url: "https://example.atlassian.net/browse/ABC-1" }]);
   });
 
   it("returns empty sections and the poll error while nothing has been fetched", async () => {
