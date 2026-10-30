@@ -1,4 +1,4 @@
-import { mentions, type ReReview, reReviewActivity, unreadComments } from "./activity.js";
+import { mentions, type ReReview, reReviewActivity, sameLogin, unreadComments } from "./activity.js";
 import type { PullRequest } from "./types.js";
 
 /** Dashboard sections, in the order they are shown: most attention needed first. */
@@ -35,8 +35,6 @@ export type ClassifiedPullRequest = PullRequest & {
 
 /** When `me` last marked a PR seen; null when never. */
 export type SeenAt = (pr: PullRequest) => string | null;
-
-const sameLogin = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 function isApproved(pr: PullRequest, rules: ClassifyRules): boolean {
   if (pr.reviewDecision) return pr.reviewDecision === "APPROVED";

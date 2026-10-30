@@ -1,4 +1,4 @@
-import { mentions, repliesTo } from "./activity.js";
+import { mentions, repliesTo, reviewAskingForMore, sameLogin } from "./activity.js";
 import { type ClassifyRules, classify, type SeenAt } from "./classify.js";
 import { type CiState, type Comment, type PullRequest, pushedAt, type ReviewState, type Snapshot } from "./types.js";
 
@@ -35,7 +35,6 @@ export type PrEvent = {
 /** The snapshot the previous poll saved, with when it was fetched. */
 export type PreviousSnapshot = Snapshot & { fetchedAt: string };
 
-const sameLogin = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const key = (pr: PullRequest) => `${pr.repo}#${pr.number}`;
 const isFailed = (ci: CiState | null) => ci === "FAILURE" || ci === "ERROR";
 const headCommit = (pr: PullRequest) => pr.commits.at(-1)?.oid ?? "none";
@@ -134,8 +133,8 @@ export function diffSnapshots(
  * last review leaving comments or asking for changes; null when there is none.
  */
 function reReviewNews(old: PullRequest, pr: PullRequest, me: string, newComments: Comment[]): { id: string; actor: string } | null {
-  const review = pr.reviews.find((candidate) => sameLogin(candidate.author, me));
-  if (!review || (review.state !== "COMMENTED" && review.state !== "CHANGES_REQUESTED")) return null;
+  const review = reviewAskingForMore(pr, me);
+  if (!review) return null;
   const afterReview = (time: string) => Date.parse(time) > Date.parse(review.submittedAt);
   const oldCommits = new Set(old.commits.map((commit) => commit.oid));
   const isReply = repliesTo(pr, me);

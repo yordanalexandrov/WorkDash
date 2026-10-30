@@ -1,9 +1,10 @@
-import { type Comment, type PullRequest, pushedAt } from "./types.js";
+import { type Comment, type PullRequest, pushedAt, type Review } from "./types.js";
 
 /** What happened on someone else's PR since my last review that asks for another look. */
 export type ReReview = { newCommits: number; replies: number };
 
-const sameLogin = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+/** GitHub logins are case-insensitive. */
+export const sameLogin = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 // GitHub writes "…:00Z" and the store "…:00.000Z", so compare instants rather than strings.
 const after = (time: string, since: string | null) => since === null || Date.parse(time) > Date.parse(since);
@@ -32,6 +33,12 @@ export function repliesTo(pr: PullRequest, me: string): (comment: Comment) => bo
     sameLogin(comment.author, pr.author) || (comment.thread !== undefined && myThreads.has(comment.thread)) || mentions(comment.body, me);
 }
 
+/** My latest review on the PR when it left comments or asked for changes; null otherwise. */
+export function reviewAskingForMore(pr: PullRequest, me: string): Review | null {
+  const review = pr.reviews.find((candidate) => sameLogin(candidate.author, me));
+  return review && (review.state === "COMMENTED" || review.state === "CHANGES_REQUESTED") ? review : null;
+}
+
 /**
  * New commits and replies to me on someone else's PR after my last review that left comments or
  * requested changes, counted from whichever is later: that review or `seenAt`. A reply is a comment
@@ -39,8 +46,8 @@ export function repliesTo(pr: PullRequest, me: string): (comment: Comment) => bo
  * Null when I have no such review or nothing new happened since.
  */
 export function reReviewActivity(pr: PullRequest, me: string, seenAt: string | null): ReReview | null {
-  const review = pr.reviews.find((candidate) => sameLogin(candidate.author, me));
-  if (!review || (review.state !== "COMMENTED" && review.state !== "CHANGES_REQUESTED")) return null;
+  const review = reviewAskingForMore(pr, me);
+  if (!review) return null;
   const since = seenAt !== null && after(seenAt, review.submittedAt) ? seenAt : review.submittedAt;
 
   const isReplyToMe = repliesTo(pr, me);
