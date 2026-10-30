@@ -1,4 +1,5 @@
-import type { DashboardState, Section } from "./api.js";
+import type { DashboardState, PollError, Section } from "./api.js";
+import type { StreamStatus } from "./events.js";
 
 const SECTION_TITLES: Record<Section, string> = {
   waiting_on_me: "Чака теб",
@@ -23,13 +24,29 @@ export function age(since: string, now: Date = new Date()): string {
 /** The header line: who the dashboard is for and how fresh it is. `state` is null before the server answers. */
 export function statusText(state: DashboardState | null): string {
   if (!state) return "Зареждане…";
-  return state.fetchedAt ? `${state.viewer} · обновено ${new Date(state.fetchedAt).toLocaleTimeString()}` : "Чака първия poll…";
+  return state.fetchedAt ? `${state.viewer} · последен успешен poll в ${new Date(state.fetchedAt).toLocaleTimeString()}` : "Чака първия poll…";
 }
 
 /** The error banner, or null when there is nothing to report; a lost server outranks a failed poll. */
-export function errorText(state: DashboardState | null, connectionError: string | null): string | null {
-  if (connectionError) return `Няма връзка със сървъра: ${connectionError}`;
-  return state?.error ? `Последният poll е неуспешен: ${state.error}` : null;
+export function errorText(state: DashboardState | null, stream: StreamStatus): string | null {
+  if (stream === "reconnecting") return "Няма връзка със сървъра, свързване отново…";
+  if (state?.error) return pollErrorText(state.error);
+  return state?.problems.length ? `Последният poll е непълен: ${state.problems.join("; ")}` : null;
+}
+
+function pollErrorText({ kind, message, resetAt }: PollError): string {
+  switch (kind) {
+    case "auth":
+      return `GitHub отказва токена (невалиден или изтекъл): ${message}`;
+    case "rate_limit":
+      return resetAt
+        ? `Изчерпан rate limit на GitHub, нов опит в ${new Date(resetAt).toLocaleTimeString()}`
+        : `Изчерпан rate limit на GitHub: ${message}`;
+    case "unreachable":
+      return `GitHub е недостъпен: ${message}`;
+    default:
+      return `Последният poll е неуспешен: ${message}`;
+  }
 }
 
 /** The banner for a config.yaml edit the server rejected, or null when the file on disk is in effect. */

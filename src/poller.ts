@@ -1,26 +1,32 @@
 import type { SnapshotStore } from "./db.js";
+import { classifyPollError, nextPollDelay, type PollHealth } from "./domain/poll-error.js";
 import { fetchSnapshot } from "./github/client.js";
 
 export type PollerSettings = { repos: string[]; token: string; intervalMs: number };
 
 export type Poller = {
-  lastError(): string | null;
+  health(): PollHealth;
   /** Switches to new settings and polls with them as soon as any poll under way has finished. */
   reconfigure(settings: PollerSettings): void;
   stop(): void;
 };
 
-/** Polls GitHub right away and then every `intervalMs`, saving each snapshot to the store. */
+/**
+ * Polls GitHub right away and then every `intervalMs` (longer while a rate limit lasts),
+ * saving each snapshot to the store. A failed poll leaves the last good snapshot in place.
+ * `onPoll` runs after every poll, failed or not, e.g. to push the new state to browsers.
+ */
 export function startPoller(
   options: PollerSettings & {
     store: SnapshotStore;
     log: { info(msg: string): void; error(msg: string): void };
+    onPoll?: () => void;
     fetch?: typeof globalThis.fetch;
   },
 ): Poller {
-  const { store, log, fetch } = options;
+  const { store, log, onPoll = () => {}, fetch } = options;
   let { repos, token, intervalMs } = options;
-  let lastError: string | null = null;
+  let health: PollHealth = { error: null, problems: [] };
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
   let polling = false;
@@ -31,22 +37,28 @@ export function startPoller(
     try {
       const snapshot = await fetchSnapshot({ repos, token, fetch });
       store.saveSnapshot(snapshot, new Date());
-      lastError = snapshot.problems.length ? snapshot.problems.join("; ") : null;
+      health = { error: null, problems: snapshot.problems };
       log.info(`poll: ${snapshot.pullRequests.length} open PRs across ${repos.length} repos`);
-      if (lastError) log.error(`poll problems: ${lastError}`);
+      if (snapshot.problems.length) log.error(`poll problems: ${snapshot.problems.join("; ")}`);
     } catch (error) {
-      lastError = (error as Error).message;
-      log.error(`poll failed: ${lastError}`);
+      health = { error: classifyPollError(error, new Date()), problems: [] };
+      log.error(`poll failed (${health.error!.kind}): ${health.error!.message}`);
     }
     polling = false;
-    if (!stopped) timer = setTimeout(poll, pollAgain ? 0 : intervalMs);
+    if (stopped) return;
+    try {
+      onPoll();
+    } catch (error) {
+      log.error(`after poll: ${(error as Error).message}`);
+    }
+    timer = setTimeout(poll, pollAgain ? 0 : nextPollDelay(health.error, intervalMs, new Date()));
     pollAgain = false;
   }
 
   void poll();
 
   return {
-    lastError: () => lastError,
+    health: () => health,
     reconfigure(settings) {
       ({ repos, token, intervalMs } = settings);
       if (stopped) return;

@@ -4,9 +4,9 @@ import { groupByRepo } from "./group.js";
 import { useDashboard } from "./useDashboard.js";
 
 export function App() {
-  const { state, connectionError, seen } = useDashboard();
+  const { state, stream, seen } = useDashboard();
   const cards = state ? groupByRepo(state.sections) : [];
-  const error = errorText(state, connectionError);
+  const error = errorText(state, stream);
   const configError = configErrorText(state);
 
   return (
