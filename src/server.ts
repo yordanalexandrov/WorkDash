@@ -4,7 +4,8 @@ import Fastify, { type FastifyInstance, LogController } from "fastify";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 
-const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
+// Static files are kept in web/public; the bundle built from web/src lands in web/dist.
+const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
 export function buildServer(options: {
   store: SnapshotStore;
@@ -16,7 +17,7 @@ export function buildServer(options: {
   const { store, rules, pollIntervalMs, lastPollError, logger = false } = options;
   const server = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
-  server.register(fastifyStatic, { root: WEB_ROOT });
+  server.register(fastifyStatic, { root: WEB_ROOTS });
 
   server.get("/api/prs", async () => {
     const snapshot = store.loadSnapshot();

@@ -55,7 +55,10 @@ npm install
 npm test             # Vitest
 npm run typecheck
 npm run build && node dist/main.js
+npm run watch:web    # пресглобява web/dist/app.js при промяна в web/src
 ```
+
+Frontend-ът е Preact (TSX) в `web/src`, сглобен от esbuild в `web/dist`; статичните файлове са в `web/public`.
 
 Без Docker приложението чете `config.yaml` и пише в `data/workdash.db` в текущата директория и слуша на
 `127.0.0.1:3000`. Пътищата и адресът се сменят с `CONFIG_PATH`, `DB_PATH`, `HOST` и `PORT`. Токенът се

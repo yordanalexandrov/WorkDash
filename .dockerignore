@@ -8,3 +8,4 @@ docs
 *.db
 .env
 config.yaml
+web/dist
