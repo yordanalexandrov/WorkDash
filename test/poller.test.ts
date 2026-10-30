@@ -112,6 +112,12 @@ function fakeGitHubWithClosed(open: number[], mergedAt: string) {
   const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
     const { query } = JSON.parse(String(init?.body)) as { query: string };
     queries.push(query);
+    if (query.startsWith("query PullRequestDetails")) {
+      const lookups = [...query.matchAll(/\b(p\d+): pullRequest/g)].map((match) => match[1]!);
+      return Response.json({
+        data: { r0: Object.fromEntries(lookups.map((alias) => [alias, { comments: { nodes: [] }, reviewThreads: { nodes: [] }, history: { nodes: [] } }])) },
+      });
+    }
     if (query.startsWith("query ClosedPullRequests")) {
       return Response.json({
         data: {
@@ -130,6 +136,23 @@ function fakeGitHubWithClosed(open: number[], mergedAt: string) {
   };
   return { fetch, queries };
 }
+
+describe("startPoller details", () => {
+  it("keeps the saved comments of a PR that has not changed, without asking GitHub for them again", async () => {
+    const store = openStore(":memory:");
+    const comments = [{ id: "c1", author: "colleague1", createdAt: "2026-10-30T09:00:00Z", body: "hi" }];
+    store.saveSnapshot({ viewer: "me", pullRequests: [pullRequest({ number: 2, updatedAt: "2026-10-30T10:00:00Z", comments })] }, new Date("2026-10-30T10:00:00Z"));
+    const github = fakeGitHubWithClosed([2, 3], new Date().toISOString());
+
+    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch: github.fetch });
+    await vi.waitFor(() => expect(store.loadSnapshot()?.pullRequests).toHaveLength(2));
+    poller.stop();
+
+    expect(store.loadSnapshot()?.pullRequests.find((pr) => pr.number === 2)?.comments).toEqual(comments);
+    const details = github.queries.filter((query) => query.startsWith("query PullRequestDetails"));
+    expect(details.map((query) => query.match(/pullRequest\(number: \d+\)/g))).toEqual([["pullRequest(number: 3)"]]);
+  });
+});
 
 describe("startPoller seen baseline", () => {
   it("marks each PR seen when a poll first observes it, leaving existing marks alone", async () => {
