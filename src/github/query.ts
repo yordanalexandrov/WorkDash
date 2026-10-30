@@ -4,6 +4,7 @@
  */
 export const PAGE_SIZE = 100;
 const REVIEWERS_PAGE_SIZE = 20;
+const CHECKS_PAGE_SIZE = 50;
 
 export function buildSnapshotQuery(repos: string[]): { query: string; variables: Record<string, string> } {
   const variables: Record<string, string> = {};
@@ -39,7 +40,21 @@ fragment openPullRequests on Repository {
       author { login }
       reviewRequests(first: ${REVIEWERS_PAGE_SIZE}) { nodes { requestedReviewer { ... on User { login } } } }
       latestReviews(first: ${REVIEWERS_PAGE_SIZE}) { nodes { author { login } state submittedAt } }
-      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      commits(last: 1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              contexts(first: ${CHECKS_PAGE_SIZE}) {
+                nodes {
+                  __typename
+                  ... on CheckRun { name status conclusion checkSuite { app { slug } } }
+                  ... on StatusContext { context state }
+                }
+              }
+            }
+          }
+        }
+      }
     }
     pageInfo { hasNextPage }
   }

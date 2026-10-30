@@ -1,5 +1,4 @@
 import type {
-  CiState,
   Mergeable,
   MergeStateStatus,
   PullRequest,
@@ -7,6 +6,7 @@ import type {
   ReviewState,
   Snapshot,
 } from "../domain/types.js";
+import { type CheckContext, summarizeChecks } from "./checks.js";
 import { buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
@@ -25,7 +25,7 @@ type PullRequestNode = {
   // A team (or a deleted user) matches no fragment field and comes back as {} or null.
   reviewRequests: { nodes: { requestedReviewer: { login?: string } | null }[] };
   latestReviews: { nodes: { author: { login: string } | null; state: ReviewState | "PENDING"; submittedAt: string | null }[] };
-  commits: { nodes: { commit: { statusCheckRollup: { state: CiState } | null } }[] };
+  commits: { nodes: { commit: { statusCheckRollup: { contexts: { nodes: CheckContext[] } } | null } }[] };
 };
 
 type RepositoryNode = {
@@ -111,6 +111,6 @@ function toPullRequests(repository: RepositoryNode): PullRequest[] {
         ? []
         : [{ author: review.author?.login ?? "ghost", state: review.state, submittedAt: review.submittedAt }],
     ),
-    ci: node.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
+    ...summarizeChecks(node.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []),
   }));
 }

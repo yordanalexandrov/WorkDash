@@ -5,7 +5,7 @@ export const SECTIONS = ["waiting_on_me", "free_for_review", "ready_to_merge", "
 export type Section = (typeof SECTIONS)[number];
 
 /** Why a PR waits on me. */
-export type Reason = "ci_failed" | "changes_requested" | "conflict" | "needs_rebase" | "review_requested";
+export type Reason = "ci_failed" | "sonar_failed" | "changes_requested" | "conflict" | "needs_rebase" | "review_requested";
 
 export type Classification = { section: "waiting_on_me"; reason: Reason } | { section: Exclude<Section, "waiting_on_me"> };
 
@@ -33,10 +33,11 @@ function changesRequested(pr: PullRequest): boolean {
 export function classify(pr: PullRequest, me: string, rules: ClassifyRules): Classification | null {
   if (sameLogin(pr.author, me)) {
     if (pr.ci === "FAILURE" || pr.ci === "ERROR") return { section: "waiting_on_me", reason: "ci_failed" };
+    if (pr.sonar === "FAILURE" || pr.sonar === "ERROR") return { section: "waiting_on_me", reason: "sonar_failed" };
     if (changesRequested(pr)) return { section: "waiting_on_me", reason: "changes_requested" };
     if (pr.mergeable === "CONFLICTING") return { section: "waiting_on_me", reason: "conflict" };
-    // A repo without CI reports no checks; that should not keep a PR from being merged.
-    const ciGreen = pr.ci === "SUCCESS" || pr.ci === null;
+    // A repo without CI or Sonar reports no checks; that should not keep a PR from being merged.
+    const ciGreen = (pr.ci === "SUCCESS" || pr.ci === null) && (pr.sonar === "SUCCESS" || pr.sonar === null);
     if (!isApproved(pr, rules) || !ciGreen || pr.isDraft) return { section: "waiting_on_others" };
     // Branch protection that requires an up-to-date branch blocks the merge until I rebase.
     if (pr.mergeStateStatus === "BEHIND") return { section: "waiting_on_me", reason: "needs_rebase" };

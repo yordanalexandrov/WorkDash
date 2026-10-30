@@ -17,18 +17,19 @@ const SECTION_TITLES = {
 // Same colour as the matching merge-state badge, so "needs rebase" looks alike wherever it shows.
 const REASONS = {
   ci_failed: ["CI failed", "bad"],
+  sonar_failed: ["Sonar failed", "bad"],
   changes_requested: ["changes requested", "bad"],
   conflict: ["conflict", "bad"],
   needs_rebase: ["needs rebase", "pending"],
   review_requested: ["review requested", "bad"],
 };
 
-const CI_LABELS = {
-  SUCCESS: ["CI ✓", "ok"],
-  FAILURE: ["CI ✗", "bad"],
-  ERROR: ["CI ✗", "bad"],
-  PENDING: ["CI …", "pending"],
-  EXPECTED: ["CI …", "pending"],
+const CHECK_MARKS = {
+  SUCCESS: ["✓", "ok"],
+  FAILURE: ["✗", "bad"],
+  ERROR: ["✗", "bad"],
+  PENDING: ["…", "pending"],
+  EXPECTED: ["…", "pending"],
 };
 
 // What the merge box would say: conflict, out of date, blocked by rules, or free to merge.
@@ -84,10 +85,18 @@ function statusBadges(pr) {
   return badges;
 }
 
-function ciBadge(ci) {
-  if (!ci) return badge("без CI", "muted");
-  const [text, kind] = CI_LABELS[ci] ?? [ci, "muted"];
-  return badge(text, kind);
+/** CI and Sonar badges; a failure the reason badge already names is not repeated. */
+function checkBadges(pr) {
+  const badges = [];
+  if (pr.reason !== "ci_failed") {
+    const [mark, kind] = pr.ci ? (CHECK_MARKS[pr.ci] ?? [pr.ci, "muted"]) : ["–", "muted"];
+    badges.push(badge(`CI ${mark}`, kind, pr.ci ? undefined : "Няма CI проверки"));
+  }
+  if (pr.sonar && pr.reason !== "sonar_failed") {
+    const [mark, kind] = CHECK_MARKS[pr.sonar] ?? [pr.sonar, "muted"];
+    badges.push(badge(`Sonar ${mark}`, kind));
+  }
+  return badges;
 }
 
 function reviewBadges(pr) {
@@ -111,7 +120,7 @@ function prItem(pr) {
       "pr-meta",
       element("span", "author", pr.author),
       ...statusBadges(pr),
-      ciBadge(pr.ci),
+      ...checkBadges(pr),
       ...reviewBadges(pr),
       ageEl,
     ),

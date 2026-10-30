@@ -19,6 +19,13 @@ describe("classify: my PR", () => {
     });
   });
 
+  it("waits on me when the Sonar quality gate fails", () => {
+    expect(classify(pr({ sonar: "FAILURE", reviewDecision: "CHANGES_REQUESTED" }), "me", rules)).toEqual({
+      section: "waiting_on_me",
+      reason: "sonar_failed",
+    });
+  });
+
   it("waits on me when changes are requested", () => {
     expect(classify(pr({ reviewDecision: "CHANGES_REQUESTED", mergeable: "CONFLICTING" }), "me", rules)).toEqual({
       section: "waiting_on_me",
@@ -55,12 +62,17 @@ describe("classify: my PR", () => {
     expect(classify(pr({ mergeStateStatus: "BEHIND" }), "me", rules)).toEqual({ section: "waiting_on_others" });
   });
 
-  it("is ready to merge when the repo has no CI", () => {
-    expect(classify(pr({ reviewDecision: "APPROVED", ci: null }), "me", rules)).toEqual({ section: "ready_to_merge" });
+  it("is ready to merge when the repo has no CI and no Sonar", () => {
+    expect(classify(pr({ reviewDecision: "APPROVED", ci: null, sonar: null }), "me", rules)).toEqual({ section: "ready_to_merge" });
+  });
+
+  it("is ready to merge when Sonar passes", () => {
+    expect(classify(pr({ reviewDecision: "APPROVED", sonar: "SUCCESS" }), "me", rules)).toEqual({ section: "ready_to_merge" });
   });
 
   it.each([
     ["CI is pending", { ci: "PENDING" }],
+    ["Sonar is pending", { sonar: "PENDING" }],
     ["it is a draft", { isDraft: true }],
     ["review is still required", { reviewDecision: "REVIEW_REQUIRED" }],
     ["nobody has approved", { reviewDecision: null }],

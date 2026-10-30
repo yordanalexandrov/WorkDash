@@ -17,6 +17,7 @@ export function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     requestedReviewers: [],
     reviews: [],
     ci: "SUCCESS",
+    sonar: null,
     ...overrides,
   };
 }

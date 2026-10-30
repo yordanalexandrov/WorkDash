@@ -26,7 +26,8 @@ export type PullRequest = {
   reviewDecision: ReviewDecision | null;
   requestedReviewers: string[];
   reviews: Review[];
-  ci: CiState | null; // null when the head commit has no checks
+  ci: CiState | null; // every check on the head commit except Sonar; null when there are none
+  sonar: CiState | null; // the Sonar quality gate; null when the repo does not run Sonar
 };
 
 /** What one poll learns from GitHub. */

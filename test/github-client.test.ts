@@ -27,6 +27,19 @@ function fakeGitHub(prsByRepo: Record<string, unknown[]>, options: { truncated?:
   return { fetch, calls };
 }
 
+/** The head commit's checks, as GitHub's statusCheckRollup lists them. */
+function checks(...contexts: unknown[]) {
+  return { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: contexts } } } }] };
+}
+
+function status(context: string, state: string) {
+  return { __typename: "StatusContext", context, state };
+}
+
+function checkRun(name: string, status: string, conclusion: string | null, app = "github-actions") {
+  return { __typename: "CheckRun", name, status, conclusion, checkSuite: { app: { slug: app } } };
+}
+
 function prNode(number: number, overrides: Record<string, unknown> = {}) {
   return {
     number,
@@ -41,7 +54,7 @@ function prNode(number: number, overrides: Record<string, unknown> = {}) {
     author: { login: "colleague1" },
     reviewRequests: { nodes: [] },
     latestReviews: { nodes: [] },
-    commits: { nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }] },
+    commits: checks(status("ci/build", "SUCCESS")),
     ...overrides,
   };
 }
@@ -89,7 +102,7 @@ describe("fetchSnapshot", () => {
               { author: null, state: "APPROVED", submittedAt: "2026-10-30T08:00:00Z" },
             ],
           },
-          commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE" } } }] },
+          commits: checks(status("ci/build", "FAILURE")),
         }),
       ],
     });
@@ -110,14 +123,48 @@ describe("fetchSnapshot", () => {
     });
   });
 
-  it("has no CI state when the head commit has no checks", async () => {
+  it("has no CI or Sonar state when the head commit has no checks", async () => {
     const github = fakeGitHub({
       "my-org/repo-a": [prNode(1, { commits: { nodes: [{ commit: { statusCheckRollup: null } }] } })],
     });
 
     const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch });
 
-    expect(snapshot.pullRequests[0]?.ci).toBeNull();
+    expect(snapshot.pullRequests[0]).toMatchObject({ ci: null, sonar: null });
+  });
+
+  it.each([
+    ["every check passes", [status("ci/build", "SUCCESS"), checkRun("test", "COMPLETED", "SKIPPED")], "SUCCESS"],
+    ["a status fails", [status("ci/build", "SUCCESS"), status("ci/lint", "FAILURE")], "FAILURE"],
+    ["a status errors", [status("ci/build", "ERROR"), checkRun("test", "IN_PROGRESS", null)], "ERROR"],
+    ["a check run fails", [checkRun("test", "COMPLETED", "TIMED_OUT")], "FAILURE"],
+    ["a check run is still running", [checkRun("test", "COMPLETED", "SUCCESS"), checkRun("e2e", "QUEUED", null)], "PENDING"],
+  ])("rolls the non-Sonar checks up into one CI state when %s", async (_, contexts, ci) => {
+    const github = fakeGitHub({ "my-org/repo-a": [prNode(1, { commits: checks(...contexts) })] });
+
+    const [pr] = (await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch })).pullRequests;
+
+    expect(pr?.ci).toBe(ci);
+  });
+
+  it("reports Sonar apart from CI, so a failed quality gate does not read as a broken build", async () => {
+    const github = fakeGitHub({
+      "my-org/repo-a": [
+        prNode(1, {
+          commits: checks(
+            status("ci/build", "SUCCESS"),
+            checkRun("SonarCloud Code Analysis", "COMPLETED", "FAILURE", "sonarqubecloud"),
+            checkRun("SonarCloud", "COMPLETED", "SUCCESS", "github-advanced-security"),
+          ),
+        }),
+        prNode(2, { commits: checks(status("ci/build", "SUCCESS")) }),
+      ],
+    });
+
+    const [withSonar, withoutSonar] = (await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch })).pullRequests;
+
+    expect(withSonar).toMatchObject({ ci: "SUCCESS", sonar: "FAILURE" });
+    expect(withoutSonar).toMatchObject({ ci: "SUCCESS", sonar: null });
   });
 
   it("shows a deleted account's PR as authored by ghost", async () => {
