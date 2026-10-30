@@ -92,3 +92,39 @@ describe("SnapshotStore", () => {
     expect(openStore(path).loadSnapshot()).toBeNull();
   });
 });
+
+describe("SnapshotStore: seen marks", () => {
+  it("knows when each PR was last marked seen", () => {
+    const store = openStore(":memory:");
+    store.markSeen("my-org/repo-a", 1, new Date("2026-10-30T10:00:00Z"));
+    store.markSeen("my-org/repo-a", 1, new Date("2026-10-30T11:00:00Z"));
+    store.markSeen("my-org/repo-b", 1, new Date("2026-10-30T09:00:00Z"));
+
+    const seen = store.loadSeen();
+
+    expect(seen(pr("my-org/repo-a", 1))).toBe("2026-10-30T11:00:00.000Z");
+    expect(seen(pr("my-org/repo-b", 1))).toBe("2026-10-30T09:00:00.000Z");
+    expect(seen(pr("my-org/repo-a", 2))).toBeNull();
+  });
+
+  it("never moves a seen mark back", () => {
+    const store = openStore(":memory:");
+    store.markSeen("my-org/repo-a", 1, new Date("2026-10-30T11:00:00Z"));
+    store.markSeen("my-org/repo-a", 1, new Date("2026-10-30T10:00:00Z"));
+
+    expect(store.loadSeen()(pr("my-org/repo-a", 1))).toBe("2026-10-30T11:00:00.000Z");
+  });
+
+  it("keeps seen marks across a restart, even when the snapshot format changes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+
+    openStore(path).markSeen("my-org/repo-a", 1, new Date("2026-10-30T10:00:00Z"));
+    const db = new Database(path);
+    db.pragma("user_version = 0");
+    db.close();
+
+    expect(openStore(path).loadSeen()(pr("my-org/repo-a", 1))).toBe("2026-10-30T10:00:00.000Z");
+  });
+});

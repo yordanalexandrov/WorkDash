@@ -87,6 +87,8 @@ function openNode(number: number) {
   return {
     number,
     title: `PR ${number}`,
+    headRefName: `pr-${number}`,
+    body: "",
     url: `https://github.com/my-org/repo-a/pull/${number}`,
     isDraft: false,
     createdAt: "2026-10-29T10:00:00Z",
@@ -98,6 +100,9 @@ function openNode(number: number) {
     reviewRequests: { nodes: [] },
     latestReviews: { nodes: [] },
     commits: { nodes: [] },
+    comments: { nodes: [] },
+    reviewThreads: { nodes: [] },
+    history: { nodes: [] },
   };
 }
 

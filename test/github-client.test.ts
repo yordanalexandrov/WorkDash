@@ -57,6 +57,9 @@ function prNode(number: number, overrides: Record<string, unknown> = {}) {
     reviewRequests: { nodes: [] },
     latestReviews: { nodes: [] },
     commits: checks(status("ci/build", "SUCCESS")),
+    comments: { nodes: [] },
+    reviewThreads: { nodes: [] },
+    history: { nodes: [] },
     ...overrides,
   };
 }
@@ -124,6 +127,55 @@ describe("fetchSnapshot", () => {
       ],
       ci: "FAILURE",
     });
+  });
+
+  it("merges general and review-thread comments by people, oldest first, and lists the branch's commits", async () => {
+    const user = (login: string) => ({ __typename: "User", login });
+    const github = fakeGitHub({
+      "my-org/repo-a": [
+        prNode(1, {
+          comments: {
+            nodes: [
+              { id: "c1", author: user("colleague1"), createdAt: "2026-10-30T09:00:00Z", body: "first" },
+              { id: "c2", author: { __typename: "Bot", login: "sonarcloud" }, createdAt: "2026-10-30T09:30:00Z", body: "gate" },
+              { id: "c3", author: null, createdAt: "2026-10-30T11:00:00Z", body: "gone" },
+            ],
+          },
+          reviewThreads: {
+            nodes: [
+              {
+                id: "t1",
+                comments: {
+                  nodes: [
+                    { id: "r1", author: user("me"), createdAt: "2026-10-30T08:00:00Z", body: "nit" },
+                    { id: "r2", author: user("colleague1"), createdAt: "2026-10-30T10:00:00Z", body: "done" },
+                  ],
+                },
+              },
+            ],
+          },
+          history: {
+            nodes: [
+              { commit: { oid: "aaa", committedDate: "2026-10-30T07:00:00Z" } },
+              { commit: { oid: "bbb", committedDate: "2026-10-30T09:45:00Z" } },
+            ],
+          },
+        }),
+      ],
+    });
+
+    const [pr] = (await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch })).pullRequests;
+
+    expect(pr?.comments).toEqual([
+      { id: "r1", author: "me", createdAt: "2026-10-30T08:00:00Z", body: "nit", thread: "t1" },
+      { id: "c1", author: "colleague1", createdAt: "2026-10-30T09:00:00Z", body: "first" },
+      { id: "r2", author: "colleague1", createdAt: "2026-10-30T10:00:00Z", body: "done", thread: "t1" },
+      { id: "c3", author: "ghost", createdAt: "2026-10-30T11:00:00Z", body: "gone" },
+    ]);
+    expect(pr?.commits).toEqual([
+      { oid: "aaa", committedAt: "2026-10-30T07:00:00Z" },
+      { oid: "bbb", committedAt: "2026-10-30T09:45:00Z" },
+    ]);
   });
 
   it("keeps the branch name and description, where Jira keys are looked for", async () => {
@@ -240,7 +292,7 @@ describe("fetchSnapshot", () => {
 
     const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch });
 
-    expect(snapshot.problems).toEqual(["my-org/repo-a has more than 100 open PRs; showing the 100 most recently updated"]);
+    expect(snapshot.problems).toEqual(["my-org/repo-a has more than 50 open PRs; showing the 50 most recently updated"]);
   });
 
   it("reports no problems when every repo came back whole", async () => {

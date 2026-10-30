@@ -26,3 +26,13 @@ export type DashboardState = {
   /** Merged or closed PRs within the configured window, most recently closed first; never part of `sections`. */
   recentlyClosed: ClosedPullRequest[];
 };
+
+/** Marks a PR seen as of `fetchedAt`, the snapshot the page showed when I clicked "видях". */
+export async function markSeen(pr: { repo: string; number: number }, fetchedAt: string | null): Promise<void> {
+  const response = await fetch("/api/seen", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: pr.repo, number: pr.number, ...(fetchedAt ? { at: fetchedAt } : {}) }),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}

@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, LogController } from "fastify";
+import { z } from "zod";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 import { withinWindow } from "./domain/closed.js";
@@ -9,6 +10,12 @@ import type { PollHealth } from "./domain/poll-error.js";
 import { createEventHub, type EventHub } from "./sse.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
+
+const SeenRequest = z.object({
+  repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
+  number: z.number().int().positive(),
+  at: z.iso.datetime({ offset: true }).optional(),
+});
 
 // Static files are kept in web/public; the bundle built from web/src lands in web/dist.
 const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
@@ -47,7 +54,7 @@ export function dashboardState({
     error,
     problems,
     configError: configError(),
-    sections: groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", rules()).map(({ section, pullRequests }) => ({
+    sections: groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", rules(), store.loadSeen()).map(({ section, pullRequests }) => ({
       section,
       pullRequests: pullRequests.map((pr) => ({ ...pr, jira: jiraLinks(pr, jira()) })),
     })),
@@ -69,6 +76,19 @@ export function buildServer(
   server.register(fastifyStatic, { root: WEB_ROOTS });
 
   server.get("/api/prs", async () => dashboardState(options));
+
+  // "Видях": the page sends the fetchedAt of the snapshot it showed, so a comment that arrived
+  // after that snapshot stays unread even though it was posted before the click. Every open page
+  // gets the new state right away instead of after the next poll.
+  server.post("/api/seen", async (request, reply) => {
+    const parsed = SeenRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const { repo, number, at } = parsed.data;
+    const now = Date.now();
+    options.store.markSeen(repo, number, new Date(at ? Math.min(Date.parse(at), now) : now));
+    events.broadcast("dashboard", dashboardState(options));
+    return reply.code(204).send();
+  });
 
   server.get("/api/events", (request, reply) => {
     reply.hijack();

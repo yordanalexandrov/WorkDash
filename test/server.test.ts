@@ -4,7 +4,7 @@ import { type ClassifyRules, SECTIONS } from "../src/domain/classify.js";
 import type { JiraConfig } from "../src/domain/jira.js";
 import type { PollHealth } from "../src/domain/poll-error.js";
 import { buildServer, dashboardState } from "../src/server.js";
-import { createEventHub } from "../src/sse.js";
+import { createEventHub, type EventHub } from "../src/sse.js";
 import { pullRequest } from "./fixtures.js";
 
 const rules: ClassifyRules = { team: ["colleague1"], requiredApprovals: 1 };
@@ -33,7 +33,10 @@ describe("GET /api/prs", () => {
       error: null,
       problems: [],
       configError: null,
-      sections: [{ section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed", jira: [] }] }, ...emptySections.slice(1)],
+      sections: [
+        { section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed", unreadComments: 0, jira: [] }] },
+        ...emptySections.slice(1),
+      ],
       recentlyClosed: [],
     });
   });
@@ -126,6 +129,75 @@ describe("GET /api/prs", () => {
     expect(body.configError).toBe("config.yaml: invalid configuration:\n  repos: list at least one repo");
     // colleague2 joined the team, so their PR now shows up.
     expect(body.sections.find((s: { section: string }) => s.section === "free_for_review").pullRequests).toHaveLength(1);
+  });
+});
+
+describe("POST /api/seen", () => {
+  const commented = pullRequest({
+    number: 4,
+    comments: [{ id: "c1", author: "colleague1", createdAt: "2026-10-30T09:59:00Z", body: "why?" }],
+  });
+
+  function serverWith(pullRequests: (typeof pr)[], events?: EventHub) {
+    const store = openStore(":memory:");
+    store.saveSnapshot({ viewer: "me", pullRequests }, new Date("2026-10-30T10:00:00Z"));
+    return buildServer({
+      store,
+      rules: () => rules,
+      pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
+      pollHealth: () => healthy,
+      configError: () => null,
+      events,
+    });
+  }
+
+  const sectionOf = async (server: ReturnType<typeof buildServer>, number: number) =>
+    ((await server.inject("/api/prs")).json() as { sections: { section: string; pullRequests: { number: number }[] }[] }).sections.find(
+      (s) => s.pullRequests.some((p) => p.number === number),
+    )?.section;
+
+  it("marks a PR seen as of the snapshot the page showed, so its comments stop waiting on me", async () => {
+    const server = serverWith([commented]);
+    expect(await sectionOf(server, 4)).toBe("waiting_on_me");
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/seen",
+      payload: { repo: "my-org/repo-a", number: 4, at: "2026-10-30T10:00:00.000Z" },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(await sectionOf(server, 4)).toBe("waiting_on_others");
+  });
+
+  it("does not mark seen what the page could not have shown yet", async () => {
+    const server = serverWith([commented]);
+
+    await server.inject({ method: "POST", url: "/api/seen", payload: { repo: "my-org/repo-a", number: 4, at: "2026-10-30T09:00:00.000Z" } });
+
+    expect(await sectionOf(server, 4)).toBe("waiting_on_me");
+  });
+
+  it.each([
+    ["no repo", { number: 4 }],
+    ["no number", { repo: "my-org/repo-a" }],
+    ["a bad time", { repo: "my-org/repo-a", number: 4, at: "yesterday" }],
+  ])("rejects a request with %s", async (_, payload) => {
+    const response = await serverWith([commented]).inject({ method: "POST", url: "/api/seen", payload });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("pushes the new dashboard to every open page", async () => {
+    const broadcasts: { type: string; data: unknown }[] = [];
+    const events: EventHub = { ...createEventHub(), broadcast: (type, data) => broadcasts.push({ type, data }) };
+    const server = serverWith([commented], events);
+
+    await server.inject({ method: "POST", url: "/api/seen", payload: { repo: "my-org/repo-a", number: 4 } });
+
+    expect(broadcasts).toEqual([{ type: "dashboard", data: (await server.inject("/api/prs")).json() }]);
+    expect((broadcasts[0]?.data as { sections: { pullRequests: unknown[] }[] }).sections[0]?.pullRequests).toEqual([]);
   });
 });
 

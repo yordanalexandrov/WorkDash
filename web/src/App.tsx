@@ -5,7 +5,7 @@ import { groupByRepo } from "./group.js";
 import { useDashboard } from "./useDashboard.js";
 
 export function App() {
-  const { state, stream } = useDashboard();
+  const { state, stream, seen } = useDashboard();
   const cards = state ? groupByRepo(state.sections) : [];
   const error = errorText(state, stream);
   const configError = configErrorText(state);
@@ -21,7 +21,7 @@ export function App() {
       <main>
         <div id="repos">
           {cards.map((card) => (
-            <RepoCardView key={card.repo} card={card} />
+            <RepoCardView key={card.repo} card={card} onSeen={seen} />
           ))}
         </div>
         {cards.length === 0 && state?.fetchedAt && <p id="empty">Няма PR-и, които да те засягат.</p>}

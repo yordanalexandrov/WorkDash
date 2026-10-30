@@ -20,6 +20,8 @@ export function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     reviews: [],
     ci: "SUCCESS",
     sonar: null,
+    comments: [],
+    commits: [],
     ...overrides,
   };
 }
