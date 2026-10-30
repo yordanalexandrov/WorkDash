@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { type Config, ConfigError, loadConfig, watchConfig } from "./config.js";
 import { openStore } from "./db.js";
 import { createNotifier } from "./notifier.js";
-import { startPoller } from "./poller.js";
+import { type PollerSettings, startPoller } from "./poller.js";
 import { buildServer, type DashboardSource, dashboardState } from "./server.js";
 import { createEventHub } from "./sse.js";
 
@@ -26,6 +26,10 @@ function tokenFor(config: Config): string {
   const token = process.env[config.github.tokenEnv];
   if (!token) throw new ConfigError(`github.token_env: environment variable ${config.github.tokenEnv} is not set`);
   return token;
+}
+
+function pollerSettings(config: Config, token: string): PollerSettings {
+  return { repos: config.repos, token, intervalMs: config.github.pollIntervalMs, recentlyClosedWindowMs: config.review.recentlyClosedWindowMs };
 }
 
 try {
@@ -67,10 +71,7 @@ missedTimer.unref();
 
 const server = buildServer({ ...dashboard, events, pendingNotifications: notifier.takePending, acknowledgeNotifications: notifier.acknowledge, logger: true });
 const poller = startPoller({
-  repos: config.repos,
-  token,
-  intervalMs: config.github.pollIntervalMs,
-  recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
+  ...pollerSettings(config, token),
   store,
   log: server.log,
   onPoll: publishDashboard,
@@ -84,12 +85,7 @@ const configWatcher = watchConfig(CONFIG_PATH, {
     const nextToken = tokenFor(next);
     config = next;
     token = nextToken;
-    poller.reconfigure({
-      repos: config.repos,
-      token,
-      intervalMs: config.github.pollIntervalMs,
-      recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
-    });
+    poller.reconfigure(pollerSettings(config, token));
   },
   onChange: publishDashboard,
   log: server.log,
