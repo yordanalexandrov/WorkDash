@@ -115,11 +115,13 @@ export function watchConfig(
   options: {
     current: Config;
     apply(config: Config): void;
+    /** Called after a later change to the file was applied or rejected, so the UI can be told right away. */
+    onChange?(): void;
     intervalMs?: number;
     log?: { info(msg: string): void; error(msg: string): void };
   },
 ): ConfigWatcher {
-  const { apply, intervalMs = 1_000, log } = options;
+  const { apply, onChange = () => {}, intervalMs = 1_000, log } = options;
   let current = JSON.stringify(options.current);
   let error: string | null = null;
 
@@ -150,7 +152,9 @@ export function watchConfig(
     const next = fileStamp(path);
     if (next === stamp) return;
     stamp = next;
+    const before = [current, error];
     reload();
+    if (current !== before[0] || error !== before[1]) onChange();
   }, intervalMs);
   timer.unref();
 

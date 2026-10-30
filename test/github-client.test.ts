@@ -194,6 +194,29 @@ describe("fetchSnapshot", () => {
     await expect(fetchSnapshot({ repos: ["my-org/repo-a"], token: "bad", fetch })).rejects.toThrow(/401.*Bad credentials/);
   });
 
+  it("keeps the status and rate-limit headers of a refused request, for classifyPollError", async () => {
+    const fetch = async () =>
+      Response.json(
+        { message: "API rate limit exceeded" },
+        { status: 403, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1793363400", "x-github-request-id": "1" } },
+      );
+
+    await expect(fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch })).rejects.toMatchObject({
+      status: 403,
+      headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1793363400" },
+    });
+  });
+
+  it("keeps the type of each GraphQL error when no data comes back", async () => {
+    const fetch = async () =>
+      Response.json({ errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded for user ID 1." }] });
+
+    await expect(fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch })).rejects.toMatchObject({
+      status: 200,
+      errorTypes: ["RATE_LIMITED"],
+    });
+  });
+
   it("keeps the other repos and reports the one GitHub cannot resolve", async () => {
     const fetch = async () =>
       Response.json({

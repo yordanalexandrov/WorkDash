@@ -7,6 +7,7 @@ import type {
   ReviewState,
   Snapshot,
 } from "../domain/types.js";
+import type { GitHubResponseFailure } from "../domain/poll-error.js";
 import { type CheckContext, summarizeChecks } from "./checks.js";
 import { buildClosedQuery, buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
@@ -38,8 +39,10 @@ type RepositoryNode = {
 
 type GraphQLResponse<T> = {
   data?: T;
-  errors?: { message: string }[];
+  errors?: GraphQLErrors;
 };
+
+type GraphQLErrors = { message: string; type?: string }[];
 
 type ClosedPullRequestNode = {
   number: number;
@@ -50,8 +53,33 @@ type ClosedPullRequestNode = {
   closedAt: string | null;
 } | null;
 
-export class GitHubError extends Error {
+/** Headers that say why GitHub refused a request; classifyPollError reads them. */
+const FAILURE_HEADERS = ["x-ratelimit-remaining", "x-ratelimit-reset", "retry-after"];
+
+/** How long a poll waits for GitHub before treating it as unreachable. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export class GitHubError extends Error implements GitHubResponseFailure {
   override name = "GitHubError";
+  readonly status?: number;
+  readonly headers: Record<string, string>;
+  readonly errorTypes: string[];
+
+  constructor(message: string, details: { status?: number; headers?: Record<string, string>; errorTypes?: string[] } = {}) {
+    super(message);
+    this.status = details.status;
+    this.headers = details.headers ?? {};
+    this.errorTypes = details.errorTypes ?? [];
+  }
+}
+
+function failureHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const name of FAILURE_HEADERS) {
+    const value = response.headers.get(name);
+    if (value !== null) headers[name] = value;
+  }
+  return headers;
 }
 
 /**
@@ -68,7 +96,7 @@ async function postGraphQL<T>(
   body: { query: string; variables: Record<string, string> },
   token: string,
   fetch: typeof globalThis.fetch,
-): Promise<{ data: T | undefined; errors: { message: string }[] }> {
+): Promise<{ data: T | undefined; errors: GraphQLErrors; failure: (reason: string) => GitHubError }> {
   const response = await fetch(GRAPHQL_URL, {
     method: "POST",
     headers: {
@@ -77,15 +105,26 @@ async function postGraphQL<T>(
       "User-Agent": "WorkDash",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new GitHubError(`GitHub API responded ${response.status}: ${body.message ?? response.statusText}`);
+    throw new GitHubError(`GitHub API responded ${response.status}: ${body.message ?? response.statusText}`, {
+      status: response.status,
+      headers: failureHeaders(response),
+    });
   }
 
   const { data, errors = [] } = (await response.json()) as GraphQLResponse<T>;
-  return { data, errors };
+  // A GraphQL failure (a rate limit, say) comes back as 200 with errors; keep what classifyPollError needs.
+  const failure = (reason: string) =>
+    new GitHubError(`GitHub GraphQL error: ${errors.map((e) => e.message).join("; ") || reason}`, {
+      status: response.status,
+      headers: failureHeaders(response),
+      errorTypes: errors.flatMap((e) => e.type ?? []),
+    });
+  return { data, errors, failure };
 }
 
 export async function fetchSnapshot(options: {
@@ -94,15 +133,12 @@ export async function fetchSnapshot(options: {
   fetch?: typeof globalThis.fetch;
 }): Promise<FetchedSnapshot> {
   const { repos, token, fetch = globalThis.fetch } = options;
-  const { data, errors } = await postGraphQL<{ viewer: { login: string } } & Record<string, RepositoryNode>>(
+  const { data, errors, failure } = await postGraphQL<{ viewer: { login: string } } & Record<string, RepositoryNode>>(
     buildSnapshotQuery(repos),
     token,
     fetch,
   );
-  if (!data?.viewer) {
-    const reason = errors.map((e) => e.message).join("; ") || "empty response";
-    throw new GitHubError(`GitHub GraphQL error: ${reason}`);
-  }
+  if (!data?.viewer) throw failure("empty response");
 
   const repositories = repos.map((_, i) => data[`r${i}`] ?? null);
   const truncated = repositories.filter((repository) => repository?.pullRequests.pageInfo.hasNextPage);
@@ -122,7 +158,8 @@ export async function fetchSnapshot(options: {
 
 /**
  * Looks up PRs by number, in one request, to learn whether each was merged or closed.
- * A PR that is still open (one pushed off a full page, say) is left out.
+ * A PR that is still open (one pushed off a full page, say) is left out. Throws a GitHubError,
+ * like fetchSnapshot, when GitHub answers with no data.
  */
 export async function fetchClosedPullRequests(options: {
   pullRequests: { repo: string; number: number }[];
@@ -133,14 +170,16 @@ export async function fetchClosedPullRequests(options: {
   if (pullRequests.length === 0) return { closed: [], problems: [] };
 
   const { query, variables, aliases } = buildClosedQuery(pullRequests);
-  const { data, errors } = await postGraphQL<Record<string, Record<string, ClosedPullRequestNode> | null>>(
+  const { data, errors, failure } = await postGraphQL<Record<string, Record<string, ClosedPullRequestNode> | null>>(
     { query, variables },
     token,
     fetch,
   );
+  // No data at all (a rate limit, a revoked token) fails the lookup; a PR GitHub cannot resolve is only a problem.
+  if (!data) throw failure("empty response");
 
   const closed = aliases.flatMap(({ repo }, i) =>
-    Object.values(data?.[`r${i}`] ?? {}).flatMap((node): ClosedPullRequest[] =>
+    Object.values(data[`r${i}`] ?? {}).flatMap((node): ClosedPullRequest[] =>
       node && node.state !== "OPEN" && node.closedAt
         ? [
             {

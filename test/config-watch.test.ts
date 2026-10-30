@@ -51,6 +51,24 @@ describe("watchConfig", () => {
     expect(watcher?.error()).toBeNull();
   });
 
+  it("tells onChange when an edit is rejected and when a valid one is applied", async () => {
+    const errors: (string | null)[] = [];
+    watcher = watchConfig(path, {
+      current: parseConfig(yamlWithRepos("my-org/repo-a")),
+      intervalMs: INTERVAL_MS,
+      apply: (config) => applied.push(config),
+      onChange: () => errors.push(watcher!.error()),
+    });
+
+    writeFileSync(path, "repos: []\n");
+    await waitFor(() => errors.length === 1);
+    writeFileSync(path, yamlWithRepos("my-org/repo-b"));
+    await waitFor(() => errors.length === 2);
+
+    expect(errors[0]).toMatch(/repos: list at least one repo/);
+    expect(errors[1]).toBeNull();
+  });
+
   it("applies the edited config when an editor replaces the file with a new one", async () => {
     watch();
 

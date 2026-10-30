@@ -3,7 +3,8 @@ import { dirname } from "node:path";
 import { type Config, ConfigError, loadConfig, watchConfig } from "./config.js";
 import { openStore } from "./db.js";
 import { startPoller } from "./poller.js";
-import { buildServer } from "./server.js";
+import { buildServer, type DashboardSource, dashboardState } from "./server.js";
+import { createEventHub } from "./sse.js";
 
 const CONFIG_PATH = process.env.CONFIG_PATH ?? "config.yaml";
 const DB_PATH = process.env.DB_PATH ?? "data/workdash.db";
@@ -35,16 +36,20 @@ try {
 mkdirSync(dirname(DB_PATH), { recursive: true });
 const store = openStore(DB_PATH);
 
-const server = buildServer({
+const events = createEventHub();
+const dashboard: DashboardSource = {
   store,
   rules: () => ({ team: config.team, requiredApprovals: config.review.requiredApprovals }),
   jira: () => config.jira,
   pollIntervalMs: () => config.github.pollIntervalMs,
   recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
-  lastPollError: () => poller.lastError(),
+  pollHealth: () => poller.health(),
   configError: () => configWatcher.error(),
-  logger: true,
-});
+};
+/** Pushes the dashboard as it is now to every open browser. */
+const publishDashboard = () => events.broadcast("dashboard", dashboardState(dashboard));
+
+const server = buildServer({ ...dashboard, events, logger: true });
 const poller = startPoller({
   repos: config.repos,
   token,
@@ -52,6 +57,7 @@ const poller = startPoller({
   recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
   store,
   log: server.log,
+  onPoll: publishDashboard,
 });
 
 // Edits to config.yaml apply without a restart; an invalid edit is shown in the UI and the last valid config stays.
@@ -68,6 +74,7 @@ const configWatcher = watchConfig(CONFIG_PATH, {
       recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
     });
   },
+  onChange: publishDashboard,
   log: server.log,
 });
 

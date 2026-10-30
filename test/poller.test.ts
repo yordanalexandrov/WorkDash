@@ -153,4 +153,88 @@ describe("startPoller recently closed", () => {
 
     expect(store.loadRecentlyClosed()).toEqual([]);
   });
+
+  it("fails the whole poll, keeping the last snapshot, when the lookup is rate limited", async () => {
+    const store = openStore(":memory:");
+    const before = [pullRequest({ number: 1 })];
+    store.saveSnapshot({ viewer: "me", pullRequests: before }, new Date("2026-10-30T10:00:00Z"));
+    const github = fakeGitHubWithClosed([], new Date().toISOString());
+    const fetch = async (url: string | URL | Request, init?: RequestInit) =>
+      String(init?.body).includes("ClosedPullRequests")
+        ? Response.json({ data: null, errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] })
+        : github.fetch(url, init);
+
+    let poller!: Poller;
+    const health = await new Promise<ReturnType<Poller["health"]>>((resolve) => {
+      poller = startPoller({
+        repos: ["my-org/repo-a"],
+        token: "t",
+        intervalMs: 3_600_000,
+        recentlyClosedWindowMs: 3_600_000,
+        store,
+        log: quietLog,
+        fetch,
+        onPoll: () => resolve(poller.health()),
+      });
+    });
+    poller.stop();
+
+    expect(health.error?.kind).toBe("rate_limit");
+    // Nothing saved, so the next poll sees PR 1 vanish again and retries the lookup.
+    expect(store.loadSnapshot()?.pullRequests).toEqual(before);
+    expect(store.loadRecentlyClosed()).toEqual([]);
+  });
+});
+
+function ok() {
+  return Response.json({
+    data: { viewer: { login: "me" }, r0: { nameWithOwner: "my-org/repo-a", pullRequests: { nodes: [], pageInfo: { hasNextPage: false } } } },
+  });
+}
+
+/** Starts a poller whose GitHub answers with `responses` in turn, and resolves after `polls` polls. */
+async function run(responses: (() => Response | Promise<Response>)[], polls: number) {
+  const store = openStore(":memory:");
+  const healths: ReturnType<Poller["health"]>[] = [];
+  let poller!: Poller;
+  let calls = 0;
+  await new Promise<void>((resolve) => {
+    poller = startPoller({
+      repos: ["my-org/repo-a"],
+      token: "t",
+      intervalMs: 1,
+      recentlyClosedWindowMs: 3_600_000,
+      store,
+      log: quietLog,
+      fetch: async () => responses[Math.min(calls++, responses.length - 1)]!(),
+      onPoll: () => {
+        healths.push(poller.health());
+        if (healths.length === polls) resolve();
+      },
+    });
+  });
+  poller.stop();
+  return { store, healths };
+}
+
+describe("startPoller health", () => {
+  it("saves each snapshot and reports a healthy poll", async () => {
+    const { store, healths } = await run([ok], 1);
+
+    expect(store.loadSnapshot()?.viewer).toBe("me");
+    expect(healths).toEqual([{ error: null, problems: [] }]);
+  });
+
+  it("keeps the last good snapshot and goes on trying when GitHub refuses the token", async () => {
+    const { store, healths } = await run([ok, () => Response.json({ message: "Bad credentials" }, { status: 401 }), ok], 3);
+
+    expect(store.loadSnapshot()?.viewer).toBe("me");
+    expect(healths.map((health) => health.error?.kind ?? null)).toEqual([null, "auth", null]);
+  });
+
+  it("tells a GitHub it cannot reach apart from other failures", async () => {
+    const { healths } = await run([() => Promise.reject(new TypeError("fetch failed"))], 1);
+
+    expect(healths[0]?.error).toMatchObject({ kind: "unreachable", message: "fetch failed" });
+  });
 });

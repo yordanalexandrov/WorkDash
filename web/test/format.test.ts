@@ -5,7 +5,17 @@ import { age, configErrorText, errorText, statusText } from "../src/format.js";
 const now = new Date("2026-10-30T12:00:00Z");
 
 function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
-  return { viewer: "me", fetchedAt: "2026-10-30T10:00:00Z", pollIntervalMs: 60_000, error: null, configError: null, sections: [], recentlyClosed: [], ...overrides };
+  return {
+    viewer: "me",
+    fetchedAt: "2026-10-30T10:00:00Z",
+    pollIntervalMs: 60_000,
+    error: null,
+    problems: [],
+    configError: null,
+    sections: [],
+    recentlyClosed: [],
+    ...overrides,
+  };
 }
 
 describe("statusText", () => {
@@ -19,25 +29,62 @@ describe("statusText", () => {
 
   it("names the viewer and when the snapshot was fetched", () => {
     const fetchedAt = "2026-10-30T10:00:00Z";
-    expect(statusText(dashboard({ fetchedAt }))).toBe(`me · обновено ${new Date(fetchedAt).toLocaleTimeString()}`);
+    expect(statusText(dashboard({ fetchedAt }))).toBe(`me · последен успешен poll в ${new Date(fetchedAt).toLocaleTimeString()}`);
   });
 });
 
 describe("errorText", () => {
-  it("is empty while the server answers and the last poll succeeded", () => {
-    expect(errorText(dashboard(), null)).toBeNull();
+  it("is empty while the stream is connected and the last poll succeeded", () => {
+    expect(errorText(dashboard(), "open")).toBeNull();
   });
 
-  it("reports a failed poll", () => {
-    expect(errorText(dashboard({ error: "GitHub API responded 401" }), null)).toBe(
-      "Последният poll е неуспешен: GitHub API responded 401",
+  it("is empty while connecting for the first time", () => {
+    expect(errorText(null, "connecting")).toBeNull();
+  });
+
+  it("reports a token GitHub rejects", () => {
+    const error = { kind: "auth", message: "GitHub API responded 401: Bad credentials", resetAt: null } as const;
+
+    expect(errorText(dashboard({ error }), "open")).toBe(
+      "GitHub отказва токена (невалиден или изтекъл): GitHub API responded 401: Bad credentials",
     );
+  });
+
+  it("reports a rate limit with the time it resets", () => {
+    const resetAt = "2026-10-30T12:40:00.000Z";
+    const error = { kind: "rate_limit", message: "API rate limit exceeded", resetAt } as const;
+
+    expect(errorText(dashboard({ error }), "open")).toBe(
+      `Изчерпан rate limit на GitHub, нов опит в ${new Date(resetAt).toLocaleTimeString()}`,
+    );
+  });
+
+  it("reports a rate limit without a known reset time", () => {
+    const error = { kind: "rate_limit", message: "API rate limit exceeded", resetAt: null } as const;
+
+    expect(errorText(dashboard({ error }), "open")).toBe("Изчерпан rate limit на GitHub: API rate limit exceeded");
+  });
+
+  it("reports GitHub being unreachable", () => {
+    const error = { kind: "unreachable", message: "fetch failed: getaddrinfo ENOTFOUND", resetAt: null } as const;
+
+    expect(errorText(dashboard({ error }), "open")).toBe("GitHub е недостъпен: fetch failed: getaddrinfo ENOTFOUND");
+  });
+
+  it("reports any other failed poll", () => {
+    const error = { kind: "other", message: "GitHub GraphQL error: boom", resetAt: null } as const;
+
+    expect(errorText(dashboard({ error }), "open")).toBe("Последният poll е неуспешен: GitHub GraphQL error: boom");
+  });
+
+  it("reports what a successful poll could not fetch", () => {
+    expect(errorText(dashboard({ problems: ["a", "b"] }), "open")).toBe("Последният poll е непълен: a; b");
   });
 
   it("reports a lost server ahead of an older poll failure", () => {
-    expect(errorText(dashboard({ error: "GitHub API responded 401" }), "Failed to fetch")).toBe(
-      "Няма връзка със сървъра: Failed to fetch",
-    );
+    const error = { kind: "auth", message: "401", resetAt: null } as const;
+
+    expect(errorText(dashboard({ error }), "reconnecting")).toBe("Няма връзка със сървъра, свързване отново…");
   });
 });
 
