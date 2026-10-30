@@ -14,12 +14,13 @@ const SECTION_TITLES = {
   team: "Екипът",
 };
 
-const REASON_LABELS = {
-  ci_failed: "CI failed",
-  changes_requested: "changes requested",
-  conflict: "conflict",
-  needs_rebase: "needs rebase",
-  review_requested: "review requested",
+// Same colour as the matching merge-state badge, so "needs rebase" looks alike wherever it shows.
+const REASONS = {
+  ci_failed: ["CI failed", "bad"],
+  changes_requested: ["changes requested", "bad"],
+  conflict: ["conflict", "bad"],
+  needs_rebase: ["needs rebase", "pending"],
+  review_requested: ["review requested", "bad"],
 };
 
 const CI_LABELS = {
@@ -73,7 +74,7 @@ function age(since) {
 
 function statusBadges(pr) {
   const badges = [];
-  if (pr.reason) badges.push(badge(REASON_LABELS[pr.reason] ?? pr.reason, "bad"));
+  if (pr.reason) badges.push(badge(...(REASONS[pr.reason] ?? [pr.reason, "bad"])));
   if (pr.isDraft) badges.push(badge("draft", "muted"));
   // GitHub may still be computing DIRTY while `mergeable` already says CONFLICTING.
   const state = pr.mergeable === "CONFLICTING" ? "DIRTY" : pr.mergeStateStatus;
