@@ -116,6 +116,18 @@ describe("SnapshotStore: seen marks", () => {
     expect(store.loadSeen()(pr("my-org/repo-a", 1))).toBe("2026-10-30T11:00:00.000Z");
   });
 
+  it("gives a first-seen mark only to PRs that have no mark yet", () => {
+    const store = openStore(":memory:");
+    store.markSeen("my-org/repo-a", 1, new Date("2026-10-30T10:00:00Z"));
+
+    store.markFirstSeen([pr("my-org/repo-a", 1), pr("my-org/repo-a", 2)], new Date("2026-10-30T12:00:00Z"));
+    store.markFirstSeen([pr("my-org/repo-a", 2)], new Date("2026-10-30T13:00:00Z"));
+
+    const seen = store.loadSeen();
+    expect(seen(pr("my-org/repo-a", 1))).toBe("2026-10-30T10:00:00.000Z");
+    expect(seen(pr("my-org/repo-a", 2))).toBe("2026-10-30T12:00:00.000Z");
+  });
+
   it("keeps seen marks across a restart, even when the snapshot format changes", () => {
     const dir = mkdtempSync(join(tmpdir(), "workdash-"));
     dirs.push(dir);

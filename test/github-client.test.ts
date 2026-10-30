@@ -4,12 +4,37 @@ import { pullRequest } from "./fixtures.js";
 
 type Call = { url: string; headers: Record<string, string>; query: string; variables: Record<string, string> };
 
+/**
+ * Answers a details query (`rI: repository { pJ: pullRequest(number: N) }`) from the PR nodes
+ * in `prsByRepo`, looked up by number; a number with no node comes back null.
+ */
+function answerDetails(query: string, variables: Record<string, string>, prsByRepo: Record<string, unknown[]>) {
+  const data: Record<string, Record<string, unknown>> = {};
+  let alias = "";
+  let repo = "";
+  for (const line of query.split("\n")) {
+    const repository = line.match(/\b(r(\d+)): repository/);
+    if (repository) {
+      alias = repository[1]!;
+      repo = `${variables[`owner${repository[2]}`]}/${variables[`name${repository[2]}`]}`;
+      data[alias] = {};
+    }
+    const lookup = line.match(/\b(p\d+): pullRequest\(number: (\d+)\)/);
+    if (lookup) {
+      const node = (prsByRepo[repo] ?? []).find((candidate) => (candidate as { number: number }).number === Number(lookup[2]));
+      data[alias]![lookup[1]!] = node ?? null;
+    }
+  }
+  return Response.json({ data });
+}
+
 /** A stand-in for api.github.com that answers each aliased repository from `prsByRepo`. */
 function fakeGitHub(prsByRepo: Record<string, unknown[]>, options: { truncated?: string[] } = {}) {
   const calls: Call[] = [];
   const fetch = async (url: string | URL | Request, init?: RequestInit) => {
     const { query, variables } = JSON.parse(String(init?.body));
     calls.push({ url: String(url), headers: init?.headers as Record<string, string>, query, variables });
+    if ((query as string).startsWith("query PullRequestDetails")) return answerDetails(query, variables, prsByRepo);
 
     const data: Record<string, unknown> = { viewer: { login: "me" } };
     for (const [, alias, index] of (query as string).matchAll(/\b(r(\d+)): repository/g)) {
@@ -65,7 +90,7 @@ function prNode(number: number, overrides: Record<string, unknown> = {}) {
 }
 
 describe("fetchSnapshot", () => {
-  it("fetches the viewer and every repo's open PRs in a single GraphQL request", async () => {
+  it("lists every repo's open PRs in one request, then fetches their comments and commits in one more", async () => {
     const github = fakeGitHub({
       "my-org/repo-a": [prNode(1)],
       "my-org/repo-b": [prNode(7, { title: "Fix login", author: { login: "colleague2" } })],
@@ -73,7 +98,8 @@ describe("fetchSnapshot", () => {
 
     const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a", "my-org/repo-b"], token: "t0ken", fetch: github.fetch });
 
-    expect(github.calls).toHaveLength(1);
+    expect(github.calls.map((call) => call.query.split("(")[0])).toEqual(["query Snapshot", "query PullRequestDetails"]);
+    expect(github.calls[0]?.query).not.toMatch(/reviewThreads|history/);
     expect(github.calls[0]?.url).toBe("https://api.github.com/graphql");
     expect(github.calls[0]?.headers.Authorization).toBe("Bearer t0ken");
     expect(snapshot.viewer).toBe("me");
@@ -178,6 +204,75 @@ describe("fetchSnapshot", () => {
     ]);
   });
 
+  describe("comments and commits of PRs seen before", () => {
+    const comment = (id: string) => ({ id, author: { __typename: "User", login: "colleague1" }, createdAt: "2026-10-30T09:00:00Z", body: id });
+    const stored = (number: number, updatedAt: string) =>
+      pullRequest({
+        number,
+        updatedAt,
+        comments: [{ id: `old-${number}`, author: "colleague1", createdAt: "2026-10-30T08:00:00Z", body: "old" }],
+        commits: [{ oid: `old-${number}`, committedAt: "2026-10-30T08:00:00Z" }],
+      });
+
+    it("reuses them for a PR whose updatedAt has not changed, and refetches only the changed and new PRs", async () => {
+      const github = fakeGitHub({
+        "my-org/repo-a": [
+          prNode(1, { updatedAt: "2026-10-30T10:00:00Z", comments: { nodes: [comment("new-1")] } }),
+          prNode(2, { updatedAt: "2026-10-30T11:00:00Z", comments: { nodes: [comment("new-2")] } }),
+          prNode(3, { comments: { nodes: [comment("new-3")] } }),
+        ],
+      });
+      const previous = [stored(1, "2026-10-30T10:00:00Z"), stored(2, "2026-10-30T10:00:00Z")];
+
+      const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch, previous });
+
+      expect(snapshot.pullRequests.map((pr) => [pr.number, pr.comments.map((c) => c.id), pr.commits.map((c) => c.oid)])).toEqual([
+        [1, ["old-1"], ["old-1"]],
+        [2, ["new-2"], []],
+        [3, ["new-3"], []],
+      ]);
+      expect(github.calls[1]?.query.match(/pullRequest\(number: \d+\)/g)).toEqual(["pullRequest(number: 2)", "pullRequest(number: 3)"]);
+    });
+
+    it("makes no details request when no PR changed", async () => {
+      const github = fakeGitHub({ "my-org/repo-a": [prNode(1, { updatedAt: "2026-10-30T10:00:00Z" })] });
+
+      await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch, previous: [stored(1, "2026-10-30T10:00:00Z")] });
+
+      expect(github.calls).toHaveLength(1);
+    });
+
+    it("does not reuse details from a PR with the same number in another repo", async () => {
+      const github = fakeGitHub({ "my-org/repo-b": [prNode(1, { updatedAt: "2026-10-30T10:00:00Z" })] });
+
+      const snapshot = await fetchSnapshot({ repos: ["my-org/repo-b"], token: "t", fetch: github.fetch, previous: [stored(1, "2026-10-30T10:00:00Z")] });
+
+      expect(snapshot.pullRequests[0]?.comments).toEqual([]);
+      expect(github.calls).toHaveLength(2);
+    });
+
+    it("splits the details of many changed PRs into requests small enough for GitHub to answer in time", async () => {
+      const numbers = Array.from({ length: 60 }, (_, i) => i + 1);
+      const github = fakeGitHub({ "my-org/repo-a": numbers.map((number) => prNode(number)) });
+
+      const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch });
+
+      const lookups = github.calls.slice(1).map((call) => call.query.match(/pullRequest\(number: \d+\)/g)!.length);
+      expect(lookups).toEqual([25, 25, 10]);
+      expect(snapshot.pullRequests).toHaveLength(60);
+    });
+
+    it("fails the poll when GitHub returns no details for a changed PR, so the next poll asks again", async () => {
+      const github = fakeGitHub({ "my-org/repo-a": [prNode(1)] });
+      const fetch = async (url: string | URL | Request, init?: RequestInit) =>
+        String(init?.body).includes("PullRequestDetails")
+          ? Response.json({ data: { r0: { p0: null } }, errors: [{ message: "Something went wrong" }] })
+          : github.fetch(url, init);
+
+      await expect(fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch })).rejects.toThrow(/Something went wrong/);
+    });
+  });
+
   it("keeps the branch name and description, where Jira keys are looked for", async () => {
     const github = fakeGitHub({
       "my-org/repo-a": [prNode(1, { headRefName: "feature/ABC-1-login", body: "Fixes ABC-1" })],
@@ -270,8 +365,10 @@ describe("fetchSnapshot", () => {
   });
 
   it("keeps the other repos and reports the one GitHub cannot resolve", async () => {
-    const fetch = async () =>
-      Response.json({
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      const { query, variables } = JSON.parse(String(init?.body));
+      if (query.startsWith("query PullRequestDetails")) return answerDetails(query, variables, { "my-org/repo-a": [prNode(1)] });
+      return Response.json({
         data: {
           viewer: { login: "me" },
           r0: null,
@@ -279,6 +376,7 @@ describe("fetchSnapshot", () => {
         },
         errors: [{ message: "Could not resolve to a Repository with the name 'my-org/nope'." }],
       });
+    };
 
     const snapshot = await fetchSnapshot({ repos: ["my-org/nope", "my-org/repo-a"], token: "t", fetch });
 
@@ -292,7 +390,7 @@ describe("fetchSnapshot", () => {
 
     const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch });
 
-    expect(snapshot.problems).toEqual(["my-org/repo-a has more than 50 open PRs; showing the 50 most recently updated"]);
+    expect(snapshot.problems).toEqual(["my-org/repo-a has more than 100 open PRs; showing the 100 most recently updated"]);
   });
 
   it("reports no problems when every repo came back whole", async () => {

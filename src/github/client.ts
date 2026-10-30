@@ -10,7 +10,7 @@ import type {
 } from "../domain/types.js";
 import type { GitHubResponseFailure } from "../domain/poll-error.js";
 import { type CheckContext, summarizeChecks } from "./checks.js";
-import { buildClosedQuery, buildSnapshotQuery, PAGE_SIZE } from "./query.js";
+import { buildClosedQuery, buildDetailsQuery, buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
 
@@ -31,10 +31,14 @@ type PullRequestNode = {
   reviewRequests: { nodes: { requestedReviewer: { login?: string } | null }[] };
   latestReviews: { nodes: { author: { login: string } | null; state: ReviewState | "PENDING"; submittedAt: string | null }[] };
   commits: { nodes: { commit: { statusCheckRollup: { contexts: { nodes: CheckContext[] } } | null } }[] };
+};
+
+/** The expensive part of a PR, fetched apart and only when the PR changed. */
+type DetailsNode = {
   comments: { nodes: CommentNode[] };
   reviewThreads: { nodes: { id: string; comments: { nodes: CommentNode[] } }[] };
   history: { nodes: { commit: { oid: string; committedDate: string } }[] };
-};
+} | null;
 
 type CommentNode = {
   id: string;
@@ -138,12 +142,25 @@ async function postGraphQL<T>(
   return { data, errors, failure };
 }
 
+/**
+ * How many PRs one details request asks for. GitHub gives up on a request after about 10 seconds,
+ * and the details of 100 busy PRs at once did not come back in time.
+ */
+const DETAILS_BATCH_SIZE = 25;
+
+/**
+ * Fetches the open PRs of every repo in one listing request, then the comments, review threads
+ * and commits of the PRs that are new or whose `updatedAt` moved since `previous`, in one more
+ * request per DETAILS_BATCH_SIZE PRs. Unchanged PRs keep their comments and commits from `previous`.
+ */
 export async function fetchSnapshot(options: {
   repos: string[];
   token: string;
   fetch?: typeof globalThis.fetch;
+  /** The last saved snapshot's PRs, whose comments and commits are reused while a PR is unchanged. */
+  previous?: PullRequest[];
 }): Promise<FetchedSnapshot> {
-  const { repos, token, fetch = globalThis.fetch } = options;
+  const { repos, token, fetch = globalThis.fetch, previous = [] } = options;
   const { data, errors, failure } = await postGraphQL<{ viewer: { login: string } } & Record<string, RepositoryNode>>(
     buildSnapshotQuery(repos),
     token,
@@ -153,9 +170,24 @@ export async function fetchSnapshot(options: {
 
   const repositories = repos.map((_, i) => data[`r${i}`] ?? null);
   const truncated = repositories.filter((repository) => repository?.pullRequests.pageInfo.hasNextPage);
+  const listed = repositories.flatMap(toPullRequests);
+
+  const key = (pr: { repo: string; number: number }) => `${pr.repo}#${pr.number}`;
+  const known = new Map(previous.map((pr) => [key(pr), pr]));
+  const changed = listed.filter((pr) => known.get(key(pr))?.updatedAt !== pr.updatedAt);
+  const details = new Map<string, Pick<PullRequest, "comments" | "commits">>();
+  for (let start = 0; start < changed.length; start += DETAILS_BATCH_SIZE) {
+    for (const [prKey, detail] of await fetchDetails(changed.slice(start, start + DETAILS_BATCH_SIZE), token, fetch)) {
+      details.set(prKey, detail);
+    }
+  }
+
   return {
     viewer: data.viewer.login,
-    pullRequests: repositories.flatMap(toPullRequests),
+    pullRequests: listed.map((pr) => {
+      const { comments, commits } = details.get(key(pr)) ?? known.get(key(pr))!;
+      return { ...pr, comments, commits };
+    }),
     unreadRepos: repos.filter((_, i) => !repositories[i]),
     problems: [
       ...errors.map((e) => e.message),
@@ -165,6 +197,32 @@ export async function fetchSnapshot(options: {
       ),
     ],
   };
+}
+
+/**
+ * Fetches the comments and commits of `pullRequests` in one request, keyed `repo#number`.
+ * Throws when GitHub leaves any of them out: saving the PR without them would hide its comments
+ * until it changes again, while a failed poll is retried with the same PRs.
+ */
+async function fetchDetails(
+  pullRequests: { repo: string; number: number }[],
+  token: string,
+  fetch: typeof globalThis.fetch,
+): Promise<Map<string, Pick<PullRequest, "comments" | "commits">>> {
+  const { query, variables, aliases } = buildDetailsQuery(pullRequests);
+  const { data, failure } = await postGraphQL<Record<string, Record<string, DetailsNode> | null>>({ query, variables }, token, fetch);
+  const details = new Map<string, Pick<PullRequest, "comments" | "commits">>();
+  aliases.forEach(({ repo, numbers }, i) =>
+    numbers.forEach((number, j) => {
+      const node = data?.[`r${i}`]?.[`p${j}`];
+      if (!node) throw failure(`no details for ${repo}#${number}`);
+      details.set(`${repo}#${number}`, {
+        comments: toComments(node),
+        commits: node.history.nodes.map(({ commit }) => ({ oid: commit.oid, committedAt: commit.committedDate })),
+      });
+    }),
+  );
+  return details;
 }
 
 /**
@@ -209,7 +267,8 @@ export async function fetchClosedPullRequests(options: {
   return { closed, problems: errors.map((e) => e.message) };
 }
 
-function toPullRequests(repository: RepositoryNode): PullRequest[] {
+/** The listed PRs, without comments and commits; those come from fetchDetails or the previous snapshot. */
+function toPullRequests(repository: RepositoryNode): Omit<PullRequest, "comments" | "commits">[] {
   if (!repository) return [];
   return repository.pullRequests.nodes.map((node) => ({
     repo: repository.nameWithOwner,
@@ -233,13 +292,11 @@ function toPullRequests(repository: RepositoryNode): PullRequest[] {
         : [{ author: review.author?.login ?? "ghost", state: review.state, submittedAt: review.submittedAt }],
     ),
     ...summarizeChecks(node.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []),
-    comments: toComments(node),
-    commits: node.history.nodes.map(({ commit }) => ({ oid: commit.oid, committedAt: commit.committedDate })),
   }));
 }
 
 /** General and review-thread comments in one list, oldest first. Bots are not people, so their comments are left out. */
-function toComments(node: PullRequestNode): Comment[] {
+function toComments(node: NonNullable<DetailsNode>): Comment[] {
   const toComment = (comment: CommentNode, thread?: string): Comment[] =>
     comment.author?.__typename === "Bot"
       ? []
