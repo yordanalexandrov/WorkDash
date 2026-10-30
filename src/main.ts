@@ -3,7 +3,8 @@ import { dirname } from "node:path";
 import { ConfigError, loadConfig } from "./config.js";
 import { openStore } from "./db.js";
 import { startPoller } from "./poller.js";
-import { buildServer } from "./server.js";
+import { buildServer, type DashboardSource, dashboardState } from "./server.js";
+import { createEventHub } from "./sse.js";
 
 const CONFIG_PATH = process.env.CONFIG_PATH ?? "config.yaml";
 const DB_PATH = process.env.DB_PATH ?? "data/workdash.db";
@@ -29,19 +30,21 @@ if (!token) fail(`${CONFIG_PATH}: github.token_env: environment variable ${confi
 mkdirSync(dirname(DB_PATH), { recursive: true });
 const store = openStore(DB_PATH);
 
-const server = buildServer({
+const events = createEventHub();
+const dashboard: DashboardSource = {
   store,
   rules: { team: config.team, requiredApprovals: config.review.requiredApprovals },
   pollIntervalMs: config.github.pollIntervalMs,
-  lastPollError: () => poller.lastError(),
-  logger: true,
-});
+  pollHealth: () => poller.health(),
+};
+const server = buildServer({ ...dashboard, events, logger: true });
 const poller = startPoller({
   repos: config.repos,
   token,
   intervalMs: config.github.pollIntervalMs,
   store,
   log: server.log,
+  onPoll: () => events.broadcast("dashboard", dashboardState(dashboard)),
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
