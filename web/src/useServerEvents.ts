@@ -16,9 +16,13 @@ export function useServerEvent<K extends keyof ServerEvents>(type: K, handler: (
   useEffect(() => stream().subscribe(type, (data) => latest.current(data)), [type]);
 }
 
-/** Whether the event stream is connected right now. */
+/**
+ * Whether the event stream is connected right now. The stream opens in the effect, never during render:
+ * the server sends the dashboard right on connect, and an event that arrives before the
+ * `useServerEvent` effects subscribe is lost until the next poll.
+ */
 export function useStreamStatus(): StreamStatus {
-  const [status, setStatus] = useState<StreamStatus>(() => stream().status());
+  const [status, setStatus] = useState<StreamStatus>("connecting");
   useEffect(() => {
     setStatus(stream().status());
     return stream().onStatus(setStatus);
