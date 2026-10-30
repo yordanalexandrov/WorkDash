@@ -8,7 +8,7 @@
 - Нотификации само за важното, по правила от конфигурацията.
 - Хоства се локално с Docker.
 
-> Статус: планиране. Виж [docs/plan.md](docs/plan.md).
+> Статус: walking skeleton: един списък с отворените PR-и от всички repo-та. Виж [docs/plan.md](docs/plan.md).
 
 ## Конфигурация
 
@@ -18,3 +18,41 @@ echo "GITHUB_TOKEN=..." > .env       # read-only токен
 ```
 
 `config.yaml` и `.env` не се commit-ват.
+
+Токен: fine-grained PAT с достъп само за четене до следените repo-та (Pull requests, Contents/Metadata,
+Commit statuses, Checks). Ако организацията не позволява fine-grained токени, ползвай classic PAT с `repo`
+или `gh auth token`. Текущият потребител се определя от токена.
+
+Конфигурацията се валидира при старт. При грешка процесът спира и съобщението казва кое поле е грешно.
+
+## Пускане
+
+```sh
+docker compose up -d --build
+```
+
+Таблото е на <http://localhost:3000>. Списъкът се обновява на всеки `github.poll_interval`.
+Последният snapshot се пази в SQLite във volume `workdash-data`, затова след рестарт таблото показва
+запазените данни още преди първия нов poll.
+
+Портът на хоста се сменя с `WORKDASH_PORT` в `.env`. Например за <http://dash>:
+
+```sh
+echo "WORKDASH_PORT=80" >> .env
+echo "127.0.0.1 dash" | sudo tee -a /etc/hosts
+```
+
+Логове: `docker compose logs -f`. След промяна на `config.yaml`: `docker compose restart`.
+
+## Разработка
+
+```sh
+npm install
+npm test             # Vitest
+npm run typecheck
+npm run build && node dist/main.js
+```
+
+Без Docker приложението чете `config.yaml` и пише в `data/workdash.db` в текущата директория и слуша на
+`127.0.0.1:3000`. Пътищата и адресът се сменят с `CONFIG_PATH`, `DB_PATH`, `HOST` и `PORT`. Токенът се
+чете от env променливата, посочена в `github.token_env`.
