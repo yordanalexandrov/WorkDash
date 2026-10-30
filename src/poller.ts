@@ -47,10 +47,15 @@ export function startPoller(
     polling = true;
     try {
       const previous = store.loadSnapshot()?.pullRequests ?? [];
+      // Taken before the request, so a comment posted while it is under way stays unread.
+      const startedAt = new Date();
       const snapshot = await fetchSnapshot({ repos, token, fetch });
       const vanished = vanishedPullRequests(previous, snapshot.pullRequests, snapshot.unreadRepos);
       const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token, fetch });
       const now = new Date();
+      // Only comments after a PR first showed up count as unread; marked before saving, so no
+      // reader sees a new PR without its mark.
+      store.markFirstSeen(snapshot.pullRequests, startedAt);
       store.saveSnapshot(snapshot, now);
       store.saveRecentlyClosed(
         updateRecentlyClosed({

@@ -12,6 +12,11 @@ export type SnapshotStore = {
   loadRecentlyClosed(): ClosedPullRequest[];
   /** Records that I have seen a PR as it was at `seenAt`; a later mark wins over an earlier one. */
   markSeen(repo: string, number: number, seenAt: Date): void;
+  /**
+   * Marks PRs that have no seen mark yet as seen at `at`, the time they were first observed,
+   * so only comments after that count as unread. PRs that already have a mark keep it.
+   */
+  markFirstSeen(pullRequests: { repo: string; number: number }[], at: Date): void;
   /** When each PR was last marked seen, as of this call. */
   loadSeen(): SeenAt;
   close(): void;
@@ -82,6 +87,10 @@ export function openStore(path: string): SnapshotStore {
   const upsertSeen = db.prepare(
     "INSERT INTO pr_seen (repo, number, seen_at) VALUES (?, ?, ?) ON CONFLICT (repo, number) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at)",
   );
+  const insertFirstSeen = db.prepare("INSERT INTO pr_seen (repo, number, seen_at) VALUES (?, ?, ?) ON CONFLICT (repo, number) DO NOTHING");
+  const firstSeen = db.transaction((pullRequests: { repo: string; number: number }[], at: string) => {
+    for (const pr of pullRequests) insertFirstSeen.run(pr.repo, pr.number, at);
+  });
   const selectSeen = db.prepare<[], { repo: string; number: number; seen_at: string }>("SELECT repo, number, seen_at FROM pr_seen");
 
   const save = db.transaction((snapshot: Snapshot, fetchedAt: string) => {
@@ -110,6 +119,9 @@ export function openStore(path: string): SnapshotStore {
     },
     markSeen(repo, number, seenAt) {
       upsertSeen.run(repo, number, seenAt.toISOString());
+    },
+    markFirstSeen(pullRequests, at) {
+      firstSeen(pullRequests, at.toISOString());
     },
     loadSeen() {
       const seen = new Map(selectSeen.all().map((row) => [`${row.repo}#${row.number}`, row.seen_at]));

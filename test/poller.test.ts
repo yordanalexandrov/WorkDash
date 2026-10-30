@@ -131,6 +131,25 @@ function fakeGitHubWithClosed(open: number[], mergedAt: string) {
   return { fetch, queries };
 }
 
+describe("startPoller seen baseline", () => {
+  it("marks each PR seen when a poll first observes it, leaving existing marks alone", async () => {
+    const store = openStore(":memory:");
+    store.markSeen("my-org/repo-a", 2, new Date("2026-10-01T00:00:00Z"));
+    const github = fakeGitHubWithClosed([2, 3], new Date().toISOString());
+    const startedAt = new Date().toISOString();
+
+    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch: github.fetch });
+    await vi.waitFor(() => expect(store.loadSnapshot()).not.toBeNull());
+    poller.stop();
+
+    const seen = store.loadSeen();
+    expect(seen(pullRequest({ number: 2 }))).toBe("2026-10-01T00:00:00.000Z");
+    // Taken before the request, so a comment posted while it was under way still counts as unread.
+    expect(seen(pullRequest({ number: 3 }))! >= startedAt).toBe(true);
+    expect(seen(pullRequest({ number: 3 }))! <= store.loadSnapshot()!.fetchedAt).toBe(true);
+  });
+});
+
 describe("startPoller recently closed", () => {
   it("looks up a PR that left the open list and keeps it apart as recently closed", async () => {
     const store = openStore(":memory:");
