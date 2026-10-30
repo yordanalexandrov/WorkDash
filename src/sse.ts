@@ -1,3 +1,14 @@
+import type { PrEvent } from "./domain/events.js";
+import type { MissedNotice } from "./domain/notify.js";
+import type { DashboardState } from "./server.js";
+
+/** Every event the server pushes, by SSE event name, with its data; web/src/events.ts mirrors it. */
+export type ServerEvents = {
+  dashboard: DashboardState;
+  notification: PrEvent;
+  missed: MissedNotice;
+};
+
 /** Where the hub writes: an HTTP response, or any stream in tests. */
 export type EventSink = {
   write(chunk: string): unknown;
@@ -5,16 +16,16 @@ export type EventSink = {
   once(event: "close", listener: () => void): unknown;
 };
 
-export type ServerEvent = { type: string; data: unknown };
+export type ServerEvent<E = ServerEvents> = { [K in keyof E & string]: { type: K; data: E[K] } }[keyof E & string];
 
 /**
  * The server's one Server-Sent Events channel. Every connected browser gets every
  * broadcast; the `type` becomes the SSE event name the browser subscribes to.
  */
-export type EventHub = {
+export type EventHub<E = ServerEvents> = {
   /** Adds a client and sends it `initial` right away, so it does not wait for the next broadcast. */
-  connect(sink: EventSink, initial?: ServerEvent[]): void;
-  broadcast(type: string, data: unknown): void;
+  connect(sink: EventSink, initial?: ServerEvent<E>[]): void;
+  broadcast<K extends keyof E & string>(type: K, data: E[K]): void;
   clientCount(): number;
   /** Ends every connection; the server cannot close while one is open. */
   close(): void;
@@ -30,7 +41,7 @@ export function formatEvent(type: string, data: unknown): string {
   return `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-export function createEventHub(options: { keepAliveMs?: number } = {}): EventHub {
+export function createEventHub<E = ServerEvents>(options: { keepAliveMs?: number } = {}): EventHub<E> {
   const clients = new Set<EventSink>();
   const keepAlive = setInterval(() => {
     for (const client of clients) client.write(": keep-alive\n\n");

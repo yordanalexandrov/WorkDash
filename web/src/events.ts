@@ -1,10 +1,7 @@
 import type { DashboardState } from "./api.js";
 import type { MissedNotice, PrEvent } from "./notifications.js";
 
-/**
- * Every event the server pushes over /api/events, by SSE event name, with the data it carries.
- * A new kind of server event gets its entry here, and then `subscribe`/`useServerEvent` take it.
- */
+/** Every event the server pushes over /api/events, by SSE event name; mirrors `ServerEvents` in src/sse.ts. */
 export type ServerEvents = {
   /** The whole dashboard, on connect and after every poll. */
   dashboard: DashboardState;

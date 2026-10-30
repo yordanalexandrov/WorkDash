@@ -5,11 +5,6 @@ import { isQuietAt, type NotificationRules, summarizeMissed } from "./domain/not
 import type { Snapshot } from "./domain/types.js";
 import type { EventHub, ServerEvent } from "./sse.js";
 
-/** The SSE event name a PR event is pushed under. */
-export const NOTIFICATION = "notification";
-/** The SSE event name the summary of the missed events is pushed under. */
-export const MISSED = "missed";
-
 /** How many missed events the summary lists at most; it counts all of them. */
 const MISSED_LIMIT = 50;
 /** How long a pushed event waits for a browser to acknowledge it before it counts as missed. */
@@ -54,7 +49,7 @@ export function createNotifier(options: {
     const ids = undelivered.map((event) => event.id);
     store.markDelivered(ids);
     for (const id of ids) awaitingAck.delete(id);
-    return missed && { type: MISSED, data: { ...missed, quiet: isQuietAt(current.quietHours, at, timeZone) } };
+    return missed && { type: "missed" as const, data: { ...missed, quiet: isQuietAt(current.quietHours, at, timeZone) } };
   }
 
   function flushMissed() {
@@ -75,7 +70,7 @@ export function createNotifier(options: {
       if (events.clientCount() === 0 || isQuietAt(quietHours, at, timeZone)) return;
       for (const event of fresh.filter((event) => enabled[event.type])) {
         awaitingAck.set(event.id, at.getTime());
-        events.broadcast(NOTIFICATION, event);
+        events.broadcast("notification", event);
       }
     },
     takePending: () => {

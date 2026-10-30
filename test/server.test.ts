@@ -266,16 +266,25 @@ describe("GET /api/events", () => {
     await readUntil("event: dashboard\n", 1);
     expect(text).toContain(`data: ${JSON.stringify(dashboardState(source))}\n\n`);
 
-    events.broadcast("dashboard", { changed: true });
+    const changed = { ...dashboardState(source), pollIntervalMs: 1 };
+    events.broadcast("dashboard", changed);
     await readUntil("event: dashboard\n", 2);
-    expect(text).toContain('data: {"changed":true}\n\n');
+    expect(text).toContain(`data: ${JSON.stringify(changed)}\n\n`);
     await reader.cancel();
   });
 
   it("sends a connecting browser the notifications it missed, after the dashboard", async () => {
     const store = openStore(":memory:");
     const source = { store, rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null };
-    const missed = { id: "mention:my-org/repo-a#1:c1", type: "mention" };
+    const missed = {
+      id: "mention:my-org/repo-a#1:c1",
+      type: "mention" as const,
+      repo: "my-org/repo-a",
+      number: 1,
+      title: "PR 1",
+      url: "https://github.com/my-org/repo-a/pull/1",
+      actor: "colleague1",
+    };
     const server = buildServer({ ...source, pendingNotifications: () => [{ type: "notification", data: missed }] });
     close = () => server.close();
     const address = await server.listen({ host: "127.0.0.1", port: 0 });

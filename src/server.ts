@@ -65,6 +65,8 @@ export function dashboardState({
   };
 }
 
+export type DashboardState = ReturnType<typeof dashboardState>;
+
 export function buildServer(
   options: DashboardSource & {
     /** The SSE channel behind GET /api/events; whoever polls broadcasts on it. */

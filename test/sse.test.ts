@@ -18,7 +18,7 @@ describe("formatEvent", () => {
 
 describe("createEventHub", () => {
   it("sends a connecting client its initial events, then every broadcast", () => {
-    const hub = createEventHub();
+    const hub = createEventHub<Record<string, unknown>>();
     const c = client();
 
     hub.connect(c.stream, [{ type: "dashboard", data: 1 }]);
@@ -32,7 +32,7 @@ describe("createEventHub", () => {
   });
 
   it("sends every broadcast to every connected client", () => {
-    const hub = createEventHub();
+    const hub = createEventHub<Record<string, unknown>>();
     const [a, b] = [client(), client()];
     hub.connect(a.stream);
     hub.connect(b.stream);
@@ -45,7 +45,7 @@ describe("createEventHub", () => {
   });
 
   it("forgets a client once its connection closes", async () => {
-    const hub = createEventHub();
+    const hub = createEventHub<Record<string, unknown>>();
     const c = client();
     hub.connect(c.stream);
 
@@ -58,7 +58,7 @@ describe("createEventHub", () => {
   });
 
   it("keeps idle connections open with a comment line", () => {
-    const hub = createEventHub({ keepAliveMs: 10 });
+    const hub = createEventHub<Record<string, unknown>>({ keepAliveMs: 10 });
     const c = client();
     hub.connect(c.stream);
 
@@ -72,7 +72,7 @@ describe("createEventHub", () => {
   });
 
   it("ends every connection when closed", () => {
-    const hub = createEventHub();
+    const hub = createEventHub<Record<string, unknown>>();
     const c = client();
     hub.connect(c.stream);
 
