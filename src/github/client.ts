@@ -6,6 +6,7 @@ import type {
   ReviewState,
   Snapshot,
 } from "../domain/types.js";
+import type { GitHubResponseFailure } from "../domain/poll-error.js";
 import { type CheckContext, summarizeChecks } from "./checks.js";
 import { buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
@@ -35,11 +36,36 @@ type RepositoryNode = {
 
 type GraphQLResponse = {
   data?: { viewer: { login: string } } & Record<string, RepositoryNode>;
-  errors?: { message: string }[];
+  errors?: { message: string; type?: string }[];
 };
 
-export class GitHubError extends Error {
+/** Headers that say why GitHub refused a request; classifyPollError reads them. */
+const FAILURE_HEADERS = ["x-ratelimit-remaining", "x-ratelimit-reset", "retry-after"];
+
+/** How long a poll waits for GitHub before treating it as unreachable. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export class GitHubError extends Error implements GitHubResponseFailure {
   override name = "GitHubError";
+  readonly status?: number;
+  readonly headers: Record<string, string>;
+  readonly errorTypes: string[];
+
+  constructor(message: string, details: { status?: number; headers?: Record<string, string>; errorTypes?: string[] } = {}) {
+    super(message);
+    this.status = details.status;
+    this.headers = details.headers ?? {};
+    this.errorTypes = details.errorTypes ?? [];
+  }
+}
+
+function failureHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const name of FAILURE_HEADERS) {
+    const value = response.headers.get(name);
+    if (value !== null) headers[name] = value;
+  }
+  return headers;
 }
 
 /**
@@ -62,17 +88,25 @@ export async function fetchSnapshot(options: {
       "User-Agent": "WorkDash",
     },
     body: JSON.stringify(buildSnapshotQuery(repos)),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new GitHubError(`GitHub API responded ${response.status}: ${body.message ?? response.statusText}`);
+    throw new GitHubError(`GitHub API responded ${response.status}: ${body.message ?? response.statusText}`, {
+      status: response.status,
+      headers: failureHeaders(response),
+    });
   }
 
   const { data, errors = [] } = (await response.json()) as GraphQLResponse;
   if (!data?.viewer) {
     const reason = errors.map((e) => e.message).join("; ") || "empty response";
-    throw new GitHubError(`GitHub GraphQL error: ${reason}`);
+    throw new GitHubError(`GitHub GraphQL error: ${reason}`, {
+      status: response.status,
+      headers: failureHeaders(response),
+      errorTypes: errors.flatMap((e) => e.type ?? []),
+    });
   }
 
   const repositories = repos.map((_, i) => data[`r${i}`] ?? null);
