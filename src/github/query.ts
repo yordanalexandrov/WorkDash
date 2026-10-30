@@ -9,10 +9,7 @@ const THREADS_PAGE_SIZE = 30;
 const THREAD_COMMENTS_PAGE_SIZE = 10;
 const COMMITS_PAGE_SIZE = 20;
 
-/**
- * Builds one GraphQL query that lists the viewer and the open PRs of every repo, one
- * `rN: repository(...)` alias per repo, without the PRs' comments and commits.
- */
+/** One query for the viewer and the open PRs of every repo (alias `rN`), without comments and commits. */
 export function buildSnapshotQuery(repos: string[]): { query: string; variables: Record<string, string> } {
   const variables: Record<string, string> = {};
   const params: string[] = [];
@@ -74,11 +71,7 @@ fragment openPullRequests on Repository {
 
 type Lookup = { query: string; variables: Record<string, string>; aliases: { repo: string; numbers: number[] }[] };
 
-/**
- * Builds one GraphQL query that looks up PRs by number, one `rN: repository(...)` alias per repo
- * and one `pM: pullRequest(number: ...)` alias per PR, each selecting the first fragment in `fragment`.
- * Returns the repos and numbers in alias order, so the answer can be mapped back.
- */
+/** One query that looks up PRs by number (aliases `rN`/`pM`); returns the aliases' repos and numbers to map the answer back. */
 function buildLookupQuery(operation: string, fragment: string, pullRequests: { repo: string; number: number }[]): Lookup {
   const aliases: { repo: string; numbers: number[] }[] = [];
   for (const { repo, number } of pullRequests) {
@@ -109,10 +102,7 @@ ${fragment}`;
   return { query, variables, aliases };
 }
 
-/**
- * Builds one GraphQL query for the comments, review threads and recent commits of the given PRs.
- * These are the expensive part of a PR, so they are fetched only for PRs that changed.
- */
+/** One query for the comments, review threads and recent commits of the given PRs. */
 export function buildDetailsQuery(pullRequests: { repo: string; number: number }[]): Lookup {
   return buildLookupQuery(
     "PullRequestDetails",

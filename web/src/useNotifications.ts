@@ -20,10 +20,7 @@ export type NotificationsView = {
   dismissMissed(): void;
 };
 
-/**
- * Shows a desktop notification for every event the server pushes, once the browser allows it, and one
- * summary notification for the missed events, which are also listed until dismissed.
- */
+/** Shows a desktop notification per pushed event and one for the missed events, which stay listed until dismissed. */
 export function useNotifications(): NotificationsView {
   const [permission, setPermission] = useState<PermissionState>(() => notificationPermission());
   const [missed, setMissed] = useState<Missed | null>(null);

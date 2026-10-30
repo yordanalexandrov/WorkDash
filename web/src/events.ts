@@ -31,10 +31,7 @@ export type EventSourceLike = {
 
 const CLOSED = 2;
 
-/**
- * Opens one SSE connection that any number of subscribers share. The browser retries a dropped
- * connection by itself; when it gives up (an HTTP error, a restarting server) this opens a new one.
- */
+/** Opens one shared SSE connection; when the browser gives up retrying (an HTTP error), this opens a new one. */
 export function openEventStream(options: {
   url: string;
   EventSource?: new (url: string) => EventSourceLike;

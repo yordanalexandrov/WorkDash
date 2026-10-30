@@ -1,6 +1,4 @@
-// Service worker for the installed dashboard (PWA).
-// It keeps the app shell available when the server is briefly down and brings the
-// dashboard forward when a notification shown through the registration is clicked.
+// Service worker for the installed dashboard (PWA): keeps the app shell available and handles notification clicks.
 // Data (/api/*) is never cached: the dashboard must show what the server knows now.
 
 const CACHE = "workdash-shell-v1";

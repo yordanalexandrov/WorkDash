@@ -3,10 +3,7 @@ import type { SectionOfPullRequests } from "./api.js";
 /** One repo's PRs, in the sections they fall into. */
 export type RepoCard = { repo: string; sections: SectionOfPullRequests[] };
 
-/**
- * Regroups the API's sections into one card per repo. Cards are ordered by the most urgent
- * section they hold, so a repo with something waiting on me comes first.
- */
+/** Regroups the sections into one card per repo, ordered by the most urgent section each holds. */
 export function groupByRepo(sections: SectionOfPullRequests[]): RepoCard[] {
   const cards = new Map<string, RepoCard & { urgency: number }>();
   sections.forEach(({ section, pullRequests }, urgency) => {

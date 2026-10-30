@@ -15,10 +15,7 @@ export const EVENT_TYPES = [
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
-/**
- * One thing that happened on a PR. The `id` is deterministic (type, PR and what happened), so the
- * same event found again, by the next poll or after a restart, has the same id and is not repeated.
- */
+/** One thing that happened on a PR; the `id` is deterministic, so an event found again is not repeated. */
 export type PrEvent = {
   id: string;
   type: EventType;
@@ -39,11 +36,7 @@ const key = (pr: PullRequest) => `${pr.repo}#${pr.number}`;
 const isFailed = (ci: CiState | null) => ci === "FAILURE" || ci === "ERROR";
 const headCommit = (pr: PullRequest) => pr.commits.at(-1)?.oid ?? "none";
 
-/**
- * How long before the previous poll a PR missing from it may have been opened and still count as
- * new: GitHub can list a PR a little after creating it. An older PR that shows up (a newly
- * followed repo, a reopened PR) is only baseline.
- */
+/** How long before the previous poll a PR may have been opened and still count as new: GitHub lists new PRs a little late. */
 const NEW_PR_SLACK_MS = 5 * 60_000;
 
 /** A PR before anything happened on it, to diff a newly opened PR against. */
@@ -51,12 +44,7 @@ function unopened(pr: PullRequest): PullRequest {
   return { ...pr, isDraft: true, requestedReviewers: [], reviews: [], comments: [], commits: [], ci: null, sonar: null };
 }
 
-/**
- * The events between the previous poll and this one, as seen by `current.viewer`.
- * Without a previous snapshot (the first poll ever) there are none: the snapshot is only the baseline.
- * A PR that left the open list (merged, closed) is not an event. One comment gives one event:
- * a mention wins over "new comment on my PR" and over a re-review reply.
- */
+/** The events between two polls, as seen by `current.viewer`; none on the first poll. A mention wins over other comment events. */
 export function diffSnapshots(
   previous: PreviousSnapshot | null,
   current: Snapshot,
@@ -128,10 +116,7 @@ export function diffSnapshots(
   return events;
 }
 
-/**
- * The newest commit or reply to me on someone else's PR since the previous poll that came after my
- * last review leaving comments or asking for changes; null when there is none.
- */
+/** The newest commit or reply to me since the previous poll that came after my review asking for more; null when none. */
 function reReviewNews(old: PullRequest, pr: PullRequest, me: string, newComments: Comment[]): { id: string; actor: string } | null {
   const review = reviewAskingForMore(pr, me);
   if (!review) return null;

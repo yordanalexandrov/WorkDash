@@ -127,12 +127,7 @@ export type ConfigWatcher = {
   close(): void;
 };
 
-/**
- * Watches the config file and hands every valid change to `apply`. An invalid change, or `apply` throwing a
- * ConfigError, leaves `current` in effect and is reported by `error()` until a later change is applied.
- *
- * The file is polled by path, so a change is seen even when an editor replaces the file with a new one.
- */
+/** Hands every valid change of the config file to `apply`; an invalid one keeps `current` and shows in `error()`. */
 export function watchConfig(
   path: string,
   options: {

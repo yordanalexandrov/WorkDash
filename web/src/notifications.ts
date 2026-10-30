@@ -1,5 +1,4 @@
-// Desktop notifications for the events the server pushes. Shown through the service worker when
-// there is one (sw.js opens `data.url` on click), otherwise with a plain `new Notification`.
+// Desktop notifications for the events the server pushes.
 
 import type { EventType, PrEvent } from "../../src/domain/events.js";
 import type { Missed, MissedNotice } from "../../src/domain/notify.js";
@@ -57,10 +56,7 @@ type NotificationEnv = {
 
 const browserEnv = (): NotificationEnv => ({ Notification: browserNotification, registration: serviceWorkerRegistration() });
 
-/**
- * Shows a notification through the service worker, else with `new Notification`; a click opens `url`,
- * or brings the dashboard forward without one. False when notifications are not allowed.
- */
+/** Shows a notification via the service worker, else `new Notification`; a click opens `url` or the dashboard. */
 async function show(env: NotificationEnv, title: string, options: { body: string; tag: string }, url?: string): Promise<boolean> {
   const { Notification: NotificationApi, open = (target) => window.open(target, "_blank") } = env;
   if (notificationPermission(NotificationApi) !== "granted") return false;

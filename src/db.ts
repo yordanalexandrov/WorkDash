@@ -13,10 +13,7 @@ export type SnapshotStore = {
   loadRecentlyClosed(): ClosedPullRequest[];
   /** Records that I have seen a PR as it was at `seenAt`; a later mark wins over an earlier one. */
   markSeen(repo: string, number: number, seenAt: Date): void;
-  /**
-   * Marks PRs that have no seen mark yet as seen at `at`, the time they were first observed,
-   * so only comments after that count as unread. PRs that already have a mark keep it.
-   */
+  /** Marks PRs without a seen mark as seen at `at`, when first observed, so only later comments are unread. */
   markFirstSeen(pullRequests: { repo: string; number: number }[], at: Date): void;
   /** When each PR was last marked seen, as of this call. */
   loadSeen(): SeenAt;

@@ -21,11 +21,7 @@ export type Notifier = {
   acknowledge(ids: string[]): void;
 };
 
-/**
- * Turns the difference between two polls into notifications, by the rules in `notifications`
- * (read on every call, so a reloaded config takes effect right away). An event stays undelivered
- * until a browser acknowledges it or lists it in a missed summary.
- */
+/** Turns the difference between two polls into notifications; an event stays undelivered until a browser shows it. */
 export function createNotifier(options: {
   store: SnapshotStore;
   events: EventHub;

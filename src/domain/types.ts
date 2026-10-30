@@ -12,16 +12,10 @@ export type ReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISM
 /** The latest submitted review of one reviewer. */
 export type Review = { author: string; state: ReviewState; submittedAt: string };
 
-/**
- * A comment by a person (bots are left out): a general PR comment, or one in a review thread.
- * `thread` is the review thread's id; general comments have none.
- */
+/** A comment by a person (not a bot); `thread` is the review thread's id, absent on general comments. */
 export type Comment = { id: string; author: string; createdAt: string; body: string; thread?: string };
 
-/**
- * A commit on the PR branch; `committedAt` changes when the commit is rebased or amended.
- * `firstSeenAt` is when a poll first saw it, standing in for the push time; absent for commits already there when the PR was first seen.
- */
+/** A commit on the PR branch; `firstSeenAt` (when a poll first saw it) stands in for the push time. */
 export type Commit = { oid: string; committedAt: string; firstSeenAt?: string };
 
 /** When the commit reached the branch, as far as the polls can tell. */

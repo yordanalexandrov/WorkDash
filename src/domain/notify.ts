@@ -12,10 +12,7 @@ export const ALL_ENABLED: NotificationRules = {
   quietHours: null,
 };
 
-/**
- * The events that were recorded but never shown: no browser was open, or it was quiet hours.
- * They are handed over at once, as one summary, rather than as a burst of notifications.
- */
+/** The events no browser showed, handed over as one summary rather than a burst of notifications. */
 export type Missed = {
   /** How many were missed, the ones left out of `events` too. */
   total: number;

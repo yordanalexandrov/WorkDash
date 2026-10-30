@@ -23,10 +23,7 @@ export function unreadComments(pr: PullRequest, me: string, seenAt: string | nul
   return pr.comments.filter((comment) => !sameLogin(comment.author, me) && after(comment.createdAt, seenAt));
 }
 
-/**
- * Whether a comment on someone else's PR answers `me`: it is by the PR author, in a review thread
- * I wrote in, or mentions me.
- */
+/** Whether a comment on someone else's PR answers `me`: by the PR author, in my review thread, or mentioning me. */
 export function repliesTo(pr: PullRequest, me: string): (comment: Comment) => boolean {
   const myThreads = new Set(pr.comments.flatMap((comment) => (comment.thread && sameLogin(comment.author, me) ? [comment.thread] : [])));
   return (comment) =>
@@ -39,12 +36,7 @@ export function reviewAskingForMore(pr: PullRequest, me: string): Review | null 
   return review && (review.state === "COMMENTED" || review.state === "CHANGES_REQUESTED") ? review : null;
 }
 
-/**
- * New commits and replies to me on someone else's PR after my last review that left comments or
- * requested changes, counted from whichever is later: that review or `seenAt`. A reply is a comment
- * by the PR author, a comment in a review thread I wrote in, or a comment that mentions me.
- * Null when I have no such review or nothing new happened since.
- */
+/** New commits and replies to me since my review asking for more or `seenAt`, whichever is later; null when none. */
 export function reReviewActivity(pr: PullRequest, me: string, seenAt: string | null): ReReview | null {
   const review = reviewAskingForMore(pr, me);
   if (!review) return null;

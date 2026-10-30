@@ -143,17 +143,10 @@ async function postGraphQL<T>(
   return { data, errors, failure };
 }
 
-/**
- * How many PRs one details request asks for. GitHub gives up on a request after about 10 seconds,
- * and the details of 100 busy PRs at once did not come back in time.
- */
+/** PRs per details request: GitHub gives up after about 10 s, and 100 busy PRs did not come back in time. */
 const DETAILS_BATCH_SIZE = 25;
 
-/**
- * Fetches the open PRs of every repo in one listing request, then the comments, review threads
- * and commits of the PRs that are new or whose `updatedAt` moved since `previous`, in one more
- * request per DETAILS_BATCH_SIZE PRs. Unchanged PRs keep their comments and commits from `previous`.
- */
+/** Lists the open PRs of every repo, then fetches details only for PRs new or updated since `previous`. */
 export async function fetchSnapshot(options: {
   repos: string[];
   token: string;
@@ -214,11 +207,7 @@ function firstSeen(commits: Commit[], before: Commit[], at: Date): Commit[] {
   });
 }
 
-/**
- * Fetches the comments and commits of `pullRequests` in one request, keyed `repo#number`.
- * Throws when GitHub leaves any of them out: saving the PR without them would hide its comments
- * until it changes again, while a failed poll is retried with the same PRs.
- */
+/** The comments and commits of `pullRequests`, keyed `repo#number`; throws when one is missing, so the poll is retried. */
 async function fetchDetails(
   pullRequests: { repo: string; number: number }[],
   token: string,
@@ -240,11 +229,7 @@ async function fetchDetails(
   return details;
 }
 
-/**
- * Looks up PRs by number, in one request, to learn whether each was merged or closed.
- * A PR that is still open (one pushed off a full page, say) is left out. Throws a GitHubError,
- * like fetchSnapshot, when GitHub answers with no data.
- */
+/** Looks up PRs by number to learn whether each was merged or closed; one still open is left out. */
 export async function fetchClosedPullRequests(options: {
   pullRequests: { repo: string; number: number }[];
   token: string;

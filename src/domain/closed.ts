@@ -2,11 +2,7 @@ import type { ClosedPullRequest, PullRequest } from "./types.js";
 
 const key = (pr: { repo: string; number: number }) => `${pr.repo}#${pr.number}`;
 
-/**
- * The PRs that were open at the previous poll and are not open now: merged, closed, or (rarely)
- * pushed off a full page. A repo the current poll could not read is skipped, since its PRs
- * did not really disappear.
- */
+/** The PRs open at the previous poll and not now; a repo this poll could not read is skipped. */
 export function vanishedPullRequests(previous: PullRequest[], current: PullRequest[], unreadRepos: string[]): PullRequest[] {
   const open = new Set(current.map(key));
   return previous.filter((pr) => !open.has(key(pr)) && !unreadRepos.includes(pr.repo));
@@ -18,11 +14,7 @@ export function withinWindow(closed: ClosedPullRequest[], now: Date, windowMs: n
   return closed.filter((pr) => new Date(pr.closedAt).getTime() >= since);
 }
 
-/**
- * The recently closed list after a poll: the known entries plus the newly closed ones (one entry
- * per PR, the newer wins), minus PRs that were reopened and PRs closed before the window.
- * Most recently closed first.
- */
+/** The recently closed list after a poll, without reopened PRs and those before the window; newest first. */
 export function updateRecentlyClosed(options: {
   known: ClosedPullRequest[];
   newlyClosed: ClosedPullRequest[];

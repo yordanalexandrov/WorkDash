@@ -1,6 +1,4 @@
-// Registers the PWA service worker (web/public/sw.js) and hands out its registration.
-// Notifications shown through `registration.showNotification` keep working while the
-// installed window is minimized, so the notification code should prefer it when it is there.
+// Registers the PWA service worker; its notifications keep working while the installed window is minimized.
 
 let registration: Promise<ServiceWorkerRegistration | null> = Promise.resolve(null);
 

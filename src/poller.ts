@@ -20,13 +20,8 @@ export type Poller = {
 };
 
 /**
- * Polls GitHub right away and then every `intervalMs` (longer while a rate limit lasts),
- * saving each snapshot to the store. A failed poll leaves the last good snapshot in place.
- * `onPoll` runs after every poll, failed or not, e.g. to push the new state to browsers.
- *
- * A PR that left the open list since the last poll is looked up once by number; if it was merged
- * or closed, it is kept apart from the open PRs for `recentlyClosedWindowMs`. When that lookup
- * fails outright, the whole poll fails and nothing is saved, so the next poll looks again.
+ * Polls GitHub right away and then every `intervalMs` (longer while a rate limit lasts), saving each snapshot.
+ * A failed poll, a failed closed-PR lookup included, saves nothing, so the next poll looks again.
  */
 export function startPoller(
   options: PollerSettings & {
@@ -59,8 +54,7 @@ export function startPoller(
       const vanished = vanishedPullRequests(previous, snapshot.pullRequests, snapshot.unreadRepos);
       const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token, fetch });
       const now = new Date();
-      // Only comments after a PR first showed up count as unread; marked before saving, so no
-      // reader sees a new PR without its mark.
+      // Marked before saving, so no reader sees a new PR without its mark.
       store.markFirstSeen(snapshot.pullRequests, startedAt);
       store.saveSnapshot(snapshot, now);
       store.saveRecentlyClosed(

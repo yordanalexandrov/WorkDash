@@ -46,10 +46,7 @@ function changesRequested(pr: PullRequest): boolean {
   return pr.reviews.some((review) => review.state === "CHANGES_REQUESTED");
 }
 
-/**
- * Places a PR in a section for `me`, or returns null when the dashboard should not show it.
- * `seenAt` is when I last marked the PR seen: comments and commits until then no longer call for me.
- */
+/** Places a PR in a section for `me`; null when the dashboard should not show it. Activity before `seenAt` is read. */
 export function classify(pr: PullRequest, me: string, rules: ClassifyRules, seenAt: string | null = null): Classification | null {
   const unread = unreadComments(pr, me, seenAt);
   if (sameLogin(pr.author, me)) {
