@@ -52,6 +52,15 @@ echo "127.0.0.1 dash" | sudo tee -a /etc/hosts
 
 Логове: `docker compose logs -f`. След промяна на `config.yaml`: `docker compose restart`.
 
+### Инсталиране като приложение
+
+В Chrome/Edge отвори таблото и избери „Install WorkDash“ (иконката в адресната лента или менюто ⋮ →
+„Cast, save and share“ → „Install page as app“). Таблото се отваря в собствен прозорец с иконка.
+
+Service worker-ът, а с него и инсталирането, изискват secure context. `localhost` е такъв, `http://dash`
+не е. За `http://dash` пусни браузъра с `--unsafely-treat-insecure-origin-as-secure=http://dash` или
+инсталирай от `http://localhost:<WORKDASH_PORT>`.
+
 ## Разработка
 
 ```sh
