@@ -61,7 +61,7 @@ describe("createNotifier", () => {
 
     expect(page.text()).toContain("event: notification\n");
     expect(page.text()).toContain('"id":"review_requested:my-org/repo-a#1:none"');
-    expect(store.undeliveredEvents(10)).toEqual([]);
+    expect(store.undeliveredEvents()).toEqual([]);
     hub.close();
   });
 
@@ -83,7 +83,7 @@ describe("createNotifier", () => {
 
     notifier.afterSnapshot(null, requested());
 
-    expect(store.undeliveredEvents(10)).toEqual([]);
+    expect(store.undeliveredEvents()).toEqual([]);
     expect(notifier.takePending()).toEqual([]);
   });
 
@@ -159,7 +159,7 @@ describe("createNotifier", () => {
           },
         },
       ]);
-      expect(store.undeliveredEvents(10)).toEqual([]);
+      expect(store.undeliveredEvents()).toEqual([]);
       expect(notifier.takePending()).toEqual([]);
     });
 
@@ -184,7 +184,7 @@ describe("createNotifier", () => {
       notifier.afterSnapshot(before, requested());
 
       expect(page.text()).toBe("retry: 3000\n\n");
-      expect(store.undeliveredEvents(10)).toHaveLength(1);
+      expect(store.undeliveredEvents()).toHaveLength(1);
       hub.close();
     });
 
@@ -231,7 +231,7 @@ describe("createNotifier", () => {
 
       notifier.flushMissed();
 
-      expect(store.undeliveredEvents(10)).toHaveLength(1);
+      expect(store.undeliveredEvents()).toHaveLength(1);
     });
   });
 });

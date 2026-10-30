@@ -165,34 +165,9 @@ describe("SnapshotStore: events", () => {
     store.recordEvents([event("a"), event("b")], new Date("2026-10-30T10:00:00Z"));
     store.recordEvents([event("c")], new Date("2026-10-30T10:01:00Z"));
 
-    expect(store.undeliveredEvents(10)).toEqual([event("a"), event("b"), event("c")]);
+    expect(store.undeliveredEvents()).toEqual([event("a"), event("b"), event("c")]);
     store.markDelivered(["a", "c"]);
-    expect(store.undeliveredEvents(10)).toEqual([event("b")]);
-  });
-
-  it("gives only the latest undelivered events when there are more than asked for", () => {
-    const store = openStore(":memory:");
-    store.recordEvents([event("a"), event("b"), event("c")], new Date("2026-10-30T10:00:00Z"));
-
-    expect(store.undeliveredEvents(2)).toEqual([event("b"), event("c")]);
-  });
-
-  it("counts the undelivered events by type", () => {
-    const store = openStore(":memory:");
-    store.recordEvents([event("a"), event("b"), { ...event("c"), type: "team_pr_opened" }], new Date("2026-10-30T10:00:00Z"));
-    store.markDelivered(["a"]);
-
-    expect(store.undeliveredCounts()).toEqual({ mention: 1, team_pr_opened: 1 });
-  });
-
-  it("marks every undelivered event delivered at once", () => {
-    const store = openStore(":memory:");
-    store.recordEvents([event("a"), event("b")], new Date("2026-10-30T10:00:00Z"));
-
-    store.markAllDelivered();
-
-    expect(store.undeliveredEvents(10)).toEqual([]);
-    expect(store.undeliveredCounts()).toEqual({});
+    expect(store.undeliveredEvents()).toEqual([event("b")]);
   });
 
   it("remembers events across a restart and a snapshot format change, so none is repeated", () => {
@@ -209,6 +184,6 @@ describe("SnapshotStore: events", () => {
 
     const second = openStore(path);
     expect(second.recordEvents([event("a")], new Date("2026-10-30T10:05:00Z"))).toEqual([]);
-    expect(second.undeliveredEvents(10)).toEqual([event("b")]);
+    expect(second.undeliveredEvents()).toEqual([event("b")]);
   });
 });

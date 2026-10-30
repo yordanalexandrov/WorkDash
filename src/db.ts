@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import type { SeenAt } from "./domain/classify.js";
-import type { EventType, PrEvent } from "./domain/events.js";
+import type { PrEvent } from "./domain/events.js";
 import type { ClosedPullRequest, PullRequest, Snapshot } from "./domain/types.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
@@ -22,13 +22,9 @@ export type SnapshotStore = {
   loadSeen(): SeenAt;
   /** Saves the events; returns those it had not saved before, in the given order. */
   recordEvents(events: PrEvent[], at: Date): PrEvent[];
-  /** The latest `limit` events not yet sent to a browser, oldest first. */
-  undeliveredEvents(limit: number): PrEvent[];
+  /** The events no browser has shown yet, oldest first. */
+  undeliveredEvents(): PrEvent[];
   markDelivered(ids: string[]): void;
-  /** How many events of each type are not yet sent to a browser. */
-  undeliveredCounts(): Partial<Record<EventType, number>>;
-  /** Marks every event delivered, the ones too old to be listed as missed included. */
-  markAllDelivered(): void;
   close(): void;
 };
 
@@ -116,17 +112,11 @@ export function openStore(path: string): SnapshotStore {
   const insertEvent = db.prepare(
     "INSERT OR IGNORE INTO event (id, type, repo, number, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
   );
-  const selectUndelivered = db.prepare<[number], { payload_json: string }>(
-    "SELECT payload_json FROM (SELECT payload_json, rowid AS n FROM event WHERE delivered = 0 ORDER BY rowid DESC LIMIT ?) ORDER BY n",
-  );
+  const selectUndelivered = db.prepare<[], { payload_json: string }>("SELECT payload_json FROM event WHERE delivered = 0 ORDER BY rowid");
   const updateDelivered = db.prepare("UPDATE event SET delivered = 1 WHERE id = ?");
   const record = db.transaction((events: PrEvent[], at: string) =>
     events.filter((event) => insertEvent.run(event.id, event.type, event.repo, event.number, at, JSON.stringify(event)).changes > 0),
   );
-  const countUndelivered = db.prepare<[], { type: EventType; count: number }>(
-    "SELECT type, COUNT(*) AS count FROM event WHERE delivered = 0 GROUP BY type",
-  );
-  const deliverAll = db.prepare("UPDATE event SET delivered = 1 WHERE delivered = 0");
   const deliver = db.transaction((ids: string[]) => ids.forEach((id) => updateDelivered.run(id)));
 
   const save = db.transaction((snapshot: Snapshot, fetchedAt: string) => {
@@ -166,17 +156,11 @@ export function openStore(path: string): SnapshotStore {
     recordEvents(events, at) {
       return record(events, at.toISOString());
     },
-    undeliveredEvents(limit) {
-      return selectUndelivered.all(limit).map((row) => JSON.parse(row.payload_json) as PrEvent);
+    undeliveredEvents() {
+      return selectUndelivered.all().map((row) => JSON.parse(row.payload_json) as PrEvent);
     },
     markDelivered(ids) {
       deliver(ids);
-    },
-    undeliveredCounts() {
-      return Object.fromEntries(countUndelivered.all().map((row) => [row.type, row.count]));
-    },
-    markAllDelivered() {
-      deliverAll.run();
     },
     close() {
       db.close();

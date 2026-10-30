@@ -24,28 +24,13 @@ export type Missed = {
   events: PrEvent[];
 };
 
-/**
- * The summary of the missed events from how many there are of each type and the latest of them
- * (oldest first, as the store gives them). Types that are turned off are left out; null when
- * nothing that notifies was missed.
- */
-export function summarizeMissed(
-  counts: Partial<Record<EventType, number>>,
-  latest: PrEvent[],
-  rules: NotificationRules,
-  limit: number,
-): Missed | null {
+/** The summary of the undelivered events (oldest first), types turned off left out; null when nothing that notifies was missed. */
+export function summarizeMissed(undelivered: PrEvent[], rules: NotificationRules, limit: number): Missed | null {
+  const missed = undelivered.filter((event) => rules.enabled[event.type]);
+  if (missed.length === 0) return null;
   const byType: Partial<Record<EventType, number>> = {};
-  let total = 0;
-  for (const type of EVENT_TYPES) {
-    const count = counts[type] ?? 0;
-    if (!rules.enabled[type] || count === 0) continue;
-    byType[type] = count;
-    total += count;
-  }
-  if (total === 0) return null;
-  const events = latest.filter((event) => rules.enabled[event.type]).reverse().slice(0, limit);
-  return { total, byType, events };
+  for (const event of missed) byType[event.type] = (byType[event.type] ?? 0) + 1;
+  return { total: missed.length, byType, events: missed.reverse().slice(0, limit) };
 }
 
 /** A daily time range with no notifications, in minutes since midnight; `end` before `start` crosses midnight. */

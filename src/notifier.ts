@@ -46,10 +46,10 @@ export function createNotifier(options: {
   function takeMissed(): ServerEvent | null {
     const current = notifications();
     if (isQuietAt(current.quietHours, now(), timeZone)) return null;
-    const counts = store.undeliveredCounts();
-    const skipped = Object.entries(counts).reduce((sum, [type, count]) => sum + (current.enabled[type as keyof typeof current.enabled] ? 0 : count), 0);
-    const missed = summarizeMissed(counts, store.undeliveredEvents(MISSED_LIMIT + skipped), current, MISSED_LIMIT);
-    store.markAllDelivered();
+    const undelivered = store.undeliveredEvents();
+    const missed = summarizeMissed(undelivered, current, MISSED_LIMIT);
+    // Exactly what was read: the turned-off types too, so turning one back on does not bring them up.
+    store.markDelivered(undelivered.map((event) => event.id));
     return missed && { type: MISSED, data: missed };
   }
 

@@ -25,26 +25,26 @@ describe("ALL_ENABLED", () => {
 
 describe("summarizeMissed", () => {
   it("counts the missed events by type and lists the newest first", () => {
-    const missed = summarizeMissed({ mention: 2, review_requested: 1 }, [event(1), event(2, "review_requested"), event(3)], rules(), 50);
+    const missed = summarizeMissed([event(1), event(2, "review_requested"), event(3)], rules(), 50);
 
     expect(missed).toEqual({ total: 3, byType: { mention: 2, review_requested: 1 }, events: [event(3), event(2, "review_requested"), event(1)] });
   });
 
   it("lists at most `limit` events but counts them all", () => {
-    const missed = summarizeMissed({ mention: 70 }, [event(68), event(69), event(70)], rules(), 2);
+    const missed = summarizeMissed([event(68), event(69), event(70)], rules(), 2);
 
-    expect(missed).toEqual({ total: 70, byType: { mention: 70 }, events: [event(70), event(69)] });
+    expect(missed).toEqual({ total: 3, byType: { mention: 3 }, events: [event(70), event(69)] });
   });
 
   it("leaves out the types that are turned off", () => {
-    const missed = summarizeMissed({ mention: 1, team_pr_opened: 2 }, [event(1, "team_pr_opened"), event(2), event(3, "team_pr_opened")], rules(["team_pr_opened"]), 50);
+    const missed = summarizeMissed([event(1, "team_pr_opened"), event(2), event(3, "team_pr_opened")], rules(["team_pr_opened"]), 1);
 
     expect(missed).toEqual({ total: 1, byType: { mention: 1 }, events: [event(2)] });
   });
 
   it("is null when nothing was missed", () => {
-    expect(summarizeMissed({}, [], rules(), 50)).toBeNull();
-    expect(summarizeMissed({ mention: 1 }, [event(1)], rules(["mention"]), 50)).toBeNull();
+    expect(summarizeMissed([], rules(), 50)).toBeNull();
+    expect(summarizeMissed([event(1)], rules(["mention"]), 50)).toBeNull();
   });
 });
 
