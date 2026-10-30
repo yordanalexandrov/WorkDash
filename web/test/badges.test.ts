@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
-import { checkBadges, reviewBadges, statusBadges } from "../src/badges.js";
+import { checkBadges, reviewBadges, statusBadges, unreadBadges } from "../src/badges.js";
 
 const pr = pullRequest;
 
@@ -17,6 +17,26 @@ describe("statusBadges", () => {
     expect(statusBadges(pr({ mergeable: "CONFLICTING", mergeStateStatus: "UNKNOWN" }))).toEqual([
       { text: "conflict", kind: "bad", title: "Има конфликт с base клона" },
     ]);
+  });
+
+  it.each([
+    [1, "1 нов коментар"],
+    [3, "3 нови коментара"],
+  ])("names the number of new comments on my PR (%i)", (unreadComments, text) => {
+    expect(statusBadges({ ...pr(), reason: "unread_comments", unreadComments })[0]).toEqual({ text, kind: "bad" });
+  });
+
+  it("names a mention", () => {
+    expect(statusBadges({ ...pr(), reason: "mention" })[0]).toEqual({ text: "mention", kind: "bad" });
+  });
+
+  it.each([
+    [{ newCommits: 1, replies: 0 }, "re-review: 1 нов commit"],
+    [{ newCommits: 2, replies: 0 }, "re-review: 2 нови commit-а"],
+    [{ newCommits: 0, replies: 1 }, "re-review: 1 отговор"],
+    [{ newCommits: 3, replies: 2 }, "re-review: 3 нови commit-а, 2 отговора"],
+  ])("says what is new for a re-review (%o)", (reReview, text) => {
+    expect(statusBadges({ ...pr(), reason: "re_review", reReview })[0]).toEqual({ text, kind: "bad" });
   });
 
   it("does not repeat a merge state the reason already names", () => {
@@ -42,6 +62,21 @@ describe("checkBadges", () => {
     expect(checkBadges({ ...pr({ ci: "FAILURE", sonar: "FAILURE" }), reason: "ci_failed" })).toEqual([
       { text: "Sonar ✗", kind: "bad" },
     ]);
+  });
+});
+
+describe("unreadBadges", () => {
+  it("shows how many comments are unread", () => {
+    expect(unreadBadges({ ...pr(), unreadComments: 2 })).toEqual([{ text: "💬 2", kind: "pending", title: "2 непрочетени коментара" }]);
+  });
+
+  it("shows nothing when every comment is read", () => {
+    expect(unreadBadges({ ...pr(), unreadComments: 0 })).toEqual([]);
+    expect(unreadBadges(pr())).toEqual([]);
+  });
+
+  it("does not repeat the count the reason already names", () => {
+    expect(unreadBadges({ ...pr(), reason: "unread_comments", unreadComments: 2 })).toEqual([]);
   });
 });
 

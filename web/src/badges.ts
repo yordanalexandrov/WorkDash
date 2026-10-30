@@ -14,7 +14,29 @@ const REASONS: Record<string, Mark> = {
   conflict: ["conflict", "bad"],
   needs_rebase: ["needs rebase", "pending"],
   review_requested: ["review requested", "bad"],
+  mention: ["mention", "bad"],
 };
+
+/** "1 нов коментар", "2 нови коментара": Bulgarian counts take a different form after one. */
+function count(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+const newComments = (n: number) => count(n, "нов коментар", "нови коментара");
+
+/** The reasons whose text depends on what the PR holds. */
+function reasonMark(pr: ClassifiedPullRequest): Mark | undefined {
+  if (pr.reason === "unread_comments") return [newComments(pr.unreadComments ?? 0), "bad"];
+  if (pr.reason === "re_review") {
+    const { newCommits = 0, replies = 0 } = pr.reReview ?? {};
+    const news = [
+      ...(newCommits ? [count(newCommits, "нов commit", "нови commit-а")] : []),
+      ...(replies ? [count(replies, "отговор", "отговора")] : []),
+    ];
+    return [`re-review: ${news.join(", ")}`, "bad"];
+  }
+  return pr.reason ? REASONS[pr.reason] : undefined;
+}
 
 const CHECK_MARKS: Record<CiState, Mark> = {
   SUCCESS: ["✓", "ok"],
@@ -47,7 +69,7 @@ function badge([text, kind, title]: Mark): Badge {
 /** Why the PR waits on me, whether it is a draft, and whether it can be merged. */
 export function statusBadges(pr: ClassifiedPullRequest): Badge[] {
   const badges: Badge[] = [];
-  if (pr.reason) badges.push(badge(REASONS[pr.reason] ?? [pr.reason, "bad"]));
+  if (pr.reason) badges.push(badge(reasonMark(pr) ?? [pr.reason, "bad"]));
   if (pr.isDraft) badges.push(badge(["draft", "muted"]));
   // GitHub may still be computing DIRTY while `mergeable` already says CONFLICTING.
   const state = pr.mergeable === "CONFLICTING" ? "DIRTY" : pr.mergeStateStatus;
@@ -69,6 +91,13 @@ export function checkBadges(pr: ClassifiedPullRequest): Badge[] {
     badges.push(badge([`Sonar ${mark}`, kind]));
   }
   return badges;
+}
+
+/** How many comments are unread, unless the reason badge already says it. */
+export function unreadBadges(pr: ClassifiedPullRequest): Badge[] {
+  const unread = pr.unreadComments ?? 0;
+  if (!unread || pr.reason === "unread_comments") return [];
+  return [badge([`💬 ${unread}`, "pending", count(unread, "непрочетен коментар", "непрочетени коментара")])];
 }
 
 /** One badge per reviewer's latest review; dismissed reviews are left out. */
