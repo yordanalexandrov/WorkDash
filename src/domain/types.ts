@@ -18,8 +18,14 @@ export type Review = { author: string; state: ReviewState; submittedAt: string }
  */
 export type Comment = { id: string; author: string; createdAt: string; body: string; thread?: string };
 
-/** A commit on the PR branch; `committedAt` changes when the commit is rebased or amended. */
-export type Commit = { oid: string; committedAt: string };
+/**
+ * A commit on the PR branch; `committedAt` changes when the commit is rebased or amended.
+ * `firstSeenAt` is when a poll first saw it, standing in for the push time; absent for commits already there when the PR was first seen.
+ */
+export type Commit = { oid: string; committedAt: string; firstSeenAt?: string };
+
+/** When the commit reached the branch, as far as the polls can tell. */
+export const pushedAt = (commit: Commit) => commit.firstSeenAt ?? commit.committedAt;
 
 export type PullRequest = {
   repo: string; // owner/name

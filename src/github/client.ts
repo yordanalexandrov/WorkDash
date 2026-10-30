@@ -1,6 +1,7 @@
 import type {
   ClosedPullRequest,
   Comment,
+  Commit,
   Mergeable,
   MergeStateStatus,
   PullRequest,
@@ -159,8 +160,10 @@ export async function fetchSnapshot(options: {
   fetch?: typeof globalThis.fetch;
   /** The last saved snapshot's PRs, whose comments and commits are reused while a PR is unchanged. */
   previous?: PullRequest[];
+  /** The `firstSeenAt` of commits new on a PR seen before. */
+  observedAt?: Date;
 }): Promise<FetchedSnapshot> {
-  const { repos, token, fetch = globalThis.fetch, previous = [] } = options;
+  const { repos, token, fetch = globalThis.fetch, previous = [], observedAt = new Date() } = options;
   const { data, errors, failure } = await postGraphQL<{ viewer: { login: string } } & Record<string, RepositoryNode>>(
     buildSnapshotQuery(repos),
     token,
@@ -185,8 +188,10 @@ export async function fetchSnapshot(options: {
   return {
     viewer: data.viewer.login,
     pullRequests: listed.map((pr) => {
-      const { comments, commits } = details.get(key(pr)) ?? known.get(key(pr))!;
-      return { ...pr, comments, commits };
+      const old = known.get(key(pr));
+      const fetched = details.get(key(pr));
+      if (!fetched) return { ...pr, comments: old!.comments, commits: old!.commits };
+      return { ...pr, comments: fetched.comments, commits: old ? firstSeen(fetched.commits, old.commits, observedAt) : fetched.commits };
     }),
     unreadRepos: repos.filter((_, i) => !repositories[i]),
     problems: [
@@ -197,6 +202,16 @@ export async function fetchSnapshot(options: {
       ),
     ],
   };
+}
+
+/** `commits` with when each was first seen: carried over from `before`, or `at` for a commit new since then. */
+function firstSeen(commits: Commit[], before: Commit[], at: Date): Commit[] {
+  const seen = new Map(before.map((commit) => [commit.oid, commit]));
+  return commits.map((commit) => {
+    const old = seen.get(commit.oid);
+    if (!old) return { ...commit, firstSeenAt: at.toISOString() };
+    return old.firstSeenAt ? { ...commit, firstSeenAt: old.firstSeenAt } : commit;
+  });
 }
 
 /**

@@ -123,6 +123,12 @@ describe("diffSnapshots", () => {
       ]);
     });
 
+    it("reports a commit made before my review but pushed after it", () => {
+      const now = { ...reviewed, commits: [{ oid: "def", committedAt: "2026-10-30T08:00:00Z", firstSeenAt: "2026-10-30T10:00:00Z" }] };
+
+      expect(diffSnapshots(previous([reviewed]), current([now]), rules).map((e) => e.id)).toEqual(["re_review_needed:my-org/repo-a#1:def"]);
+    });
+
     it("reports a reply to me after my review, but not other people's chatter", () => {
       const now = {
         ...reviewed,

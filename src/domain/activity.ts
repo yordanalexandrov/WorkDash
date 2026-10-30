@@ -1,4 +1,4 @@
-import type { Comment, PullRequest } from "./types.js";
+import { type Comment, type PullRequest, pushedAt } from "./types.js";
 
 /** What happened on someone else's PR since my last review that asks for another look. */
 export type ReReview = { newCommits: number; replies: number };
@@ -45,7 +45,7 @@ export function reReviewActivity(pr: PullRequest, me: string, seenAt: string | n
 
   const isReplyToMe = repliesTo(pr, me);
 
-  const newCommits = pr.commits.filter((commit) => after(commit.committedAt, since)).length;
+  const newCommits = pr.commits.filter((commit) => after(pushedAt(commit), since)).length;
   const replies = pr.comments.filter(
     (comment) => !sameLogin(comment.author, me) && after(comment.createdAt, since) && isReplyToMe(comment),
   ).length;

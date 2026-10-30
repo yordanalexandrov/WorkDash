@@ -1,6 +1,6 @@
 import { mentions, repliesTo } from "./activity.js";
 import { type ClassifyRules, classify, type SeenAt } from "./classify.js";
-import type { CiState, Comment, PullRequest, ReviewState, Snapshot } from "./types.js";
+import { type CiState, type Comment, type PullRequest, pushedAt, type ReviewState, type Snapshot } from "./types.js";
 
 /** What can happen between two polls that is worth telling me about, in the order the plan lists them. */
 export const EVENT_TYPES = [
@@ -141,8 +141,8 @@ function reReviewNews(old: PullRequest, pr: PullRequest, me: string, newComments
   const isReply = repliesTo(pr, me);
   const news = [
     ...pr.commits
-      .filter((commit) => !oldCommits.has(commit.oid) && afterReview(commit.committedAt))
-      .map((commit) => ({ id: commit.oid, actor: pr.author, at: commit.committedAt })),
+      .filter((commit) => !oldCommits.has(commit.oid) && afterReview(pushedAt(commit)))
+      .map((commit) => ({ id: commit.oid, actor: pr.author, at: pushedAt(commit) })),
     ...newComments
       .filter((comment) => afterReview(comment.createdAt) && isReply(comment))
       .map((comment) => ({ id: comment.id, actor: comment.author, at: comment.createdAt })),

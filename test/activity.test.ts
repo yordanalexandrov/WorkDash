@@ -74,6 +74,15 @@ describe("reReviewActivity", () => {
     expect(reReviewActivity(pr, "me", null)).toEqual({ newCommits: 2, replies: 0 });
   });
 
+  it("counts a commit made before my review but first seen after it, as it was pushed after it", () => {
+    const pr = otherPr({
+      reviews: [myReview("CHANGES_REQUESTED")],
+      commits: [{ oid: "a", committedAt: "2026-10-30T09:00:00Z", firstSeenAt: "2026-10-30T11:00:00Z" }],
+    });
+
+    expect(reReviewActivity(pr, "me", null)).toEqual({ newCommits: 1, replies: 0 });
+  });
+
   it("is null when nothing happened after my review", () => {
     const pr = otherPr({
       reviews: [myReview("CHANGES_REQUESTED")],

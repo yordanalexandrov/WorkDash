@@ -234,6 +234,42 @@ describe("fetchSnapshot", () => {
       expect(github.calls[1]?.query.match(/pullRequest\(number: \d+\)/g)).toEqual(["pullRequest(number: 2)", "pullRequest(number: 3)"]);
     });
 
+    it("dates a commit by when a poll first saw it, so one made before a review but pushed after it counts as new", async () => {
+      const history = (...oids: string[]) => ({ history: { nodes: oids.map((oid) => ({ commit: { oid, committedDate: "2026-10-30T07:00:00Z" } })) } });
+      const github = fakeGitHub({
+        "my-org/repo-a": [
+          prNode(1, { updatedAt: "2026-10-30T11:00:00Z", ...history("old-1", "seen", "new") }),
+          prNode(2, history("first")),
+        ],
+      });
+      const previous = [
+        pullRequest({
+          number: 1,
+          commits: [
+            { oid: "old-1", committedAt: "2026-10-30T07:00:00Z" },
+            { oid: "seen", committedAt: "2026-10-30T07:00:00Z", firstSeenAt: "2026-10-30T09:00:00Z" },
+          ],
+        }),
+      ];
+
+      const snapshot = await fetchSnapshot({
+        repos: ["my-org/repo-a"],
+        token: "t",
+        fetch: github.fetch,
+        previous,
+        observedAt: new Date("2026-10-30T12:00:00Z"),
+      });
+
+      expect(snapshot.pullRequests.map((pr) => pr.commits.map((c) => [c.oid, c.firstSeenAt]))).toEqual([
+        [
+          ["old-1", undefined],
+          ["seen", "2026-10-30T09:00:00Z"],
+          ["new", "2026-10-30T12:00:00.000Z"],
+        ],
+        [["first", undefined]],
+      ]);
+    });
+
     it("makes no details request when no PR changed", async () => {
       const github = fakeGitHub({ "my-org/repo-a": [prNode(1, { updatedAt: "2026-10-30T10:00:00Z" })] });
 

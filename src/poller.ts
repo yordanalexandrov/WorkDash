@@ -53,7 +53,7 @@ export function startPoller(
       const previous = before?.pullRequests ?? [];
       // Taken before the request, so a comment posted while it is under way stays unread.
       const startedAt = new Date();
-      const snapshot = await fetchSnapshot({ repos, token, fetch, previous });
+      const snapshot = await fetchSnapshot({ repos, token, fetch, previous, observedAt: startedAt });
       const vanished = vanishedPullRequests(previous, snapshot.pullRequests, snapshot.unreadRepos);
       const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token, fetch });
       const now = new Date();
