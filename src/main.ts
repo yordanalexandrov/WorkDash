@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { type Config, ConfigError, loadConfig, watchConfig } from "./config.js";
 import { openStore } from "./db.js";
+import { createNotifier } from "./notifier.js";
 import { startPoller } from "./poller.js";
 import { buildServer, type DashboardSource, dashboardState } from "./server.js";
 import { createEventHub } from "./sse.js";
@@ -49,7 +50,10 @@ const dashboard: DashboardSource = {
 /** Pushes the dashboard as it is now to every open browser. */
 const publishDashboard = () => events.broadcast("dashboard", dashboardState(dashboard));
 
-const server = buildServer({ ...dashboard, events, logger: true });
+// Desktop notifications: what changed between two polls, pushed to the open browsers.
+const notifier = createNotifier({ store, events, rules: dashboard.rules });
+
+const server = buildServer({ ...dashboard, events, pendingNotifications: notifier.takePending, logger: true });
 const poller = startPoller({
   repos: config.repos,
   token,
@@ -58,6 +62,7 @@ const poller = startPoller({
   store,
   log: server.log,
   onPoll: publishDashboard,
+  onSnapshot: notifier.afterSnapshot,
 });
 
 // Edits to config.yaml apply without a restart; an invalid edit is shown in the UI and the last valid config stays.

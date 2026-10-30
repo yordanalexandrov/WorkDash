@@ -243,3 +243,30 @@ describe("startPoller health", () => {
     expect(healths[0]?.error).toMatchObject({ kind: "unreachable", message: "fetch failed" });
   });
 });
+
+describe("startPoller onSnapshot", () => {
+  it("hands each saved snapshot over with the one saved before it", async () => {
+    const store = openStore(":memory:");
+    const github = fakeGitHubWithClosed([1], new Date().toISOString());
+    const seen: [number[] | null, number[]][] = [];
+    const numbers = (snapshot: { pullRequests: { number: number }[] }) => snapshot.pullRequests.map((pr) => pr.number);
+
+    const poller = startPoller({
+      repos: ["my-org/repo-a"],
+      token: "t",
+      intervalMs: 1,
+      recentlyClosedWindowMs: 3_600_000,
+      store,
+      log: quietLog,
+      fetch: github.fetch,
+      onSnapshot: (previous, current) => seen.push([previous && numbers(previous), numbers(current)]),
+    });
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThanOrEqual(2));
+    poller.stop();
+
+    expect(seen.slice(0, 2)).toEqual([
+      [null, [1]],
+      [[1], [1]],
+    ]);
+  });
+});

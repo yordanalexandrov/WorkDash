@@ -251,6 +251,25 @@ describe("GET /api/events", () => {
     expect(text).toContain('data: {"changed":true}\n\n');
     await reader.cancel();
   });
+
+  it("sends a connecting browser the notifications it missed, after the dashboard", async () => {
+    const store = openStore(":memory:");
+    const source = { store, rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null };
+    const missed = { id: "mention:my-org/repo-a#1:c1", type: "mention" };
+    const server = buildServer({ ...source, pendingNotifications: () => [{ type: "notification", data: missed }] });
+    close = () => server.close();
+    const address = await server.listen({ host: "127.0.0.1", port: 0 });
+
+    const response = await fetch(`${address}/api/events`);
+    const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+    let text = "";
+    while (!text.includes("event: notification\n")) text += (await reader.read()).value;
+    while (!text.endsWith("\n\n")) text += (await reader.read()).value;
+
+    expect(text.indexOf("event: dashboard\n")).toBeLessThan(text.indexOf("event: notification\n"));
+    expect(text).toContain(`event: notification\ndata: ${JSON.stringify(missed)}\n\n`);
+    await reader.cancel();
+  });
 });
 
 describe("recently closed PRs", () => {

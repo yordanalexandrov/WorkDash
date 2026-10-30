@@ -7,7 +7,7 @@ import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import type { PollHealth } from "./domain/poll-error.js";
-import { createEventHub, type EventHub } from "./sse.js";
+import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
 
@@ -67,10 +67,12 @@ export function buildServer(
   options: DashboardSource & {
     /** The SSE channel behind GET /api/events; whoever polls broadcasts on it. */
     events?: EventHub;
+    /** Notifications no browser has received yet; a connecting browser gets them after the dashboard. */
+    pendingNotifications?: () => ServerEvent[];
     logger?: boolean;
   },
 ): FastifyInstance {
-  const { events = createEventHub(), logger = false } = options;
+  const { events = createEventHub(), pendingNotifications = () => [], logger = false } = options;
   const server = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
   server.register(fastifyStatic, { root: WEB_ROOTS });
@@ -97,7 +99,7 @@ export function buildServer(
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
-    events.connect(reply.raw, [{ type: "dashboard", data: dashboardState(options) }]);
+    events.connect(reply.raw, [{ type: "dashboard", data: dashboardState(options) }, ...pendingNotifications()]);
   });
 
   // An open event stream would keep server.close() waiting forever.

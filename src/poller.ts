@@ -1,6 +1,7 @@
-import type { SnapshotStore } from "./db.js";
+import type { SnapshotStore, StoredSnapshot } from "./db.js";
 import { updateRecentlyClosed, vanishedPullRequests } from "./domain/closed.js";
 import { classifyPollError, nextPollDelay, type PollHealth } from "./domain/poll-error.js";
+import type { Snapshot } from "./domain/types.js";
 import { fetchClosedPullRequests, fetchSnapshot } from "./github/client.js";
 
 export type PollerSettings = {
@@ -32,10 +33,12 @@ export function startPoller(
     store: SnapshotStore;
     log: { info(msg: string): void; error(msg: string): void };
     onPoll?: () => void;
+    /** Runs after a successful poll saved its snapshot, with the snapshot saved before it (null on the first poll ever). */
+    onSnapshot?: (previous: StoredSnapshot | null, current: Snapshot) => void;
     fetch?: typeof globalThis.fetch;
   },
 ): Poller {
-  const { store, log, onPoll = () => {}, fetch } = options;
+  const { store, log, onPoll = () => {}, onSnapshot = () => {}, fetch } = options;
   let { repos, token, intervalMs, recentlyClosedWindowMs } = options;
   let health: PollHealth = { error: null, problems: [] };
   let timer: NodeJS.Timeout | undefined;
@@ -46,7 +49,8 @@ export function startPoller(
   async function poll() {
     polling = true;
     try {
-      const previous = store.loadSnapshot()?.pullRequests ?? [];
+      const before = store.loadSnapshot();
+      const previous = before?.pullRequests ?? [];
       const snapshot = await fetchSnapshot({ repos, token, fetch });
       const vanished = vanishedPullRequests(previous, snapshot.pullRequests, snapshot.unreadRepos);
       const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token, fetch });
@@ -61,6 +65,11 @@ export function startPoller(
           windowMs: recentlyClosedWindowMs,
         }),
       );
+      try {
+        onSnapshot(before, snapshot);
+      } catch (error) {
+        log.error(`after snapshot: ${(error as Error).message}`);
+      }
       const problems = [...snapshot.problems, ...lookup.problems];
       health = { error: null, problems };
       log.info(`poll: ${snapshot.pullRequests.length} open PRs across ${repos.length} repos`);
