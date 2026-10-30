@@ -52,7 +52,9 @@ h1 {
   color: var(--muted);
 }
 
-#error {
+#error,
+#config-error {
+  white-space: pre-wrap;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   color: var(--error-fg);
@@ -148,6 +150,10 @@ h2 {
 
 .badge.muted {
   color: var(--muted);
+}
+
+.badge.jira {
+  color: var(--link);
 }
 
 .number {

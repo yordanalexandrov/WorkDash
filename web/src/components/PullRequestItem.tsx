@@ -1,4 +1,4 @@
-import type { ClassifiedPullRequest } from "../api.js";
+import type { DashboardPullRequest } from "../api.js";
 import { checkBadges, reviewBadges, statusBadges, unreadBadges } from "../badges.js";
 import { age } from "../format.js";
 import { BadgeView } from "./BadgeView.js";
@@ -11,7 +11,7 @@ function ExternalLink({ href, text }: { href: string; text: string }) {
   );
 }
 
-export function PullRequestItem({ pr, onSeen }: { pr: ClassifiedPullRequest; onSeen: (pr: ClassifiedPullRequest) => void }) {
+export function PullRequestItem({ pr, onSeen }: { pr: DashboardPullRequest; onSeen: (pr: DashboardPullRequest) => void }) {
   const badges = [...statusBadges(pr), ...unreadBadges(pr), ...checkBadges(pr), ...reviewBadges(pr)];
   return (
     <li class="pr">
@@ -25,6 +25,11 @@ export function PullRequestItem({ pr, onSeen }: { pr: ClassifiedPullRequest; onS
         <span class="author">{pr.author}</span>
         {badges.map((badge, index) => (
           <BadgeView key={index} badge={badge} />
+        ))}
+        {pr.jira.map(({ key, url }) => (
+          <a key={key} class="badge jira" href={url} target="_blank" rel="noopener" title={`Jira ${key}`}>
+            {key}
+          </a>
         ))}
         <span class="age" title={`отворен ${new Date(pr.createdAt).toLocaleString()}`}>
           {age(pr.createdAt)}

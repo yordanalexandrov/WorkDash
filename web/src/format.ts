@@ -31,3 +31,8 @@ export function errorText(state: DashboardState | null, connectionError: string 
   if (connectionError) return `Няма връзка със сървъра: ${connectionError}`;
   return state?.error ? `Последният poll е неуспешен: ${state.error}` : null;
 }
+
+/** The banner for a config.yaml edit the server rejected, or null when the file on disk is in effect. */
+export function configErrorText(state: DashboardState | null): string | null {
+  return state?.configError ? `config.yaml не е приложен, в сила е последната валидна конфигурация. ${state.configError}` : null;
+}

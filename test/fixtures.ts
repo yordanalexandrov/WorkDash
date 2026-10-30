@@ -6,6 +6,8 @@ export function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     repo: "my-org/repo-a",
     number: 1,
     title: "PR 1",
+    headRefName: "pr-1",
+    body: "",
     url: "https://github.com/my-org/repo-a/pull/1",
     author: "me",
     isDraft: false,

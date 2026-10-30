@@ -44,6 +44,8 @@ function prNode(number: number, overrides: Record<string, unknown> = {}) {
   return {
     number,
     title: `PR ${number}`,
+    headRefName: `pr-${number}`,
+    body: "",
     url: `https://github.com/x/y/pull/${number}`,
     isDraft: false,
     createdAt: "2026-10-29T10:00:00Z",
@@ -81,6 +83,7 @@ describe("fetchSnapshot", () => {
         repo: "my-org/repo-b",
         number: 7,
         title: "Fix login",
+        headRefName: "pr-7",
         url: "https://github.com/x/y/pull/7",
         author: "colleague2",
       }),
@@ -173,6 +176,16 @@ describe("fetchSnapshot", () => {
       { oid: "aaa", committedAt: "2026-10-30T07:00:00Z" },
       { oid: "bbb", committedAt: "2026-10-30T09:45:00Z" },
     ]);
+  });
+
+  it("keeps the branch name and description, where Jira keys are looked for", async () => {
+    const github = fakeGitHub({
+      "my-org/repo-a": [prNode(1, { headRefName: "feature/ABC-1-login", body: "Fixes ABC-1" })],
+    });
+
+    const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch });
+
+    expect(snapshot.pullRequests[0]).toMatchObject({ headRefName: "feature/ABC-1-login", body: "Fixes ABC-1" });
   });
 
   it("has no CI or Sonar state when the head commit has no checks", async () => {

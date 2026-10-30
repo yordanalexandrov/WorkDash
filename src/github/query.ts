@@ -37,6 +37,8 @@ fragment openPullRequests on Repository {
     nodes {
       number
       title
+      headRefName
+      body
       url
       isDraft
       createdAt

@@ -4,10 +4,14 @@ services:
     image: workdash
     restart: unless-stopped
     env_file: .env
+    environment:
+      CONFIG_PATH: /app/host/config.yaml
     ports:
       - "127.0.0.1:${WORKDASH_PORT:-3000}:3000"
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
+      # The directory, not the file: a file mount keeps the old inode once an editor replaces config.yaml,
+      # and the container would never see the edit.
+      - ./:/app/host:ro
       - workdash-data:/app/data
 
 volumes:
