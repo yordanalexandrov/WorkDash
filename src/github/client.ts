@@ -1,4 +1,5 @@
 import type {
+  Comment,
   Mergeable,
   MergeStateStatus,
   PullRequest,
@@ -26,6 +27,16 @@ type PullRequestNode = {
   reviewRequests: { nodes: { requestedReviewer: { login?: string } | null }[] };
   latestReviews: { nodes: { author: { login: string } | null; state: ReviewState | "PENDING"; submittedAt: string | null }[] };
   commits: { nodes: { commit: { statusCheckRollup: { contexts: { nodes: CheckContext[] } } | null } }[] };
+  comments: { nodes: CommentNode[] };
+  reviewThreads: { nodes: { id: string; comments: { nodes: CommentNode[] } }[] };
+  history: { nodes: { commit: { oid: string; committedDate: string } }[] };
+};
+
+type CommentNode = {
+  id: string;
+  author: { __typename: string; login: string } | null;
+  createdAt: string;
+  body: string;
 };
 
 type RepositoryNode = {
@@ -112,5 +123,19 @@ function toPullRequests(repository: RepositoryNode): PullRequest[] {
         : [{ author: review.author?.login ?? "ghost", state: review.state, submittedAt: review.submittedAt }],
     ),
     ...summarizeChecks(node.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []),
+    comments: toComments(node),
+    commits: node.history.nodes.map(({ commit }) => ({ oid: commit.oid, committedAt: commit.committedDate })),
   }));
+}
+
+/** General and review-thread comments in one list, oldest first. Bots are not people, so their comments are left out. */
+function toComments(node: PullRequestNode): Comment[] {
+  const toComment = (comment: CommentNode, thread?: string): Comment[] =>
+    comment.author?.__typename === "Bot"
+      ? []
+      : [{ id: comment.id, author: comment.author?.login ?? "ghost", createdAt: comment.createdAt, body: comment.body, ...(thread ? { thread } : {}) }];
+  return [
+    ...node.comments.nodes.flatMap((comment) => toComment(comment)),
+    ...node.reviewThreads.nodes.flatMap((thread) => thread.comments.nodes.flatMap((comment) => toComment(comment, thread.id))),
+  ].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classify, groupIntoSections, type ClassifyRules } from "../src/domain/classify.js";
-import type { PullRequest, Review } from "../src/domain/types.js";
+import type { Comment, PullRequest, Review } from "../src/domain/types.js";
 import { pullRequest } from "./fixtures.js";
 
 const rules: ClassifyRules = { team: ["colleague1", "colleague2"], requiredApprovals: 1 };
@@ -156,5 +156,112 @@ describe("groupIntoSections", () => {
       ["team", []],
     ]);
     expect(sections[0]?.pullRequests[0]?.reason).toBe("ci_failed");
+  });
+});
+
+function comment(author: string, createdAt: string, body = "", thread?: string): Comment {
+  return { id: `${author}-${createdAt}`, author, createdAt, body, ...(thread ? { thread } : {}) };
+}
+
+describe("classify: unread comments on my PR", () => {
+  const comments = [comment("colleague1", "2026-10-30T11:00:00Z"), comment("me", "2026-10-30T12:00:00Z")];
+
+  it("waits on me while someone else's comment is unread", () => {
+    expect(classify(pr({ comments }), "me", rules, null)).toEqual({ section: "waiting_on_me", reason: "unread_comments" });
+    expect(classify(pr({ comments }), "me", rules, "2026-10-30T10:00:00Z")).toEqual({
+      section: "waiting_on_me",
+      reason: "unread_comments",
+    });
+  });
+
+  it("goes back where it was once marked seen", () => {
+    expect(classify(pr({ comments, reviewDecision: "APPROVED" }), "me", rules, "2026-10-30T11:30:00Z")).toEqual({
+      section: "ready_to_merge",
+    });
+  });
+
+  it("ranks a merge conflict above unread comments", () => {
+    expect(classify(pr({ comments, mergeable: "CONFLICTING" }), "me", rules, null)).toEqual({
+      section: "waiting_on_me",
+      reason: "conflict",
+    });
+  });
+
+  it("ignores my own comments", () => {
+    expect(classify(pr({ comments: [comment("me", "2026-10-30T12:00:00Z")] }), "me", rules, null)).toEqual({
+      section: "waiting_on_others",
+    });
+  });
+});
+
+describe("classify: mentions and re-review on someone else's PR", () => {
+  const mention = comment("colleague2", "2026-10-30T11:00:00Z", "@me can you check this?");
+
+  it("waits on me when an unread comment mentions me, even outside the team", () => {
+    expect(classify(pr({ author: "stranger", comments: [mention] }), "me", rules, null)).toEqual({
+      section: "waiting_on_me",
+      reason: "mention",
+    });
+  });
+
+  it("forgets a mention once the PR is marked seen", () => {
+    expect(classify(pr({ author: "stranger", comments: [mention] }), "me", rules, "2026-10-30T11:30:00Z")).toBeNull();
+  });
+
+  it("does not wait on me for an unread comment that does not mention me", () => {
+    const pullRequest = pr({ author: "colleague1", comments: [comment("colleague2", "2026-10-30T11:00:00Z")] });
+
+    expect(classify(pullRequest, "me", rules, null)).toEqual({ section: "free_for_review" });
+  });
+
+  it("ranks a review request above a mention", () => {
+    expect(classify(pr({ author: "colleague1", requestedReviewers: ["me"], comments: [mention] }), "me", rules, null)).toEqual({
+      section: "waiting_on_me",
+      reason: "review_requested",
+    });
+  });
+
+  const reviewed = pr({
+    author: "colleague1",
+    reviews: [review("me", "CHANGES_REQUESTED")],
+    commits: [{ oid: "a", committedAt: "2026-10-30T10:00:00Z" }],
+  });
+
+  it("waits on me for a re-review when commits arrive after my review", () => {
+    expect(classify(reviewed, "me", rules, null)).toEqual({ section: "waiting_on_me", reason: "re_review" });
+  });
+
+  it("forgets the re-review once the PR is marked seen, until something new arrives", () => {
+    expect(classify(reviewed, "me", rules, "2026-10-30T10:30:00Z")).toEqual({ section: "team" });
+    const pushedAgain = { ...reviewed, commits: [...reviewed.commits, { oid: "b", committedAt: "2026-10-30T11:00:00Z" }] };
+    expect(classify(pushedAgain, "me", rules, "2026-10-30T10:30:00Z")).toEqual({ section: "waiting_on_me", reason: "re_review" });
+  });
+});
+
+describe("groupIntoSections: seen marks", () => {
+  it("adds the unread comment count and the re-review details to every PR", () => {
+    const sections = groupIntoSections(
+      [
+        pr({ number: 1, comments: [comment("colleague1", "2026-10-30T11:00:00Z"), comment("colleague2", "2026-10-30T12:00:00Z")] }),
+        pr({
+          number: 2,
+          author: "colleague1",
+          reviews: [review("me", "COMMENTED")],
+          commits: [{ oid: "a", committedAt: "2026-10-30T10:00:00Z" }],
+          comments: [comment("colleague1", "2026-10-30T10:30:00Z")],
+        }),
+        pr({ number: 3, author: "colleague1" }),
+      ],
+      "me",
+      rules,
+      (p) => (p.number === 1 ? "2026-10-30T11:30:00Z" : null),
+    );
+
+    expect(sections[0]?.pullRequests).toEqual([
+      expect.objectContaining({ number: 1, reason: "unread_comments", unreadComments: 1 }),
+      expect.objectContaining({ number: 2, reason: "re_review", unreadComments: 1, reReview: { newCommits: 1, replies: 1 } }),
+    ]);
+    expect(sections[1]?.pullRequests).toEqual([expect.objectContaining({ number: 3, unreadComments: 0 })]);
+    expect(sections[1]?.pullRequests[0]).not.toHaveProperty("reReview");
   });
 });

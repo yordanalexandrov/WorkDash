@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import type { SeenAt } from "./domain/classify.js";
 import type { PullRequest, Snapshot } from "./domain/types.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
@@ -6,6 +7,10 @@ export type StoredSnapshot = Snapshot & { fetchedAt: string };
 export type SnapshotStore = {
   saveSnapshot(snapshot: Snapshot, fetchedAt: Date): void;
   loadSnapshot(): StoredSnapshot | null;
+  /** Records that I have seen a PR as it was at `seenAt`; a later mark wins over an earlier one. */
+  markSeen(repo: string, number: number, seenAt: Date): void;
+  /** When each PR was last marked seen, as of this call. */
+  loadSeen(): SeenAt;
   close(): void;
 };
 
@@ -22,13 +27,20 @@ const SCHEMA = `
     viewer     TEXT NOT NULL,
     fetched_at TEXT NOT NULL
   );
+  -- Not a cache: kept when the snapshot format changes.
+  CREATE TABLE IF NOT EXISTS pr_seen (
+    repo    TEXT    NOT NULL,
+    number  INTEGER NOT NULL,
+    seen_at TEXT    NOT NULL,
+    PRIMARY KEY (repo, number)
+  );
 `;
 
 /**
  * Bumped whenever the stored PullRequest shape changes. A snapshot in an older format is
  * dropped on open: it is only a cache, and the poller refetches it right away.
  */
-const SNAPSHOT_FORMAT = 4;
+const SNAPSHOT_FORMAT = 5;
 
 /** Opens (and creates if needed) the SQLite file that holds the latest snapshot. */
 export function openStore(path: string): SnapshotStore {
@@ -50,6 +62,12 @@ export function openStore(path: string): SnapshotStore {
   const selectPoll = db.prepare<[], { viewer: string; fetched_at: string }>("SELECT viewer, fetched_at FROM poll WHERE id = 1");
   const selectPullRequests = db.prepare<[], { data_json: string }>("SELECT data_json FROM pr_snapshot ORDER BY rowid");
 
+  // Both sides come from Date.toISOString, so comparing the strings compares the instants.
+  const upsertSeen = db.prepare(
+    "INSERT INTO pr_seen (repo, number, seen_at) VALUES (?, ?, ?) ON CONFLICT (repo, number) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at)",
+  );
+  const selectSeen = db.prepare<[], { repo: string; number: number; seen_at: string }>("SELECT repo, number, seen_at FROM pr_seen");
+
   const save = db.transaction((snapshot: Snapshot, fetchedAt: string) => {
     deletePullRequests.run();
     for (const pr of snapshot.pullRequests) {
@@ -67,6 +85,13 @@ export function openStore(path: string): SnapshotStore {
       if (!poll) return null;
       const pullRequests = selectPullRequests.all().map((row) => JSON.parse(row.data_json) as PullRequest);
       return { viewer: poll.viewer, pullRequests, fetchedAt: poll.fetched_at };
+    },
+    markSeen(repo, number, seenAt) {
+      upsertSeen.run(repo, number, seenAt.toISOString());
+    },
+    loadSeen() {
+      const seen = new Map(selectSeen.all().map((row) => [`${row.repo}#${row.number}`, row.seen_at]));
+      return (pr) => seen.get(`${pr.repo}#${pr.number}`) ?? null;
     },
     close() {
       db.close();
