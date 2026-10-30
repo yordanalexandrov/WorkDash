@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { ConfigError, loadConfig } from "./config.js";
+import { type Config, ConfigError, loadConfig, watchConfig } from "./config.js";
 import { openStore } from "./db.js";
 import { startPoller } from "./poller.js";
 import { buildServer } from "./server.js";
@@ -15,26 +15,34 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-let config;
+/** The GitHub token named by `github.token_env`; a ConfigError when that variable is not set. */
+function tokenFor(config: Config): string {
+  const token = process.env[config.github.tokenEnv];
+  if (!token) throw new ConfigError(`github.token_env: environment variable ${config.github.tokenEnv} is not set`);
+  return token;
+}
+
+let config: Config;
+let token: string;
 try {
   config = loadConfig(CONFIG_PATH);
+  token = tokenFor(config);
 } catch (error) {
   if (error instanceof ConfigError) fail(`${CONFIG_PATH}: ${error.message}`);
   throw error;
 }
-
-const token = process.env[config.github.tokenEnv];
-if (!token) fail(`${CONFIG_PATH}: github.token_env: environment variable ${config.github.tokenEnv} is not set`);
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 const store = openStore(DB_PATH);
 
 const server = buildServer({
   store,
-  rules: { team: config.team, requiredApprovals: config.review.requiredApprovals },
-  pollIntervalMs: config.github.pollIntervalMs,
-  recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
+  rules: () => ({ team: config.team, requiredApprovals: config.review.requiredApprovals }),
+  jira: () => config.jira,
+  pollIntervalMs: () => config.github.pollIntervalMs,
+  recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
   lastPollError: () => poller.lastError(),
+  configError: () => configWatcher.error(),
   logger: true,
 });
 const poller = startPoller({
@@ -46,8 +54,26 @@ const poller = startPoller({
   log: server.log,
 });
 
+// Edits to config.yaml apply without a restart; an invalid edit is shown in the UI and the last valid config stays.
+const configWatcher = watchConfig(CONFIG_PATH, {
+  current: config,
+  apply(next) {
+    const nextToken = tokenFor(next);
+    config = next;
+    token = nextToken;
+    poller.reconfigure({
+      repos: config.repos,
+      token,
+      intervalMs: config.github.pollIntervalMs,
+      recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
+    });
+  },
+  log: server.log,
+});
+
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {
+    configWatcher.close();
     poller.stop();
     await server.close();
     store.close();

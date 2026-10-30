@@ -15,6 +15,8 @@ const GRAPHQL_URL = "https://api.github.com/graphql";
 type PullRequestNode = {
   number: number;
   title: string;
+  headRefName: string;
+  body: string;
   url: string;
   isDraft: boolean;
   createdAt: string;
@@ -163,6 +165,8 @@ function toPullRequests(repository: RepositoryNode): PullRequest[] {
     repo: repository.nameWithOwner,
     number: node.number,
     title: node.title,
+    headRefName: node.headRefName,
+    body: node.body,
     url: node.url,
     author: node.author?.login ?? "ghost",
     isDraft: node.isDraft,

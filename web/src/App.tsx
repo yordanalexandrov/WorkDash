@@ -1,6 +1,6 @@
 import { RecentlyClosedView } from "./components/RecentlyClosedView.js";
 import { RepoCardView } from "./components/RepoCardView.js";
-import { errorText, statusText } from "./format.js";
+import { configErrorText, errorText, statusText } from "./format.js";
 import { groupByRepo } from "./group.js";
 import { useDashboard } from "./useDashboard.js";
 
@@ -8,6 +8,7 @@ export function App() {
   const { state, connectionError } = useDashboard();
   const cards = state ? groupByRepo(state.sections) : [];
   const error = errorText(state, connectionError);
+  const configError = configErrorText(state);
 
   return (
     <>
@@ -16,6 +17,7 @@ export function App() {
         <p id="status">{statusText(state)}</p>
       </header>
       {error && <p id="error">{error}</p>}
+      {configError && <p id="config-error">{configError}</p>}
       <main>
         <div id="repos">
           {cards.map((card) => (

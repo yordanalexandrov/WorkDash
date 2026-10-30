@@ -1,9 +1,87 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { openStore } from "../src/db.js";
-import { startPoller } from "../src/poller.js";
+import { type Poller, startPoller } from "../src/poller.js";
 import { pullRequest } from "./fixtures.js";
 
-const log = { info() {}, error() {} };
+type Call = { repos: string[]; token: string };
+
+/** A stand-in for GitHub that records which repos each poll asked for, with which token. */
+function fakeGitHub() {
+  const calls: Call[] = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    const { variables } = JSON.parse(String(init?.body)) as { variables: Record<string, string> };
+    const repos = Object.keys(variables)
+      .filter((key) => key.startsWith("owner"))
+      .map((key) => `${variables[key]}/${variables[key.replace("owner", "name")]}`);
+    const token = (init?.headers as Record<string, string>).Authorization!.replace("Bearer ", "");
+    calls.push({ repos, token });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight--;
+    return Response.json({ data: { viewer: { login: "me" } } });
+  };
+  return { fetch, calls, maxInFlight: () => maxInFlight };
+}
+
+const quietLog = { info() {}, error() {} };
+
+async function waitFor(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting for the condition");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+describe("startPoller", () => {
+  let poller: Poller | undefined;
+  afterEach(() => poller?.stop());
+
+  it("polls again right away with the new repos and token after a reconfigure", async () => {
+    const github = fakeGitHub();
+    poller = startPoller({
+      repos: ["my-org/repo-a"],
+      token: "t1",
+      intervalMs: 3_600_000,
+      recentlyClosedWindowMs: 3_600_000,
+      store: openStore(":memory:"),
+      log: quietLog,
+      fetch: github.fetch,
+    });
+    await waitFor(() => github.calls.length === 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    poller.reconfigure({ repos: ["my-org/repo-a", "my-org/repo-b"], token: "t2", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000 });
+
+    await waitFor(() => github.calls.length === 2);
+    expect(github.calls).toEqual([
+      { repos: ["my-org/repo-a"], token: "t1" },
+      { repos: ["my-org/repo-a", "my-org/repo-b"], token: "t2" },
+    ]);
+  });
+
+  it("finishes a poll already under way before polling with the new config", async () => {
+    const github = fakeGitHub();
+    poller = startPoller({
+      repos: ["my-org/repo-a"],
+      token: "t1",
+      intervalMs: 3_600_000,
+      recentlyClosedWindowMs: 3_600_000,
+      store: openStore(":memory:"),
+      log: quietLog,
+      fetch: github.fetch,
+    });
+
+    poller.reconfigure({ repos: ["my-org/repo-b"], token: "t1", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000 });
+
+    await waitFor(() => github.calls.length === 2);
+    expect(github.calls.map((call) => call.repos)).toEqual([["my-org/repo-a"], ["my-org/repo-b"]]);
+    expect(github.maxInFlight()).toBe(1);
+  });
+});
 
 function openNode(number: number) {
   return {
@@ -24,7 +102,7 @@ function openNode(number: number) {
 }
 
 /** GitHub with repo-a's open PRs, answering a lookup by number with PR 1 merged at `mergedAt`. */
-function fakeGitHub(open: number[], mergedAt: string) {
+function fakeGitHubWithClosed(open: number[], mergedAt: string) {
   const queries: string[] = [];
   const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
     const { query } = JSON.parse(String(init?.body)) as { query: string };
@@ -48,13 +126,13 @@ function fakeGitHub(open: number[], mergedAt: string) {
   return { fetch, queries };
 }
 
-describe("startPoller", () => {
+describe("startPoller recently closed", () => {
   it("looks up a PR that left the open list and keeps it apart as recently closed", async () => {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests: [pullRequest({ number: 1 }), pullRequest({ number: 2 })] }, new Date("2026-10-30T10:00:00Z"));
-    const github = fakeGitHub([2], new Date().toISOString());
+    const github = fakeGitHubWithClosed([2], new Date().toISOString());
 
-    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log, fetch: github.fetch });
+    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch: github.fetch });
     await vi.waitFor(() => expect(store.loadRecentlyClosed()).toHaveLength(1));
     poller.stop();
 
@@ -66,9 +144,9 @@ describe("startPoller", () => {
   it("does not keep a PR that closed before the window", async () => {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests: [pullRequest({ number: 1 })] }, new Date("2026-10-30T10:00:00Z"));
-    const github = fakeGitHub([], "2020-01-01T00:00:00Z");
+    const github = fakeGitHubWithClosed([], "2020-01-01T00:00:00Z");
 
-    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log, fetch: github.fetch });
+    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch: github.fetch });
     await vi.waitFor(() => expect(github.queries).toHaveLength(2));
     await vi.waitFor(() => expect(store.loadSnapshot()?.pullRequests).toEqual([]));
     poller.stop();

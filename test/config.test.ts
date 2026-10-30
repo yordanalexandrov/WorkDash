@@ -17,6 +17,19 @@ describe("parseConfig", () => {
     expect(config.team).toEqual(["colleague1", "colleague2"]);
     expect(config.review.requiredApprovals).toBe(1);
     expect(config.review.recentlyClosedWindowMs).toBe(24 * 3_600_000);
+    expect(config.jira).toEqual({ baseUrl: "https://example.atlassian.net/browse/", projectKeys: ["ABC"] });
+  });
+
+  it("leaves Jira out when it is not configured", () => {
+    expect(parseConfig(minimal).jira).toEqual({ baseUrl: null, projectKeys: [] });
+  });
+
+  it("names the field when the Jira base URL is not a URL", () => {
+    expect(() => parseConfig(`jira: { base_url: example }\n${minimal}`)).toThrow(/jira\.base_url/);
+  });
+
+  it("names the field when a Jira project key is malformed", () => {
+    expect(() => parseConfig(`jira: { project_keys: [abc] }\n${minimal}`)).toThrow(/jira\.project_keys\[0\]/);
   });
 
   it("fills in defaults for the GitHub section", () => {
