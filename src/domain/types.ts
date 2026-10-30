@@ -16,6 +16,8 @@ export type PullRequest = {
   repo: string; // owner/name
   number: number;
   title: string;
+  headRefName: string; // the PR's branch
+  body: string; // the PR description, "" when empty
   url: string;
   author: string;
   isDraft: boolean;

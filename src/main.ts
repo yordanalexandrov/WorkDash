@@ -32,6 +32,7 @@ const store = openStore(DB_PATH);
 const server = buildServer({
   store,
   rules: { team: config.team, requiredApprovals: config.review.requiredApprovals },
+  jira: config.jira,
   pollIntervalMs: config.github.pollIntervalMs,
   lastPollError: () => poller.lastError(),
   logger: true,

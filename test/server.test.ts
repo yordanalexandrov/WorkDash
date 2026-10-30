@@ -24,8 +24,26 @@ describe("GET /api/prs", () => {
       fetchedAt: "2026-10-30T10:00:00.000Z",
       pollIntervalMs: 60_000,
       error: null,
-      sections: [{ section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed" }] }, ...emptySections.slice(1)],
+      sections: [{ section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed", jira: [] }] }, ...emptySections.slice(1)],
     });
+  });
+
+  it("links each PR to the Jira tickets it names", async () => {
+    const store = openStore(":memory:");
+    const jiraPr = pullRequest({ headRefName: "feature/ABC-1-login", title: "ABC-1: Add login", body: "See XYZ-9" });
+    store.saveSnapshot({ viewer: "me", pullRequests: [jiraPr] }, new Date("2026-10-30T10:00:00Z"));
+    const server = buildServer({
+      store,
+      rules,
+      jira: { baseUrl: "https://example.atlassian.net/browse/", projectKeys: ["ABC"] },
+      pollIntervalMs: 60_000,
+      lastPollError: () => null,
+    });
+
+    const response = await server.inject("/api/prs");
+
+    const [served] = response.json().sections.flatMap((s: { pullRequests: unknown[] }) => s.pullRequests);
+    expect(served.jira).toEqual([{ key: "ABC-1", url: "https://example.atlassian.net/browse/ABC-1" }]);
   });
 
   it("returns empty sections and the poll error while nothing has been fetched", async () => {
