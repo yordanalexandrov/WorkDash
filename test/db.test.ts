@@ -1,19 +1,14 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import type { PullRequest } from "../src/domain/types.js";
+import { pullRequest } from "./fixtures.js";
 
 function pr(repo: string, number: number): PullRequest {
-  return {
-    repo,
-    number,
-    title: `PR ${number}`,
-    url: `https://github.com/${repo}/pull/${number}`,
-    author: "colleague1",
-    updatedAt: "2026-10-30T10:00:00Z",
-  };
+  return pullRequest({ repo, number, author: "colleague1" });
 }
 
 const dirs: string[] = [];
@@ -48,5 +43,18 @@ describe("SnapshotStore", () => {
     first.close();
 
     expect(openStore(path).loadSnapshot()?.pullRequests).toEqual([pr("my-org/repo-a", 1)]);
+  });
+
+  it("drops a snapshot saved in an older format, so the next poll replaces it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+
+    openStore(path).saveSnapshot({ viewer: "me", pullRequests: [pr("my-org/repo-a", 1)] }, new Date("2026-10-30T10:00:00Z"));
+    const db = new Database(path);
+    db.pragma("user_version = 0");
+    db.close();
+
+    expect(openStore(path).loadSnapshot()).toBeNull();
   });
 });

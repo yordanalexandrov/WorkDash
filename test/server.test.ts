@@ -1,21 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
+import { type ClassifyRules, SECTIONS } from "../src/domain/classify.js";
 import { buildServer } from "../src/server.js";
+import { pullRequest } from "./fixtures.js";
 
-const pr = {
-  repo: "my-org/repo-a",
-  number: 3,
-  title: "Add dashboard",
-  url: "https://github.com/my-org/repo-a/pull/3",
-  author: "colleague1",
-  updatedAt: "2026-10-30T10:00:00Z",
-};
+const rules: ClassifyRules = { team: ["colleague1"], requiredApprovals: 1 };
+
+const pr = pullRequest({ number: 3, title: "Add dashboard", ci: "FAILURE" });
+
+const emptySections = SECTIONS.map((section) => ({ section, pullRequests: [] }));
 
 describe("GET /api/prs", () => {
-  it("serves the stored snapshot before any poll has run", async () => {
+  it("serves the stored snapshot grouped into sections before any poll has run", async () => {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests: [pr] }, new Date("2026-10-30T10:00:00Z"));
-    const server = buildServer({ store, pollIntervalMs: 60_000, lastPollError: () => null });
+    const server = buildServer({ store, rules, pollIntervalMs: 60_000, lastPollError: () => null });
 
     const response = await server.inject("/api/prs");
 
@@ -25,13 +24,14 @@ describe("GET /api/prs", () => {
       fetchedAt: "2026-10-30T10:00:00.000Z",
       pollIntervalMs: 60_000,
       error: null,
-      pullRequests: [pr],
+      sections: [{ section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed" }] }, ...emptySections.slice(1)],
     });
   });
 
-  it("returns an empty list and the poll error while nothing has been fetched", async () => {
+  it("returns empty sections and the poll error while nothing has been fetched", async () => {
     const server = buildServer({
       store: openStore(":memory:"),
+      rules,
       pollIntervalMs: 60_000,
       lastPollError: () => "GitHub API responded 401: Bad credentials",
     });
@@ -43,14 +43,14 @@ describe("GET /api/prs", () => {
       fetchedAt: null,
       pollIntervalMs: 60_000,
       error: "GitHub API responded 401: Bad credentials",
-      pullRequests: [],
+      sections: emptySections,
     });
   });
 });
 
 describe("GET /", () => {
   it("serves the dashboard page", async () => {
-    const server = buildServer({ store: openStore(":memory:"), pollIntervalMs: 60_000, lastPollError: () => null });
+    const server = buildServer({ store: openStore(":memory:"), rules, pollIntervalMs: 60_000, lastPollError: () => null });
 
     const response = await server.inject("/");
 

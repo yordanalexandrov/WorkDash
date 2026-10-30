@@ -5,6 +5,8 @@ import { z } from "zod";
 export type Config = {
   github: { tokenEnv: string; pollIntervalMs: number };
   repos: string[];
+  team: string[];
+  review: { requiredApprovals: number };
 };
 
 export class ConfigError extends Error {
@@ -33,11 +35,19 @@ const schema = z
     repos: z
       .array(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/name"'))
       .min(1, "list at least one repo"),
+    team: z.array(z.string().min(1)).default([]),
+    review: z
+      .object({
+        required_approvals: z.number().int().min(1).default(1),
+      })
+      .prefault({}),
   })
   .transform(
     (raw): Config => ({
       github: { tokenEnv: raw.github.token_env, pollIntervalMs: raw.github.poll_interval },
       repos: raw.repos,
+      team: raw.team,
+      review: { requiredApprovals: raw.review.required_approvals },
     }),
   );
 
