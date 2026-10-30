@@ -1,4 +1,5 @@
 import type { DashboardState } from "./api.js";
+import type { PrEvent } from "./notifications.js";
 
 /**
  * Every event the server pushes over /api/events, by SSE event name, with the data it carries.
@@ -7,6 +8,8 @@ import type { DashboardState } from "./api.js";
 export type ServerEvents = {
   /** The whole dashboard, on connect and after every poll. */
   dashboard: DashboardState;
+  /** Something that happened on a PR since the previous poll, to show as a desktop notification. */
+  notification: PrEvent;
 };
 
 export type StreamStatus = "connecting" | "open" | "reconnecting";

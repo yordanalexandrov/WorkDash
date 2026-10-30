@@ -63,6 +63,25 @@ h1 {
   background: var(--error-bg);
 }
 
+#notifications {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+#notifications button {
+  padding: 0.125rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+#notifications button:hover {
+  border-color: var(--muted);
+}
+
 #repos {
   /* Columns rather than a grid, so a short card does not leave a gap under it. */
   columns: 32rem;
