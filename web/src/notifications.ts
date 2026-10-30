@@ -11,29 +11,25 @@ export type PermissionState = NotificationPermission | "unsupported";
 
 const browserNotification = typeof Notification === "undefined" ? undefined : Notification;
 
+/** Per event type: what happened, in a few words, and its label in a missed summary, in the order the plan lists them. */
+const EVENT_TEXT: Record<EventType, { what: (event: PrEvent) => string; missed: string }> = {
+  review_requested: { what: (e) => `${e.actor} иска review от теб`, missed: "Искания за review" },
+  new_comment_on_my_pr: { what: (e) => `Нов коментар от ${e.actor}`, missed: "Коментари" },
+  review_on_my_pr: {
+    what: (e) =>
+      e.review === "APPROVED" ? `${e.actor} одобри` : e.review === "CHANGES_REQUESTED" ? `${e.actor} поиска промени` : `${e.actor} остави review`,
+    missed: "Review-та",
+  },
+  ci_failed_on_my_pr: { what: () => "CI се провали", missed: "Провален CI" },
+  my_pr_ready_to_merge: { what: () => "Готов за merge", missed: "Готови за merge" },
+  mention: { what: (e) => `${e.actor} те спомена`, missed: "Споменавания" },
+  re_review_needed: { what: () => "Има ново след твоето review", missed: "Ново след твое review" },
+  team_pr_opened: { what: (e) => `${e.actor} отвори PR`, missed: "Нови PR-и на екипа" },
+};
+
 /** What happened on the PR, in a few words. */
 export function whatHappened(event: PrEvent): string {
-  const who = event.actor;
-  switch (event.type) {
-    case "review_requested":
-      return `${who} иска review от теб`;
-    case "new_comment_on_my_pr":
-      return `Нов коментар от ${who}`;
-    case "review_on_my_pr":
-      if (event.review === "APPROVED") return `${who} одобри`;
-      if (event.review === "CHANGES_REQUESTED") return `${who} поиска промени`;
-      return `${who} остави review`;
-    case "ci_failed_on_my_pr":
-      return "CI се провали";
-    case "my_pr_ready_to_merge":
-      return "Готов за merge";
-    case "mention":
-      return `${who} те спомена`;
-    case "re_review_needed":
-      return "Има ново след твоето review";
-    case "team_pr_opened":
-      return `${who} отвори PR`;
-  }
+  return EVENT_TEXT[event.type].what(event);
 }
 
 /** The notification for an event: the PR's title, and what happened on which PR. */
@@ -53,79 +49,55 @@ export async function requestNotificationPermission(
   return NotificationApi ? NotificationApi.requestPermission() : "unsupported";
 }
 
+type NotificationEnv = {
+  Notification: typeof Notification | undefined;
+  registration: Promise<ServiceWorkerRegistration | null>;
+  open?: (url: string) => void;
+};
+
+const browserEnv = (): NotificationEnv => ({ Notification: browserNotification, registration: serviceWorkerRegistration() });
+
 /**
- * Shows a native notification for the event; clicking it opens the PR. The event id is the tag,
- * so two open tabs that both get the event show it once. False when it could not be shown.
+ * Shows a notification through the service worker, else with `new Notification`; a click opens `url`,
+ * or brings the dashboard forward without one. False when notifications are not allowed.
  */
-export async function showNotification(
-  event: PrEvent,
-  env: {
-    Notification: typeof Notification | undefined;
-    registration: Promise<ServiceWorkerRegistration | null>;
-    open?: (url: string) => void;
-  } = { Notification: browserNotification, registration: serviceWorkerRegistration() },
-): Promise<boolean> {
-  const { Notification: NotificationApi, open = (url) => window.open(url, "_blank") } = env;
+async function show(env: NotificationEnv, title: string, options: { body: string; tag: string }, url?: string): Promise<boolean> {
+  const { Notification: NotificationApi, open = (target) => window.open(target, "_blank") } = env;
   if (notificationPermission(NotificationApi) !== "granted") return false;
-  const { title, body } = notificationText(event);
   const registration = await env.registration;
   if (registration) {
-    await registration.showNotification(title, { body, tag: event.id, data: { url: event.url } });
+    await registration.showNotification(title, url ? { ...options, data: { url } } : options);
     return true;
   }
-  const notification = new NotificationApi!(title, { body, tag: event.id });
+  const notification = new NotificationApi!(title, options);
   notification.onclick = () => {
-    open(event.url);
+    if (url) open(url);
+    else window.focus();
     notification.close();
   };
   return true;
 }
 
-/** Each event type in a summary, in the order the plan lists them. */
-const MISSED_LABELS: Record<EventType, string> = {
-  review_requested: "Искания за review",
-  new_comment_on_my_pr: "Коментари",
-  review_on_my_pr: "Review-та",
-  ci_failed_on_my_pr: "Провален CI",
-  my_pr_ready_to_merge: "Готови за merge",
-  mention: "Споменавания",
-  re_review_needed: "Ново след твое review",
-  team_pr_opened: "Нови PR-и на екипа",
-};
+/** Shows a notification for the event that opens the PR; the event id as tag shows it once across tabs. */
+export function showNotification(event: PrEvent, env: NotificationEnv = browserEnv()): Promise<boolean> {
+  const { title, body } = notificationText(event);
+  return show(env, title, { body, tag: event.id }, event.url);
+}
 
 /** The summary notification for the missed events: how many, and how many of each kind. */
 export function missedText(missed: Missed): { title: string; body: string } {
   const title = missed.total === 1 ? "1 пропуснато събитие" : `${missed.total} пропуснати събития`;
-  const body = (Object.keys(MISSED_LABELS) as EventType[])
+  const body = (Object.keys(EVENT_TEXT) as EventType[])
     .filter((type) => missed.byType[type])
-    .map((type) => `${MISSED_LABELS[type]}: ${missed.byType[type]}`)
+    .map((type) => `${EVENT_TEXT[type].missed}: ${missed.byType[type]}`)
     .join(" · ");
   return { title, body };
 }
 
 /** Shows one notification that sums up the missed events; clicking it brings the dashboard forward. */
-export async function showMissedNotification(
-  missed: Missed,
-  env: {
-    Notification: typeof Notification | undefined;
-    registration: Promise<ServiceWorkerRegistration | null>;
-  } = { Notification: browserNotification, registration: serviceWorkerRegistration() },
-): Promise<boolean> {
-  const { Notification: NotificationApi } = env;
-  if (notificationPermission(NotificationApi) !== "granted") return false;
+export function showMissedNotification(missed: Missed, env: NotificationEnv = browserEnv()): Promise<boolean> {
   const { title, body } = missedText(missed);
-  const registration = await env.registration;
-  if (registration) {
-    // No `data.url`: the service worker then focuses the dashboard, where the list is.
-    await registration.showNotification(title, { body, tag: "missed" });
-    return true;
-  }
-  const notification = new NotificationApi!(title, { body, tag: "missed" });
-  notification.onclick = () => {
-    window.focus();
-    notification.close();
-  };
-  return true;
+  return show(env, title, { body, tag: "missed" });
 }
 
 /** The missed events still listed with a later summary added on top, newest first. */
