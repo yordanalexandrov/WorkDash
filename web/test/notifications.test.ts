@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrEvent } from "../../src/domain/events.js";
-import { notificationPermission, notificationText, showNotification } from "../src/notifications.js";
+import type { Missed } from "../../src/domain/notify.js";
+import { mergeMissed, missedText, notificationPermission, notificationText, showMissedNotification, showNotification } from "../src/notifications.js";
 
 const event = (overrides: Partial<PrEvent> = {}): PrEvent => ({
   id: "mention:my-org/repo-a#7:c1",
@@ -86,5 +87,59 @@ describe("notificationPermission", () => {
   it("reports the browser's permission, or unsupported when there are no notifications", () => {
     expect(notificationPermission(fakeNotification("denied").Notification)).toBe("denied");
     expect(notificationPermission(undefined)).toBe("unsupported");
+  });
+});
+
+const missed = (overrides: Partial<Missed> = {}): Missed => ({
+  total: 3,
+  byType: { review_requested: 1, mention: 2 },
+  events: [event({ id: "c", number: 3 }), event({ id: "b", number: 2 }), event({ id: "a", type: "review_requested", number: 1 })],
+  ...overrides,
+});
+
+describe("missedText", () => {
+  it("says how many were missed and of which kind, in the order of the event types", () => {
+    expect(missedText(missed())).toEqual({ title: "3 пропуснати събития", body: "Искания за review: 1 · Споменавания: 2" });
+  });
+
+  it("uses the singular for one", () => {
+    expect(missedText(missed({ total: 1, byType: { ci_failed_on_my_pr: 1 } })).title).toBe("1 пропуснато събитие");
+  });
+});
+
+describe("showMissedNotification", () => {
+  it("shows one summary notification that brings the dashboard forward", async () => {
+    const registration = { showNotification: vi.fn(async () => {}) } as unknown as ServiceWorkerRegistration;
+    const { Notification } = fakeNotification("granted");
+
+    expect(await showMissedNotification(missed(), { Notification, registration: Promise.resolve(registration) })).toBe(true);
+
+    expect(registration.showNotification).toHaveBeenCalledWith("3 пропуснати събития", {
+      body: "Искания за review: 1 · Споменавания: 2",
+      tag: "missed",
+    });
+  });
+
+  it("shows nothing without permission", async () => {
+    const { Notification, shown } = fakeNotification("denied");
+
+    expect(await showMissedNotification(missed(), { Notification, registration: Promise.resolve(null) })).toBe(false);
+    expect(shown).toEqual([]);
+  });
+});
+
+describe("mergeMissed", () => {
+  it("takes the first summary as it is", () => {
+    expect(mergeMissed(null, missed(), 50)).toEqual(missed());
+  });
+
+  it("adds a later summary on top of the one still shown, newest first and capped", () => {
+    const later = missed({ total: 2, byType: { mention: 1, team_pr_opened: 1 }, events: [event({ id: "e", number: 5 }), event({ id: "d", number: 4 })] });
+
+    expect(mergeMissed(missed(), later, 4)).toEqual({
+      total: 5,
+      byType: { review_requested: 1, mention: 3, team_pr_opened: 1 },
+      events: [event({ id: "e", number: 5 }), event({ id: "d", number: 4 }), event({ id: "c", number: 3 }), event({ id: "b", number: 2 })],
+    });
   });
 });

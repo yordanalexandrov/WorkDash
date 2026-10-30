@@ -1,3 +1,4 @@
+import { MissedView } from "./components/MissedView.js";
 import { NotificationPermissionView } from "./components/NotificationPermissionView.js";
 import { RecentlyClosedView } from "./components/RecentlyClosedView.js";
 import { RepoCardView } from "./components/RepoCardView.js";
@@ -22,6 +23,7 @@ export function App() {
       <NotificationPermissionView {...notifications} />
       {error && <p id="error">{error}</p>}
       {configError && <p id="config-error">{configError}</p>}
+      {notifications.missed && <MissedView missed={notifications.missed} onDismiss={notifications.dismissMissed} />}
       <main>
         <div id="repos">
           {cards.map((card) => (

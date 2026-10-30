@@ -1,19 +1,42 @@
 import { useEffect, useState } from "preact/hooks";
-import { notificationPermission, type PermissionState, requestNotificationPermission, showNotification } from "./notifications.js";
+import {
+  type Missed,
+  mergeMissed,
+  notificationPermission,
+  type PermissionState,
+  requestNotificationPermission,
+  showMissedNotification,
+  showNotification,
+} from "./notifications.js";
 import { useServerEvent } from "./useServerEvents.js";
 
 export type NotificationsView = {
   permission: PermissionState;
   /** Asks the browser for permission; call it from a click. */
   enable(): void;
+  /** The missed events the server handed over, listed until dismissed; null when there are none. */
+  missed: Missed | null;
+  dismissMissed(): void;
 };
 
-/** Shows a desktop notification for every event the server pushes, once the browser allows it. */
+/** How many missed events the list keeps at most, like the server. */
+const MISSED_LIMIT = 50;
+
+/**
+ * Shows a desktop notification for every event the server pushes, once the browser allows it, and one
+ * summary notification for the missed events, which are also listed until dismissed.
+ */
 export function useNotifications(): NotificationsView {
   const [permission, setPermission] = useState<PermissionState>(() => notificationPermission());
+  const [missed, setMissed] = useState<Missed | null>(null);
 
   useServerEvent("notification", (event) => {
     showNotification(event).catch((error: Error) => console.error(`notification failed: ${error.message}`));
+  });
+
+  useServerEvent("missed", (summary) => {
+    setMissed((shown) => mergeMissed(shown, summary, MISSED_LIMIT));
+    showMissedNotification(summary).catch((error: Error) => console.error(`notification failed: ${error.message}`));
   });
 
   // The permission can change in the browser's site settings while the page is open.
@@ -36,5 +59,5 @@ export function useNotifications(): NotificationsView {
       .then(setPermission)
       .catch((error: Error) => console.error(`notification permission failed: ${error.message}`));
   };
-  return { permission, enable };
+  return { permission, enable, missed, dismissMissed: () => setMissed(null) };
 }

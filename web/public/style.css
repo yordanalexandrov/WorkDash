@@ -183,6 +183,25 @@ h2 {
 
 #recently-closed h2 {
   color: var(--muted);
+}
+
+#missed {
+  max-width: 32rem;
+  margin-top: 1rem;
+}
+
+.missed-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.missed-more {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
 .badge.jira {
   color: var(--link);
 }
