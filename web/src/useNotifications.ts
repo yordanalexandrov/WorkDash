@@ -20,9 +20,6 @@ export type NotificationsView = {
   dismissMissed(): void;
 };
 
-/** How many missed events the list keeps at most, like the server. */
-const MISSED_LIMIT = 50;
-
 /**
  * Shows a desktop notification for every event the server pushes, once the browser allows it, and one
  * summary notification for the missed events, which are also listed until dismissed.
@@ -39,7 +36,7 @@ export function useNotifications(): NotificationsView {
   });
 
   useServerEvent("missed", ({ quiet, ...summary }) => {
-    setMissed((shown) => mergeMissed(shown, summary, MISSED_LIMIT));
+    setMissed((shown) => mergeMissed(shown, summary));
     if (quiet) return;
     showMissedNotification(summary).catch((error: Error) => console.error(`notification failed: ${error.message}`));
   });

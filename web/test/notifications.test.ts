@@ -130,16 +130,16 @@ describe("showMissedNotification", () => {
 
 describe("mergeMissed", () => {
   it("takes the first summary as it is", () => {
-    expect(mergeMissed(null, missed(), 50)).toEqual(missed());
+    expect(mergeMissed(null, missed())).toEqual(missed());
   });
 
-  it("adds a later summary on top of the one still shown, newest first and capped", () => {
+  it("adds a later summary on top of the one still shown, newest first", () => {
     const later = missed({ total: 2, byType: { mention: 1, team_pr_opened: 1 }, events: [event({ id: "e", number: 5 }), event({ id: "d", number: 4 })] });
 
-    expect(mergeMissed(missed(), later, 4)).toEqual({
+    expect(mergeMissed(missed(), later)).toEqual({
       total: 5,
       byType: { review_requested: 1, mention: 3, team_pr_opened: 1 },
-      events: [event({ id: "e", number: 5 }), event({ id: "d", number: 4 }), event({ id: "c", number: 3 }), event({ id: "b", number: 2 })],
+      events: [...later.events, ...missed().events],
     });
   });
 });

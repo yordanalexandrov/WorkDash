@@ -128,12 +128,12 @@ export async function showMissedNotification(
   return true;
 }
 
-/** The missed events still listed with a later summary added on top: newest first, at most `limit` listed. */
-export function mergeMissed(shown: Missed | null, next: Missed, limit: number): Missed {
+/** The missed events still listed with a later summary added on top, newest first. */
+export function mergeMissed(shown: Missed | null, next: Missed): Missed {
   if (!shown) return next;
   const byType = { ...shown.byType };
   for (const [type, count] of Object.entries(next.byType) as [EventType, number][]) byType[type] = (byType[type] ?? 0) + count;
   const ids = new Set(next.events.map((event) => event.id));
-  const events = [...next.events, ...shown.events.filter((event) => !ids.has(event.id))].slice(0, limit);
+  const events = [...next.events, ...shown.events.filter((event) => !ids.has(event.id))];
   return { total: shown.total + next.total, byType, events };
 }
