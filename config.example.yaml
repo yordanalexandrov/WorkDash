@@ -1,0 +1,30 @@
+github:
+  token_env: GITHUB_TOKEN      # името на env променливата с токена (стои в .env)
+  poll_interval: 60s
+
+repos:
+  - my-org/repo-a
+  - my-org/repo-b
+
+team:                          # чии PR-и да се виждат в секция "Екипът"
+  - colleague1
+  - colleague2
+
+jira:
+  base_url: https://example.atlassian.net/browse/
+  project_keys: [ABC]          # празно = всякакъв ключ от вида ABC-123
+
+review:
+  required_approvals: 1        # ползва се, когато repo-то няма branch protection за review
+  recently_closed_window: 24h  # колко дълго се виждат merged/closed PR-и
+
+notifications:
+  review_requested: true
+  new_comment_on_my_pr: true
+  review_on_my_pr: true
+  ci_failed_on_my_pr: true
+  my_pr_ready_to_merge: true
+  mention: true
+  re_review_needed: true
+  team_pr_opened: true
+  quiet_hours: "19:00-09:00"
