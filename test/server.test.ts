@@ -11,6 +11,8 @@ const rules: ClassifyRules = { team: ["colleague1"], requiredApprovals: 1 };
 
 const pr = pullRequest({ number: 3, title: "Add dashboard", ci: "FAILURE" });
 
+const DAY = 24 * 3_600_000;
+
 const emptySections = SECTIONS.map((section) => ({ section, pullRequests: [] }));
 
 const healthy: PollHealth = { error: null, problems: [] };
@@ -19,7 +21,7 @@ describe("GET /api/prs", () => {
   it("serves the stored snapshot grouped into sections before any poll has run", async () => {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests: [pr] }, new Date("2026-10-30T10:00:00Z"));
-    const server = buildServer({ store, rules: () => rules, pollIntervalMs: () => 60_000, pollHealth: () => healthy, configError: () => null });
+    const server = buildServer({ store, rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null });
 
     const response = await server.inject("/api/prs");
 
@@ -35,6 +37,7 @@ describe("GET /api/prs", () => {
         { section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed", unreadComments: 0, jira: [] }] },
         ...emptySections.slice(1),
       ],
+      recentlyClosed: [],
     });
   });
 
@@ -47,6 +50,7 @@ describe("GET /api/prs", () => {
       rules: () => rules,
       jira: () => ({ baseUrl: "https://example.atlassian.net/browse/", projectKeys: ["ABC"] }),
       pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
       pollHealth: () => healthy,
       configError: () => null,
     });
@@ -66,6 +70,7 @@ describe("GET /api/prs", () => {
       rules: () => rules,
       jira: () => jira,
       pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
       pollHealth: () => healthy,
       configError: () => null,
     });
@@ -85,6 +90,7 @@ describe("GET /api/prs", () => {
       store: openStore(":memory:"),
       rules: () => rules,
       pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
       pollHealth: () => ({ error, problems: [] }),
       configError: () => null,
     });
@@ -99,6 +105,7 @@ describe("GET /api/prs", () => {
       problems: [],
       configError: null,
       sections: emptySections,
+      recentlyClosed: [],
     });
   });
 
@@ -110,6 +117,7 @@ describe("GET /api/prs", () => {
       store,
       rules: () => current.rules,
       pollIntervalMs: () => current.pollIntervalMs,
+      recentlyClosedWindowMs: () => DAY,
       pollHealth: () => healthy,
       configError: () => "config.yaml: invalid configuration:\n  repos: list at least one repo",
     });
@@ -133,7 +141,15 @@ describe("POST /api/seen", () => {
   function serverWith(pullRequests: (typeof pr)[], events?: EventHub) {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests }, new Date("2026-10-30T10:00:00Z"));
-    return buildServer({ store, rules: () => rules, pollIntervalMs: () => 60_000, pollHealth: () => healthy, configError: () => null, events });
+    return buildServer({
+      store,
+      rules: () => rules,
+      pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
+      pollHealth: () => healthy,
+      configError: () => null,
+      events,
+    });
   }
 
   const sectionOf = async (server: ReturnType<typeof buildServer>, number: number) =>
@@ -194,6 +210,7 @@ describe("GET /api/prs while polls fail", () => {
       store,
       rules: () => rules,
       pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
       pollHealth: () => ({ error, problems: [] }),
       configError: () => null,
     });
@@ -213,7 +230,7 @@ describe("GET /api/events", () => {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests: [] }, new Date("2026-10-30T10:00:00Z"));
     const events = createEventHub();
-    const source = { store, rules: () => rules, pollIntervalMs: () => 60_000, pollHealth: () => healthy, configError: () => null };
+    const source = { store, rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null };
     const server = buildServer({ ...source, events });
     close = () => server.close();
     const address = await server.listen({ host: "127.0.0.1", port: 0 });
@@ -236,9 +253,43 @@ describe("GET /api/events", () => {
   });
 });
 
+describe("recently closed PRs", () => {
+  it("lists the PRs closed within the window, apart from the open sections", async () => {
+    const store = openStore(":memory:");
+    const merged = {
+      repo: "my-org/repo-a",
+      number: 9,
+      title: "Ship it",
+      url: "https://github.com/my-org/repo-a/pull/9",
+      author: "me",
+      state: "MERGED" as const,
+      closedAt: "2026-10-30T11:00:00Z",
+    };
+    const old = { ...merged, number: 8, closedAt: "2026-10-29T11:00:00Z" };
+    store.saveRecentlyClosed([merged, old]);
+    const source = {
+      store,
+      rules: () => rules,
+      pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
+      pollHealth: () => healthy,
+      configError: () => null,
+      now: () => new Date("2026-10-30T12:00:00Z"),
+    };
+    const server = buildServer(source);
+
+    const response = await server.inject("/api/prs");
+
+    expect(response.json().recentlyClosed).toEqual([merged]);
+    expect(response.json().sections).toEqual(emptySections);
+    // The SSE `dashboard` event carries the same state.
+    expect(dashboardState(source).recentlyClosed).toEqual([merged]);
+  });
+});
+
 describe("GET /", () => {
   it("serves the dashboard page", async () => {
-    const server = buildServer({ store: openStore(":memory:"), rules: () => rules, pollIntervalMs: () => 60_000, pollHealth: () => healthy, configError: () => null });
+    const server = buildServer({ store: openStore(":memory:"), rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null });
 
     const response = await server.inject("/");
 

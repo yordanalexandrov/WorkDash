@@ -43,6 +43,17 @@ export type PullRequest = {
   commits: Commit[]; // the latest commits on the branch, oldest first
 };
 
+/** A PR that left the open list, with how it ended. */
+export type ClosedPullRequest = {
+  repo: string; // owner/name
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  state: "MERGED" | "CLOSED";
+  closedAt: string;
+};
+
 /** What one poll learns from GitHub. */
 export type Snapshot = {
   viewer: string;

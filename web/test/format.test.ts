@@ -13,6 +13,7 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     problems: [],
     configError: null,
     sections: [],
+    recentlyClosed: [],
     ...overrides,
   };
 }

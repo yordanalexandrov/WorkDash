@@ -5,11 +5,23 @@ import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import type { PrEvent } from "../src/domain/events.js";
-import type { PullRequest } from "../src/domain/types.js";
+import type { ClosedPullRequest, PullRequest } from "../src/domain/types.js";
 import { pullRequest } from "./fixtures.js";
 
 function pr(repo: string, number: number): PullRequest {
   return pullRequest({ repo, number, author: "colleague1" });
+}
+
+function closed(number: number): ClosedPullRequest {
+  return {
+    repo: "my-org/repo-a",
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/my-org/repo-a/pull/${number}`,
+    author: "colleague1",
+    state: "MERGED",
+    closedAt: "2026-10-30T09:00:00Z",
+  };
 }
 
 const dirs: string[] = [];
@@ -44,6 +56,28 @@ describe("SnapshotStore", () => {
     first.close();
 
     expect(openStore(path).loadSnapshot()?.pullRequests).toEqual([pr("my-org/repo-a", 1)]);
+  });
+
+  it("keeps recently closed PRs apart from the open ones, replacing the previous list", () => {
+    const store = openStore(":memory:");
+    store.saveSnapshot({ viewer: "me", pullRequests: [pr("my-org/repo-a", 2)] }, new Date("2026-10-30T10:00:00Z"));
+    store.saveRecentlyClosed([closed(1), closed(3)]);
+    store.saveRecentlyClosed([closed(3)]);
+
+    expect(store.loadRecentlyClosed()).toEqual([closed(3)]);
+    expect(store.loadSnapshot()?.pullRequests).toEqual([pr("my-org/repo-a", 2)]);
+  });
+
+  it("keeps the recently closed PRs across a restart", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+
+    const first = openStore(path);
+    first.saveRecentlyClosed([closed(1)]);
+    first.close();
+
+    expect(openStore(path).loadRecentlyClosed()).toEqual([closed(1)]);
   });
 
   it("drops a snapshot saved in an older format, so the next poll replaces it", () => {

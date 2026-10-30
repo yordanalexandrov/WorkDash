@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, LogController } from "fastify";
 import { z } from "zod";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
+import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import type { PollHealth } from "./domain/poll-error.js";
 import { createEventHub, type EventHub } from "./sse.js";
@@ -25,13 +26,25 @@ export type DashboardSource = {
   rules: () => ClassifyRules;
   jira?: () => JiraConfig;
   pollIntervalMs: () => number;
+  /** How long a merged or closed PR stays listed. */
+  recentlyClosedWindowMs: () => number;
   pollHealth: () => PollHealth;
   /** Why the config.yaml on disk is not in effect; null when it is. */
   configError: () => string | null;
+  now?: () => Date;
 };
 
 /** What GET /api/prs returns and the `dashboard` event carries. */
-export function dashboardState({ store, rules, jira = () => NO_JIRA, pollIntervalMs, pollHealth, configError }: DashboardSource) {
+export function dashboardState({
+  store,
+  rules,
+  jira = () => NO_JIRA,
+  pollIntervalMs,
+  recentlyClosedWindowMs,
+  pollHealth,
+  configError,
+  now = () => new Date(),
+}: DashboardSource) {
   const snapshot = store.loadSnapshot();
   const { error, problems } = pollHealth();
   return {
@@ -45,6 +58,8 @@ export function dashboardState({ store, rules, jira = () => NO_JIRA, pollInterva
       section,
       pullRequests: pullRequests.map((pr) => ({ ...pr, jira: jiraLinks(pr, jira()) })),
     })),
+    // Filtered here too, so an entry expires on time even while polling fails.
+    recentlyClosed: withinWindow(store.loadRecentlyClosed(), now(), recentlyClosedWindowMs()),
   };
 }
 

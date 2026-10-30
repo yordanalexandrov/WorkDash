@@ -42,6 +42,7 @@ const dashboard: DashboardSource = {
   rules: () => ({ team: config.team, requiredApprovals: config.review.requiredApprovals }),
   jira: () => config.jira,
   pollIntervalMs: () => config.github.pollIntervalMs,
+  recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
   pollHealth: () => poller.health(),
   configError: () => configWatcher.error(),
 };
@@ -53,6 +54,7 @@ const poller = startPoller({
   repos: config.repos,
   token,
   intervalMs: config.github.pollIntervalMs,
+  recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
   store,
   log: server.log,
   onPoll: publishDashboard,
@@ -65,7 +67,12 @@ const configWatcher = watchConfig(CONFIG_PATH, {
     const nextToken = tokenFor(next);
     config = next;
     token = nextToken;
-    poller.reconfigure({ repos: config.repos, token, intervalMs: config.github.pollIntervalMs });
+    poller.reconfigure({
+      repos: config.repos,
+      token,
+      intervalMs: config.github.pollIntervalMs,
+      recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
+    });
   },
   onChange: publishDashboard,
   log: server.log,
