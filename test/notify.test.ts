@@ -82,9 +82,9 @@ describe("isQuietAt", () => {
 
   it("reads the clock in the given time zone", () => {
     const quiet = parseQuietHours("19:00-09:00");
-    // 17:30 UTC is 19:30 in Sofia (EET, UTC+2) at the end of October.
-    expect(isQuietAt(quiet, utc("17:30"), "UTC")).toBe(false);
-    expect(isQuietAt(quiet, utc("17:30"), "Europe/Sofia")).toBe(true);
+    // 10:30 UTC is 19:30 in Tokyo (UTC+9, no daylight saving time).
+    expect(isQuietAt(quiet, utc("10:30"), "UTC")).toBe(false);
+    expect(isQuietAt(quiet, utc("10:30"), "Asia/Tokyo")).toBe(true);
   });
 
   it("is never quiet without quiet hours", () => {

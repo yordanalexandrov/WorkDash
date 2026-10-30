@@ -35,7 +35,7 @@ function pollerSettings(config: Config, token: string): PollerSettings {
 try {
   new Intl.DateTimeFormat("en", { timeZone: TIME_ZONE });
 } catch {
-  fail(`TZ: unknown time zone "${TIME_ZONE}"; expected a name such as "Europe/Sofia"`);
+  fail(`TZ: unknown time zone "${TIME_ZONE}"; expected a name such as "America/New_York"`);
 }
 
 let config: Config;
