@@ -1,4 +1,4 @@
-import type { PullRequest, Snapshot } from "../domain/types.js";
+import type { CiState, PullRequest, ReviewState, Snapshot } from "../domain/types.js";
 import { buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
@@ -7,8 +7,16 @@ type PullRequestNode = {
   number: number;
   title: string;
   url: string;
+  isDraft: boolean;
+  createdAt: string;
   updatedAt: string;
+  mergeable: PullRequest["mergeable"];
+  reviewDecision: PullRequest["reviewDecision"];
   author: { login: string } | null;
+  // A team (or a deleted user) matches no fragment field and comes back as {} or null.
+  reviewRequests: { nodes: { requestedReviewer: { login?: string } | null }[] };
+  latestReviews: { nodes: { author: { login: string } | null; state: ReviewState | "PENDING"; submittedAt: string | null }[] };
+  commits: { nodes: { commit: { statusCheckRollup: { state: CiState } | null } }[] };
 };
 
 type RepositoryNode = {
@@ -81,6 +89,18 @@ function toPullRequests(repository: RepositoryNode): PullRequest[] {
     title: node.title,
     url: node.url,
     author: node.author?.login ?? "ghost",
+    isDraft: node.isDraft,
+    createdAt: node.createdAt,
     updatedAt: node.updatedAt,
+    mergeable: node.mergeable,
+    reviewDecision: node.reviewDecision,
+    requestedReviewers: node.reviewRequests.nodes.flatMap((request) => request.requestedReviewer?.login ?? []),
+    reviews: node.latestReviews.nodes.flatMap((review) =>
+      // A pending review is a draft that only its author sees.
+      review.state === "PENDING" || !review.submittedAt
+        ? []
+        : [{ author: review.author?.login ?? "ghost", state: review.state, submittedAt: review.submittedAt }],
+    ),
+    ci: node.commits.nodes[0]?.commit.statusCheckRollup?.state ?? null,
   }));
 }

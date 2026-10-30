@@ -3,6 +3,7 @@
  * one `rN: repository(...)` alias per repo, so a poll costs a single request.
  */
 export const PAGE_SIZE = 100;
+const REVIEWERS_PAGE_SIZE = 20;
 
 export function buildSnapshotQuery(repos: string[]): { query: string; variables: Record<string, string> } {
   const variables: Record<string, string> = {};
@@ -29,8 +30,15 @@ fragment openPullRequests on Repository {
       number
       title
       url
+      isDraft
+      createdAt
       updatedAt
+      mergeable
+      reviewDecision
       author { login }
+      reviewRequests(first: ${REVIEWERS_PAGE_SIZE}) { nodes { requestedReviewer { ... on User { login } } } }
+      latestReviews(first: ${REVIEWERS_PAGE_SIZE}) { nodes { author { login } state submittedAt } }
+      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
     }
     pageInfo { hasNextPage }
   }

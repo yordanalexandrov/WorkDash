@@ -31,8 +31,15 @@ function prNode(number: number, overrides: Record<string, unknown> = {}) {
     number,
     title: `PR ${number}`,
     url: `https://github.com/x/y/pull/${number}`,
+    isDraft: false,
+    createdAt: "2026-10-29T10:00:00Z",
     updatedAt: "2026-10-30T10:00:00Z",
+    mergeable: "MERGEABLE",
+    reviewDecision: null,
     author: { login: "colleague1" },
+    reviewRequests: { nodes: [] },
+    latestReviews: { nodes: [] },
+    commits: { nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }] },
     ...overrides,
   };
 }
@@ -57,7 +64,14 @@ describe("fetchSnapshot", () => {
         title: "PR 1",
         url: "https://github.com/x/y/pull/1",
         author: "colleague1",
+        isDraft: false,
+        createdAt: "2026-10-29T10:00:00Z",
         updatedAt: "2026-10-30T10:00:00Z",
+        mergeable: "MERGEABLE",
+        reviewDecision: null,
+        requestedReviewers: [],
+        reviews: [],
+        ci: "SUCCESS",
       },
       {
         repo: "my-org/repo-b",
@@ -65,9 +79,63 @@ describe("fetchSnapshot", () => {
         title: "Fix login",
         url: "https://github.com/x/y/pull/7",
         author: "colleague2",
+        isDraft: false,
+        createdAt: "2026-10-29T10:00:00Z",
         updatedAt: "2026-10-30T10:00:00Z",
+        mergeable: "MERGEABLE",
+        reviewDecision: null,
+        requestedReviewers: [],
+        reviews: [],
+        ci: "SUCCESS",
       },
     ]);
+  });
+
+  it("maps status fields, requested reviewers and the latest reviews", async () => {
+    const github = fakeGitHub({
+      "my-org/repo-a": [
+        prNode(1, {
+          isDraft: true,
+          mergeable: "CONFLICTING",
+          reviewDecision: "CHANGES_REQUESTED",
+          reviewRequests: {
+            nodes: [{ requestedReviewer: { login: "me" } }, { requestedReviewer: {} }, { requestedReviewer: null }],
+          },
+          latestReviews: {
+            nodes: [
+              { author: { login: "colleague2" }, state: "CHANGES_REQUESTED", submittedAt: "2026-10-30T09:00:00Z" },
+              { author: { login: "me" }, state: "PENDING", submittedAt: null },
+              { author: null, state: "APPROVED", submittedAt: "2026-10-30T08:00:00Z" },
+            ],
+          },
+          commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE" } } }] },
+        }),
+      ],
+    });
+
+    const [pr] = (await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch })).pullRequests;
+
+    expect(pr).toMatchObject({
+      isDraft: true,
+      mergeable: "CONFLICTING",
+      reviewDecision: "CHANGES_REQUESTED",
+      requestedReviewers: ["me"],
+      reviews: [
+        { author: "colleague2", state: "CHANGES_REQUESTED", submittedAt: "2026-10-30T09:00:00Z" },
+        { author: "ghost", state: "APPROVED", submittedAt: "2026-10-30T08:00:00Z" },
+      ],
+      ci: "FAILURE",
+    });
+  });
+
+  it("has no CI state when the head commit has no checks", async () => {
+    const github = fakeGitHub({
+      "my-org/repo-a": [prNode(1, { commits: { nodes: [{ commit: { statusCheckRollup: null } }] } })],
+    });
+
+    const snapshot = await fetchSnapshot({ repos: ["my-org/repo-a"], token: "t", fetch: github.fetch });
+
+    expect(snapshot.pullRequests[0]?.ci).toBeNull();
   });
 
   it("shows a deleted account's PR as authored by ghost", async () => {

@@ -29,7 +29,13 @@ if (!token) fail(`${CONFIG_PATH}: github.token_env: environment variable ${confi
 mkdirSync(dirname(DB_PATH), { recursive: true });
 const store = openStore(DB_PATH);
 
-const server = buildServer({ store, pollIntervalMs: config.github.pollIntervalMs, lastPollError: () => poller.lastError(), logger: true });
+const server = buildServer({
+  store,
+  rules: { team: config.team, requiredApprovals: config.review.requiredApprovals },
+  pollIntervalMs: config.github.pollIntervalMs,
+  lastPollError: () => poller.lastError(),
+  logger: true,
+});
 const poller = startPoller({
   repos: config.repos,
   token,

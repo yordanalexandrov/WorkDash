@@ -24,11 +24,21 @@ const SCHEMA = `
   );
 `;
 
+/**
+ * Bumped whenever the stored PullRequest shape changes. A snapshot in an older format is
+ * dropped on open: it is only a cache, and the poller refetches it right away.
+ */
+const SNAPSHOT_FORMAT = 2;
+
 /** Opens (and creates if needed) the SQLite file that holds the latest snapshot. */
 export function openStore(path: string): SnapshotStore {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
+  if (db.pragma("user_version", { simple: true }) !== SNAPSHOT_FORMAT) {
+    db.exec("DELETE FROM pr_snapshot; DELETE FROM poll;");
+    db.pragma(`user_version = ${SNAPSHOT_FORMAT}`);
+  }
 
   const deletePullRequests = db.prepare("DELETE FROM pr_snapshot");
   const insertPullRequest = db.prepare(

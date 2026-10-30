@@ -14,12 +14,30 @@ describe("parseConfig", () => {
     expect(config.repos).toEqual(["my-org/repo-a", "my-org/repo-b"]);
     expect(config.github.tokenEnv).toBe("GITHUB_TOKEN");
     expect(config.github.pollIntervalMs).toBe(60_000);
+    expect(config.team).toEqual(["colleague1", "colleague2"]);
+    expect(config.review.requiredApprovals).toBe(1);
   });
 
   it("fills in defaults for the GitHub section", () => {
     const config = parseConfig(minimal);
 
     expect(config.github).toEqual({ tokenEnv: "GITHUB_TOKEN", pollIntervalMs: 60_000 });
+  });
+
+  it("defaults to no team and one required approval", () => {
+    const config = parseConfig(minimal);
+
+    expect(config.team).toEqual([]);
+    expect(config.review).toEqual({ requiredApprovals: 1 });
+  });
+
+  it("reads required_approvals", () => {
+    expect(parseConfig(`review: { required_approvals: 2 }\n${minimal}`).review.requiredApprovals).toBe(2);
+  });
+
+  it("names the field when required_approvals is not a positive whole number", () => {
+    expect(() => parseConfig(`review: { required_approvals: 0 }\n${minimal}`)).toThrow(/review\.required_approvals/);
+    expect(() => parseConfig(`review: { required_approvals: 1.5 }\n${minimal}`)).toThrow(/review\.required_approvals/);
   });
 
   it("reads poll intervals in seconds and minutes", () => {
