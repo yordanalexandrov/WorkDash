@@ -1,7 +1,9 @@
 import { readFileSync, statSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { EVENT_TYPES, type EventType } from "./domain/events.js";
 import type { JiraConfig } from "./domain/jira.js";
+import { type NotificationRules, parseQuietHours, type QuietHours } from "./domain/notify.js";
 
 export type Config = {
   github: { tokenEnv: string; pollIntervalMs: number };
@@ -9,6 +11,7 @@ export type Config = {
   team: string[];
   review: { requiredApprovals: number; recentlyClosedWindowMs: number };
   jira: JiraConfig;
+  notifications: NotificationRules;
 };
 
 export class ConfigError extends Error {
@@ -25,6 +28,21 @@ const duration = z
     return Number(value.slice(0, -1)) * DURATION_UNITS_MS[unit];
   })
   .refine((ms) => ms > 0, "must be greater than zero");
+
+const quietHours = z
+  .string()
+  .transform((value, context): QuietHours => {
+    const parsed = parseQuietHours(value);
+    if (!parsed) context.addIssue({ code: "custom", message: 'expected a time range such as "19:00-09:00"' });
+    return parsed ?? { start: 0, end: 0 };
+  });
+
+const notifications = z
+  .strictObject({
+    ...(Object.fromEntries(EVENT_TYPES.map((type) => [type, z.boolean().default(true)])) as Record<EventType, z.ZodDefault<z.ZodBoolean>>),
+    quiet_hours: quietHours.nullable().default(null),
+  })
+  .prefault({});
 
 const schema = z
   .object({
@@ -50,6 +68,7 @@ const schema = z
         project_keys: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/, 'expected a project key such as "ABC"')).default([]),
       })
       .prefault({}),
+    notifications,
   })
   .transform(
     (raw): Config => ({
@@ -61,6 +80,10 @@ const schema = z
         recentlyClosedWindowMs: raw.review.recently_closed_window,
       },
       jira: { baseUrl: raw.jira.base_url, projectKeys: raw.jira.project_keys },
+      notifications: {
+        enabled: Object.fromEntries(EVENT_TYPES.map((type) => [type, raw.notifications[type]])) as Record<EventType, boolean>,
+        quietHours: raw.notifications.quiet_hours,
+      },
     }),
   );
 

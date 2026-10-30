@@ -18,7 +18,7 @@ review:
   required_approvals: 1        # ползва се, когато repo-то няма branch protection за review
   recently_closed_window: 24h  # колко дълго се виждат merged/closed PR-и
 
-notifications:
+notifications:                 # false изключва типа; събитието пак се записва, но не се показва
   review_requested: true
   new_comment_on_my_pr: true
   review_on_my_pr: true
@@ -27,4 +27,4 @@ notifications:
   mention: true
   re_review_needed: true
   team_pr_opened: true
-  quiet_hours: "19:00-09:00"
+  quiet_hours: "19:00-09:00"   # без нотификации; часът е в зоната от TZ (в .env). Пропуснатото идва обобщено после

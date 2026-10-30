@@ -1,47 +1,80 @@
 import type { SnapshotStore, StoredSnapshot } from "./db.js";
 import type { ClassifyRules } from "./domain/classify.js";
-import { diffSnapshots, type PrEvent } from "./domain/events.js";
+import { diffSnapshots } from "./domain/events.js";
+import { isQuietAt, type NotificationRules, summarizeMissed } from "./domain/notify.js";
 import type { Snapshot } from "./domain/types.js";
 import type { EventHub, ServerEvent } from "./sse.js";
 
 /** The SSE event name a PR event is pushed under. */
 export const NOTIFICATION = "notification";
+/** The SSE event name the summary of the missed events is pushed under. */
+export const MISSED = "missed";
 
-/** How many undelivered events a browser gets at most when it connects. */
-const PENDING_LIMIT = 20;
+/** How many missed events the summary lists at most; it counts all of them. */
+const MISSED_LIMIT = 50;
 
 export type Notifier = {
-  /** After a poll saved `current`: finds the events since `previous`, records them and pushes them to open browsers. */
+  /**
+   * After a poll saved `current`: finds the events since `previous` and records them. Outside quiet hours,
+   * with a browser open, each new event is pushed as a notification and the ones missed before as one summary.
+   */
   afterSnapshot(previous: StoredSnapshot | null, current: Snapshot): void;
-  /** The undelivered events for a browser that just connected, now marked delivered. */
+  /** For a browser that just connected: the summary of the missed events, now marked delivered; nothing in quiet hours. */
   takePending(): ServerEvent[];
+  /** Pushes the summary of the missed events to the open browsers, e.g. once quiet hours are over. */
+  flushMissed(): void;
 };
 
 /**
- * Turns the difference between two polls into notifications. Every event is recorded; one that
- * `shouldNotify` holds back stays undelivered and is offered again on the next poll or connect.
- * `shouldNotify` is where notification rules plug in; by default every event notifies.
+ * Turns the difference between two polls into notifications, by the rules in `notifications`
+ * (read on every call, so a reloaded config takes effect right away). Every event is recorded.
+ * One whose type is turned off is marked delivered at once and never shown. One that comes while no
+ * browser is open or in quiet hours is missed: it waits, and is handed over in a summary later.
+ * Quiet hours are read on the clock of `timeZone` (the process's own zone by default).
  */
 export function createNotifier(options: {
   store: SnapshotStore;
   events: EventHub;
   rules: () => ClassifyRules;
-  shouldNotify?: (event: PrEvent) => boolean;
+  notifications: () => NotificationRules;
+  timeZone?: string;
+  now?: () => Date;
 }): Notifier {
-  const { store, events, rules, shouldNotify = () => true } = options;
+  const { store, events, rules, notifications, timeZone, now = () => new Date() } = options;
 
-  function take(): PrEvent[] {
-    const pending = store.undeliveredEvents(PENDING_LIMIT).filter(shouldNotify);
-    store.markDelivered(pending.map((event) => event.id));
-    return pending;
+  /** The summary of the missed events, now marked delivered; null when there is none or it is quiet hours. */
+  function takeMissed(): ServerEvent | null {
+    const current = notifications();
+    if (isQuietAt(current.quietHours, now(), timeZone)) return null;
+    const counts = store.undeliveredCounts();
+    const skipped = Object.entries(counts).reduce((sum, [type, count]) => sum + (current.enabled[type as keyof typeof current.enabled] ? 0 : count), 0);
+    const missed = summarizeMissed(counts, store.undeliveredEvents(MISSED_LIMIT + skipped), current, MISSED_LIMIT);
+    store.markAllDelivered();
+    return missed && { type: MISSED, data: missed };
+  }
+
+  function flushMissed() {
+    if (events.clientCount() === 0) return;
+    const missed = takeMissed();
+    if (missed) events.broadcast(missed.type, missed.data);
   }
 
   return {
     afterSnapshot(previous, current) {
-      store.recordEvents(diffSnapshots(previous, current, rules(), store.loadSeen()), new Date());
-      if (events.clientCount() === 0) return;
-      for (const event of take()) events.broadcast(NOTIFICATION, event);
+      const at = now();
+      const { enabled, quietHours } = notifications();
+      const fresh = store.recordEvents(diffSnapshots(previous, current, rules(), store.loadSeen()), at);
+      store.markDelivered(fresh.filter((event) => !enabled[event.type]).map((event) => event.id));
+      if (events.clientCount() === 0 || isQuietAt(quietHours, at, timeZone)) return;
+      const shown = fresh.filter((event) => enabled[event.type]);
+      store.markDelivered(shown.map((event) => event.id));
+      for (const event of shown) events.broadcast(NOTIFICATION, event);
+      flushMissed();
     },
-    takePending: () => take().map((event) => ({ type: NOTIFICATION, data: event })),
+    takePending: () => {
+      const missed = takeMissed();
+      return missed ? [missed] : [];
+    },
+    flushMissed,
   };
 }

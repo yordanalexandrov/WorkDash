@@ -177,6 +177,24 @@ describe("SnapshotStore: events", () => {
     expect(store.undeliveredEvents(2)).toEqual([event("b"), event("c")]);
   });
 
+  it("counts the undelivered events by type", () => {
+    const store = openStore(":memory:");
+    store.recordEvents([event("a"), event("b"), { ...event("c"), type: "team_pr_opened" }], new Date("2026-10-30T10:00:00Z"));
+    store.markDelivered(["a"]);
+
+    expect(store.undeliveredCounts()).toEqual({ mention: 1, team_pr_opened: 1 });
+  });
+
+  it("marks every undelivered event delivered at once", () => {
+    const store = openStore(":memory:");
+    store.recordEvents([event("a"), event("b")], new Date("2026-10-30T10:00:00Z"));
+
+    store.markAllDelivered();
+
+    expect(store.undeliveredEvents(10)).toEqual([]);
+    expect(store.undeliveredCounts()).toEqual({});
+  });
+
   it("remembers events across a restart and a snapshot format change, so none is repeated", () => {
     const dir = mkdtempSync(join(tmpdir(), "workdash-"));
     dirs.push(dir);

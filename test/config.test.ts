@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ConfigError, parseConfig } from "../src/config.js";
+import { ALL_ENABLED } from "../src/domain/notify.js";
 
 const minimal = `
 repos:
@@ -82,5 +83,32 @@ describe("parseConfig", () => {
 
   it("reports invalid YAML as a ConfigError", () => {
     expect(() => parseConfig("repos: [\n")).toThrow(ConfigError);
+  });
+});
+
+describe("parseConfig notifications", () => {
+  it("turns every event type on and has no quiet hours by default", () => {
+    expect(parseConfig(minimal).notifications).toEqual(ALL_ENABLED);
+  });
+
+  it("reads the example's toggles and quiet hours across midnight", () => {
+    const config = parseConfig(readFileSync("config.example.yaml", "utf8"));
+
+    expect(config.notifications).toEqual({ ...ALL_ENABLED, quietHours: { start: 19 * 60, end: 9 * 60 } });
+  });
+
+  it("turns off the types set to false and keeps the rest on", () => {
+    const { enabled } = parseConfig(`notifications: { team_pr_opened: false }\n${minimal}`).notifications;
+
+    expect(enabled.team_pr_opened).toBe(false);
+    expect(enabled.mention).toBe(true);
+  });
+
+  it("names the field when quiet_hours is malformed", () => {
+    expect(() => parseConfig(`notifications: { quiet_hours: "7pm-9am" }\n${minimal}`)).toThrow(/notifications\.quiet_hours/);
+  });
+
+  it("names a misspelled event type", () => {
+    expect(() => parseConfig(`notifications: { mentions: false }\n${minimal}`)).toThrow(/notifications.*mentions/);
   });
 });
