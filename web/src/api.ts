@@ -1,9 +1,13 @@
 import type { ClassifiedPullRequest, Section } from "../../src/domain/classify.js";
+import type { JiraLink } from "../../src/domain/jira.js";
 import type { PollError } from "../../src/domain/poll-error.js";
 
-export type { ClassifiedPullRequest, PollError, Section };
+export type { ClassifiedPullRequest, JiraLink, PollError, Section };
 
-export type SectionOfPullRequests = { section: Section; pullRequests: ClassifiedPullRequest[] };
+/** A PR as /api/prs serves it: classified, with links to the Jira tickets it names. */
+export type DashboardPullRequest = ClassifiedPullRequest & { jira: JiraLink[] };
+
+export type SectionOfPullRequests = { section: Section; pullRequests: DashboardPullRequest[] };
 
 /** The body of GET /api/prs and of the `dashboard` server event. */
 export type DashboardState = {
@@ -15,5 +19,7 @@ export type DashboardState = {
   error: PollError | null;
   /** What the last successful poll could not fetch whole. */
   problems: string[];
+  /** Why the config.yaml on disk is not in effect; the last valid config still is. */
+  configError: string | null;
   sections: SectionOfPullRequests[];
 };

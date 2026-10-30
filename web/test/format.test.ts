@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardState } from "../src/api.js";
-import { age, errorText, statusText } from "../src/format.js";
+import { age, configErrorText, errorText, statusText } from "../src/format.js";
 
 const now = new Date("2026-10-30T12:00:00Z");
 
@@ -11,6 +11,7 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     pollIntervalMs: 60_000,
     error: null,
     problems: [],
+    configError: null,
     sections: [],
     ...overrides,
   };
@@ -94,5 +95,18 @@ describe("age", () => {
     ["2026-10-27T11:00:00Z", "3д"],
   ])("shows a PR opened at %s as %s", (since, expected) => {
     expect(age(since, now)).toBe(expected);
+  });
+});
+
+describe("configErrorText", () => {
+  it("is empty before the server answers and while config.yaml is in effect", () => {
+    expect(configErrorText(null)).toBeNull();
+    expect(configErrorText(dashboard())).toBeNull();
+  });
+
+  it("reports why config.yaml is not in effect and that the last valid config still is", () => {
+    expect(configErrorText(dashboard({ configError: "config.yaml: invalid YAML: bad indentation" }))).toBe(
+      "config.yaml не е приложен, в сила е последната валидна конфигурация. config.yaml: invalid YAML: bad indentation",
+    );
   });
 });

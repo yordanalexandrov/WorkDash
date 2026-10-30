@@ -48,3 +48,8 @@ function pollErrorText({ kind, message, resetAt }: PollError): string {
       return `Последният poll е неуспешен: ${message}`;
   }
 }
+
+/** The banner for a config.yaml edit the server rejected, or null when the file on disk is in effect. */
+export function configErrorText(state: DashboardState | null): string | null {
+  return state?.configError ? `config.yaml не е приложен, в сила е последната валидна конфигурация. ${state.configError}` : null;
+}

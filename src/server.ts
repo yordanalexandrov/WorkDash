@@ -3,30 +3,41 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, LogController } from "fastify";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
+import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import type { PollHealth } from "./domain/poll-error.js";
 import { createEventHub, type EventHub } from "./sse.js";
+
+const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
 
 // Static files are kept in web/public; the bundle built from web/src lands in web/dist.
 const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
+/** Everything the dashboard is built from. Read on every call, so a reloaded config.yaml takes effect right away. */
 export type DashboardSource = {
   store: SnapshotStore;
-  rules: ClassifyRules;
-  pollIntervalMs: number;
+  rules: () => ClassifyRules;
+  jira?: () => JiraConfig;
+  pollIntervalMs: () => number;
   pollHealth: () => PollHealth;
+  /** Why the config.yaml on disk is not in effect; null when it is. */
+  configError: () => string | null;
 };
 
 /** What GET /api/prs returns and the `dashboard` event carries. */
-export function dashboardState({ store, rules, pollIntervalMs, pollHealth }: DashboardSource) {
+export function dashboardState({ store, rules, jira = () => NO_JIRA, pollIntervalMs, pollHealth, configError }: DashboardSource) {
   const snapshot = store.loadSnapshot();
   const { error, problems } = pollHealth();
   return {
     viewer: snapshot?.viewer ?? null,
     fetchedAt: snapshot?.fetchedAt ?? null,
-    pollIntervalMs,
+    pollIntervalMs: pollIntervalMs(),
     error,
     problems,
-    sections: groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", rules),
+    configError: configError(),
+    sections: groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", rules()).map(({ section, pullRequests }) => ({
+      section,
+      pullRequests: pullRequests.map((pr) => ({ ...pr, jira: jiraLinks(pr, jira()) })),
+    })),
   };
 }
 
