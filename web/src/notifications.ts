@@ -2,10 +2,10 @@
 // there is one (sw.js opens `data.url` on click), otherwise with a plain `new Notification`.
 
 import type { EventType, PrEvent } from "../../src/domain/events.js";
-import type { Missed } from "../../src/domain/notify.js";
+import type { Missed, MissedNotice } from "../../src/domain/notify.js";
 import { serviceWorkerRegistration } from "./serviceWorker.js";
 
-export type { Missed, PrEvent };
+export type { Missed, MissedNotice, PrEvent };
 
 export type PermissionState = NotificationPermission | "unsupported";
 

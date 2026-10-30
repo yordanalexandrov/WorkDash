@@ -12,25 +12,24 @@ export const MISSED = "missed";
 
 /** How many missed events the summary lists at most; it counts all of them. */
 const MISSED_LIMIT = 50;
+/** How long a pushed event waits for a browser to acknowledge it before it counts as missed. */
+const ACK_WAIT_MS = 30_000;
 
 export type Notifier = {
-  /**
-   * After a poll saved `current`: finds the events since `previous` and records them. Outside quiet hours,
-   * with a browser open, each new event is pushed as a notification and the ones missed before as one summary.
-   */
+  /** After a poll saved `current`: records the events since `previous` and pushes the ones that notify. */
   afterSnapshot(previous: StoredSnapshot | null, current: Snapshot): void;
-  /** For a browser that just connected: the summary of the missed events, now marked delivered; nothing in quiet hours. */
+  /** For a browser that just connected: the summary of the missed events, now marked delivered. */
   takePending(): ServerEvent[];
   /** Pushes the summary of the missed events to the open browsers, e.g. once quiet hours are over. */
   flushMissed(): void;
+  /** Marks the events a browser showed delivered. */
+  acknowledge(ids: string[]): void;
 };
 
 /**
  * Turns the difference between two polls into notifications, by the rules in `notifications`
- * (read on every call, so a reloaded config takes effect right away). Every event is recorded.
- * One whose type is turned off is marked delivered at once and never shown. One that comes while no
- * browser is open or in quiet hours is missed: it waits, and is handed over in a summary later.
- * Quiet hours are read on the clock of `timeZone` (the process's own zone by default).
+ * (read on every call, so a reloaded config takes effect right away). An event stays undelivered
+ * until a browser acknowledges it or lists it in a missed summary.
  */
 export function createNotifier(options: {
   store: SnapshotStore;
@@ -41,20 +40,25 @@ export function createNotifier(options: {
   now?: () => Date;
 }): Notifier {
   const { store, events, rules, notifications, timeZone, now = () => new Date() } = options;
+  /** Events pushed but not acknowledged yet, with when they were pushed. */
+  const awaitingAck = new Map<string, number>();
 
-  /** The summary of the missed events, now marked delivered; null when there is none or it is quiet hours. */
+  /** The summary of the missed events, now marked delivered; null when there is none. */
   function takeMissed(): ServerEvent | null {
     const current = notifications();
-    if (isQuietAt(current.quietHours, now(), timeZone)) return null;
-    const undelivered = store.undeliveredEvents();
+    const at = now();
+    const ackDue = at.getTime() - ACK_WAIT_MS;
+    const undelivered = store.undeliveredEvents().filter((event) => (awaitingAck.get(event.id) ?? 0) <= ackDue);
     const missed = summarizeMissed(undelivered, current, MISSED_LIMIT);
     // Exactly what was read: the turned-off types too, so turning one back on does not bring them up.
-    store.markDelivered(undelivered.map((event) => event.id));
-    return missed && { type: MISSED, data: missed };
+    const ids = undelivered.map((event) => event.id);
+    store.markDelivered(ids);
+    for (const id of ids) awaitingAck.delete(id);
+    return missed && { type: MISSED, data: { ...missed, quiet: isQuietAt(current.quietHours, at, timeZone) } };
   }
 
   function flushMissed() {
-    if (events.clientCount() === 0) return;
+    if (events.clientCount() === 0 || isQuietAt(notifications().quietHours, now(), timeZone)) return;
     const missed = takeMissed();
     if (missed) events.broadcast(missed.type, missed.data);
   }
@@ -63,18 +67,25 @@ export function createNotifier(options: {
     afterSnapshot(previous, current) {
       const at = now();
       const { enabled, quietHours } = notifications();
-      const fresh = store.recordEvents(diffSnapshots(previous, current, rules(), store.loadSeen()), at);
+      const found = diffSnapshots(previous, current, rules(), store.loadSeen());
+      // Before recording, so the summary holds only what was missed before this poll.
+      flushMissed();
+      const fresh = store.recordEvents(found, at);
       store.markDelivered(fresh.filter((event) => !enabled[event.type]).map((event) => event.id));
       if (events.clientCount() === 0 || isQuietAt(quietHours, at, timeZone)) return;
-      const shown = fresh.filter((event) => enabled[event.type]);
-      store.markDelivered(shown.map((event) => event.id));
-      for (const event of shown) events.broadcast(NOTIFICATION, event);
-      flushMissed();
+      for (const event of fresh.filter((event) => enabled[event.type])) {
+        awaitingAck.set(event.id, at.getTime());
+        events.broadcast(NOTIFICATION, event);
+      }
     },
     takePending: () => {
       const missed = takeMissed();
       return missed ? [missed] : [];
     },
     flushMissed,
+    acknowledge(ids) {
+      store.markDelivered(ids);
+      for (const id of ids) awaitingAck.delete(id);
+    },
   };
 }

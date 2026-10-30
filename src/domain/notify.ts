@@ -24,6 +24,9 @@ export type Missed = {
   events: PrEvent[];
 };
 
+/** A summary as pushed to a browser; `quiet` (in quiet hours) lists it without a desktop notification. */
+export type MissedNotice = Missed & { quiet: boolean };
+
 /** The summary of the undelivered events (oldest first), types turned off left out; null when nothing that notifies was missed. */
 export function summarizeMissed(undelivered: PrEvent[], rules: NotificationRules, limit: number): Missed | null {
   const missed = undelivered.filter((event) => rules.enabled[event.type]);

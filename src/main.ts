@@ -65,7 +65,7 @@ const notifier = createNotifier({ store, events, rules: dashboard.rules, notific
 const missedTimer = setInterval(notifier.flushMissed, MISSED_CHECK_MS);
 missedTimer.unref();
 
-const server = buildServer({ ...dashboard, events, pendingNotifications: notifier.takePending, logger: true });
+const server = buildServer({ ...dashboard, events, pendingNotifications: notifier.takePending, acknowledgeNotifications: notifier.acknowledge, logger: true });
 const poller = startPoller({
   repos: config.repos,
   token,

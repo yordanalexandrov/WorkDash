@@ -1,5 +1,5 @@
 import type { DashboardState } from "./api.js";
-import type { Missed, PrEvent } from "./notifications.js";
+import type { MissedNotice, PrEvent } from "./notifications.js";
 
 /**
  * Every event the server pushes over /api/events, by SSE event name, with the data it carries.
@@ -10,8 +10,8 @@ export type ServerEvents = {
   dashboard: DashboardState;
   /** Something that happened on a PR since the previous poll, to show as a desktop notification. */
   notification: PrEvent;
-  /** The events recorded while no browser was open or in quiet hours, summed up once. */
-  missed: Missed;
+  /** The events no browser showed, summed up once; `quiet` lists them without a desktop notification. */
+  missed: MissedNotice;
 };
 
 export type StreamStatus = "connecting" | "open" | "reconnecting";

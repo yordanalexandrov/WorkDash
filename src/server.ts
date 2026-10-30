@@ -17,6 +17,8 @@ const SeenRequest = z.object({
   at: z.iso.datetime({ offset: true }).optional(),
 });
 
+const AckRequest = z.object({ ids: z.array(z.string()) });
+
 // Static files are kept in web/public; the bundle built from web/src lands in web/dist.
 const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
@@ -69,10 +71,12 @@ export function buildServer(
     events?: EventHub;
     /** Notifications no browser has received yet; a connecting browser gets them after the dashboard. */
     pendingNotifications?: () => ServerEvent[];
+    /** Takes the ids of the notifications a browser showed. */
+    acknowledgeNotifications?: (ids: string[]) => void;
     logger?: boolean;
   },
 ): FastifyInstance {
-  const { events = createEventHub(), pendingNotifications = () => [], logger = false } = options;
+  const { events = createEventHub(), pendingNotifications = () => [], acknowledgeNotifications = () => {}, logger = false } = options;
   const server = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
   server.register(fastifyStatic, { root: WEB_ROOTS });
@@ -89,6 +93,13 @@ export function buildServer(
     const now = Date.now();
     options.store.markSeen(repo, number, new Date(at ? Math.min(Date.parse(at), now) : now));
     events.broadcast("dashboard", dashboardState(options));
+    return reply.code(204).send();
+  });
+
+  server.post("/api/notifications/ack", async (request, reply) => {
+    const parsed = AckRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    acknowledgeNotifications(parsed.data.ids);
     return reply.code(204).send();
   });
 

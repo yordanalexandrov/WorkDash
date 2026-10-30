@@ -36,3 +36,13 @@ export async function markSeen(pr: { repo: string; number: number }, fetchedAt: 
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
+
+/** Tells the server which notifications this page showed; the rest stay missed. */
+export async function acknowledgeNotifications(ids: string[]): Promise<void> {
+  const response = await fetch("/api/notifications/ack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}

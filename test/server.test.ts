@@ -132,6 +132,26 @@ describe("GET /api/prs", () => {
   });
 });
 
+describe("POST /api/notifications/ack", () => {
+  const source = () => ({ store: openStore(":memory:"), rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null });
+
+  it("hands over the ids of the notifications the browser showed", async () => {
+    const acknowledged: string[][] = [];
+    const server = buildServer({ ...source(), acknowledgeNotifications: (ids) => acknowledged.push(ids) });
+
+    const response = await server.inject({ method: "POST", url: "/api/notifications/ack", payload: { ids: ["mention:my-org/repo-a#1:c1"] } });
+
+    expect(response.statusCode).toBe(204);
+    expect(acknowledged).toEqual([["mention:my-org/repo-a#1:c1"]]);
+  });
+
+  it("rejects a request without ids", async () => {
+    const response = await buildServer(source()).inject({ method: "POST", url: "/api/notifications/ack", payload: { id: "x" } });
+
+    expect(response.statusCode).toBe(400);
+  });
+});
+
 describe("POST /api/seen", () => {
   const commented = pullRequest({
     number: 4,

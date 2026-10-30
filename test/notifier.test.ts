@@ -52,7 +52,7 @@ function setup(notifications: NotificationRules = ALL_ENABLED, start = new Date(
 }
 
 describe("createNotifier", () => {
-  it("pushes a new event to the open browsers and marks it delivered", () => {
+  it("pushes a new event to the open browsers and marks it delivered once a browser says it showed it", () => {
     const { store, hub, notifier } = setup();
     const page = browser();
     hub.connect(page.stream);
@@ -61,7 +61,24 @@ describe("createNotifier", () => {
 
     expect(page.text()).toContain("event: notification\n");
     expect(page.text()).toContain('"id":"review_requested:my-org/repo-a#1:none"');
+    expect(store.undeliveredEvents()).toHaveLength(1);
+    notifier.acknowledge(["review_requested:my-org/repo-a#1:none"]);
     expect(store.undeliveredEvents()).toEqual([]);
+    hub.close();
+  });
+
+  it("lists a pushed event no browser showed as missed, once its acknowledgement is overdue", () => {
+    const { hub, notifier, clock } = setup();
+    const page = browser();
+    hub.connect(page.stream);
+    notifier.afterSnapshot(before, requested());
+
+    notifier.flushMissed();
+    expect(received(page.text(), "missed")).toEqual([]);
+    clock.now = new Date(clock.now.getTime() + 60_000);
+    notifier.flushMissed();
+
+    expect(received(page.text(), "missed")).toEqual([expect.objectContaining({ total: 1, events: [expect.objectContaining({ number: 1 })] })]);
     hub.close();
   });
 
@@ -156,6 +173,7 @@ describe("createNotifier", () => {
             total: 2,
             byType: { review_requested: 2 },
             events: [expect.objectContaining({ number: 2 }), expect.objectContaining({ number: 1 })],
+            quiet: false,
           },
         },
       ]);
@@ -188,11 +206,14 @@ describe("createNotifier", () => {
       hub.close();
     });
 
-    it("hands nothing to a browser that connects in quiet hours", () => {
-      const { notifier } = setup(quiet, evening);
+    it("lists the missed events for a browser that connects in quiet hours, without a desktop notification", () => {
+      const { store, notifier } = setup(quiet, evening);
       notifier.afterSnapshot(before, requested());
 
-      expect(notifier.takePending()).toEqual([]);
+      expect(notifier.takePending()).toEqual([
+        { type: "missed", data: { total: 1, byType: { review_requested: 1 }, events: [expect.objectContaining({ number: 1 })], quiet: true } },
+      ]);
+      expect(store.undeliveredEvents()).toEqual([]);
     });
 
     it("sends the open browsers the summary once quiet hours are over", () => {
@@ -207,7 +228,7 @@ describe("createNotifier", () => {
       notifier.flushMissed();
       notifier.flushMissed();
 
-      expect(received(page.text(), "missed")).toEqual([{ total: 1, byType: { review_requested: 1 }, events: [expect.objectContaining({ number: 1 })] }]);
+      expect(received(page.text(), "missed")).toEqual([{ total: 1, byType: { review_requested: 1 }, events: [expect.objectContaining({ number: 1 })], quiet: false }]);
       hub.close();
     });
 

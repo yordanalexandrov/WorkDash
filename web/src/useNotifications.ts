@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { acknowledgeNotifications } from "./api.js";
 import {
   type Missed,
   mergeMissed,
@@ -30,12 +31,16 @@ export function useNotifications(): NotificationsView {
   const [permission, setPermission] = useState<PermissionState>(() => notificationPermission());
   const [missed, setMissed] = useState<Missed | null>(null);
 
+  // Unacknowledged events come back in the next missed summary, e.g. while notifications are not allowed.
   useServerEvent("notification", (event) => {
-    showNotification(event).catch((error: Error) => console.error(`notification failed: ${error.message}`));
+    showNotification(event)
+      .then((shown) => (shown ? acknowledgeNotifications([event.id]) : undefined))
+      .catch((error: Error) => console.error(`notification failed: ${error.message}`));
   });
 
-  useServerEvent("missed", (summary) => {
+  useServerEvent("missed", ({ quiet, ...summary }) => {
     setMissed((shown) => mergeMissed(shown, summary, MISSED_LIMIT));
+    if (quiet) return;
     showMissedNotification(summary).catch((error: Error) => console.error(`notification failed: ${error.message}`));
   });
 
