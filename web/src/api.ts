@@ -1,20 +1,19 @@
 import type { ClassifiedPullRequest, Section } from "../../src/domain/classify.js";
+import type { PollError } from "../../src/domain/poll-error.js";
 
-export type { ClassifiedPullRequest, Section };
+export type { ClassifiedPullRequest, PollError, Section };
 
 export type SectionOfPullRequests = { section: Section; pullRequests: ClassifiedPullRequest[] };
 
-/** The body of GET /api/prs. */
+/** The body of GET /api/prs and of the `dashboard` server event. */
 export type DashboardState = {
   viewer: string | null;
+  /** When the last successful poll fetched the snapshot. */
   fetchedAt: string | null;
   pollIntervalMs: number;
-  error: string | null;
+  /** Why the last poll failed; the sections still hold the last good snapshot. */
+  error: PollError | null;
+  /** What the last successful poll could not fetch whole. */
+  problems: string[];
   sections: SectionOfPullRequests[];
 };
-
-export async function fetchDashboard(): Promise<DashboardState> {
-  const response = await fetch("/api/prs");
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return (await response.json()) as DashboardState;
-}

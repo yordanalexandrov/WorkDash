@@ -35,7 +35,9 @@ Commit statuses, Checks). Ако организацията не позволя�
 docker compose up -d --build
 ```
 
-Таблото е на <http://localhost:3000>. Списъкът се обновява на всеки `github.poll_interval`.
+Таблото е на <http://localhost:3000>. Сървърът пита GitHub на всеки `github.poll_interval` и праща
+резултата на отворените табла през SSE (`/api/events`), без reload. Ако poll-ът се провали (невалиден
+токен, rate limit, недостъпен GitHub), таблото показва причината, а последните успешни данни остават.
 Последният snapshot се пази в SQLite във volume `workdash-data`, затова след рестарт таблото показва
 запазените данни още преди първия нов poll.
 
