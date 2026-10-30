@@ -1,12 +1,17 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
+import { EVENT_TYPES, type EventType } from "./domain/events.js";
+import type { JiraConfig } from "./domain/jira.js";
+import { type NotificationRules, parseQuietHours, type QuietHours } from "./domain/notify.js";
 
 export type Config = {
   github: { tokenEnv: string; pollIntervalMs: number };
   repos: string[];
   team: string[];
-  review: { requiredApprovals: number };
+  review: { requiredApprovals: number; recentlyClosedWindowMs: number };
+  jira: JiraConfig;
+  notifications: NotificationRules;
 };
 
 export class ConfigError extends Error {
@@ -24,6 +29,21 @@ const duration = z
   })
   .refine((ms) => ms > 0, "must be greater than zero");
 
+const quietHours = z
+  .string()
+  .transform((value, context): QuietHours => {
+    const parsed = parseQuietHours(value);
+    if (!parsed) context.addIssue({ code: "custom", message: 'expected a time range such as "19:00-09:00"' });
+    return parsed ?? { start: 0, end: 0 };
+  });
+
+const notifications = z
+  .strictObject({
+    ...(Object.fromEntries(EVENT_TYPES.map((type) => [type, z.boolean().default(true)])) as Record<EventType, z.ZodDefault<z.ZodBoolean>>),
+    quiet_hours: quietHours.nullable().default(null),
+  })
+  .prefault({});
+
 const schema = z
   .object({
     github: z
@@ -39,15 +59,31 @@ const schema = z
     review: z
       .object({
         required_approvals: z.number().int().min(1).default(1),
+        recently_closed_window: duration.default(24 * 3_600_000),
       })
       .prefault({}),
+    jira: z
+      .object({
+        base_url: z.url().nullable().default(null),
+        project_keys: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/, 'expected a project key such as "ABC"')).default([]),
+      })
+      .prefault({}),
+    notifications,
   })
   .transform(
     (raw): Config => ({
       github: { tokenEnv: raw.github.token_env, pollIntervalMs: raw.github.poll_interval },
       repos: raw.repos,
       team: raw.team,
-      review: { requiredApprovals: raw.review.required_approvals },
+      review: {
+        requiredApprovals: raw.review.required_approvals,
+        recentlyClosedWindowMs: raw.review.recently_closed_window,
+      },
+      jira: { baseUrl: raw.jira.base_url, projectKeys: raw.jira.project_keys },
+      notifications: {
+        enabled: Object.fromEntries(EVENT_TYPES.map((type) => [type, raw.notifications[type]])) as Record<EventType, boolean>,
+        quietHours: raw.notifications.quiet_hours,
+      },
     }),
   );
 
@@ -83,4 +119,74 @@ export function loadConfig(path: string): Config {
     throw new ConfigError(`cannot read ${path}: ${(error as Error).message}`);
   }
   return parseConfig(text);
+}
+
+export type ConfigWatcher = {
+  /** Why the file on disk is not in effect, or null when it is. */
+  error(): string | null;
+  close(): void;
+};
+
+/** Hands every valid change of the config file to `apply`; an invalid one keeps `current` and shows in `error()`. */
+export function watchConfig(
+  path: string,
+  options: {
+    current: Config;
+    apply(config: Config): void;
+    /** Called after a later change to the file was applied or rejected, so the UI can be told right away. */
+    onChange?(): void;
+    intervalMs?: number;
+    log?: { info(msg: string): void; error(msg: string): void };
+  },
+): ConfigWatcher {
+  const { apply, onChange = () => {}, intervalMs = 1_000, log } = options;
+  let current = JSON.stringify(options.current);
+  let error: string | null = null;
+
+  function reload() {
+    try {
+      const config = loadConfig(path);
+      const serialized = JSON.stringify(config);
+      if (serialized !== current) {
+        apply(config);
+        current = serialized;
+        log?.info(`${path}: reloaded`);
+      } else if (error) {
+        log?.info(`${path}: the config in effect is valid again`);
+      }
+      error = null;
+    } catch (caught) {
+      if (!(caught instanceof ConfigError)) throw caught;
+      const message = `${path}: ${caught.message}`;
+      if (message !== error) log?.error(`${message}\nkeeping the last valid config`);
+      error = message;
+    }
+  }
+
+  // Stat by path rather than fs.watch: a watch follows the inode, which is gone once an editor replaces the file.
+  let stamp = fileStamp(path);
+  reload();
+  const timer = setInterval(() => {
+    const next = fileStamp(path);
+    if (next === stamp) return;
+    stamp = next;
+    const before = [current, error];
+    reload();
+    if (current !== before[0] || error !== before[1]) onChange();
+  }, intervalMs);
+  timer.unref();
+
+  return {
+    error: () => error,
+    close: () => clearInterval(timer),
+  };
+}
+
+function fileStamp(path: string): string {
+  try {
+    const stats = statSync(path);
+    return `${stats.ino}:${stats.size}:${stats.mtimeMs}`;
+  } catch {
+    return "missing";
+  }
 }

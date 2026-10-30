@@ -12,10 +12,21 @@ export type ReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISM
 /** The latest submitted review of one reviewer. */
 export type Review = { author: string; state: ReviewState; submittedAt: string };
 
+/** A comment by a person (not a bot); `thread` is the review thread's id, absent on general comments. */
+export type Comment = { id: string; author: string; createdAt: string; body: string; thread?: string };
+
+/** A commit on the PR branch; `firstSeenAt` (when a poll first saw it) stands in for the push time. */
+export type Commit = { oid: string; committedAt: string; firstSeenAt?: string };
+
+/** When the commit reached the branch, as far as the polls can tell. */
+export const pushedAt = (commit: Commit) => commit.firstSeenAt ?? commit.committedAt;
+
 export type PullRequest = {
   repo: string; // owner/name
   number: number;
   title: string;
+  headRefName: string; // the PR's branch
+  body: string; // the PR description, "" when empty
   url: string;
   author: string;
   isDraft: boolean;
@@ -28,6 +39,19 @@ export type PullRequest = {
   reviews: Review[];
   ci: CiState | null; // every check on the head commit except Sonar; null when there are none
   sonar: CiState | null; // the Sonar quality gate; null when the repo does not run Sonar
+  comments: Comment[]; // the latest general and review-thread comments by people, oldest first
+  commits: Commit[]; // the latest commits on the branch, oldest first
+};
+
+/** A PR that left the open list, with how it ended. */
+export type ClosedPullRequest = {
+  repo: string; // owner/name
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  state: "MERGED" | "CLOSED";
+  closedAt: string;
 };
 
 /** What one poll learns from GitHub. */

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ConfigError, parseConfig } from "../src/config.js";
+import { ALL_ENABLED } from "../src/domain/notify.js";
 
 const minimal = `
 repos:
@@ -16,6 +17,20 @@ describe("parseConfig", () => {
     expect(config.github.pollIntervalMs).toBe(60_000);
     expect(config.team).toEqual(["colleague1", "colleague2"]);
     expect(config.review.requiredApprovals).toBe(1);
+    expect(config.review.recentlyClosedWindowMs).toBe(24 * 3_600_000);
+    expect(config.jira).toEqual({ baseUrl: "https://example.atlassian.net/browse/", projectKeys: ["ABC"] });
+  });
+
+  it("leaves Jira out when it is not configured", () => {
+    expect(parseConfig(minimal).jira).toEqual({ baseUrl: null, projectKeys: [] });
+  });
+
+  it("names the field when the Jira base URL is not a URL", () => {
+    expect(() => parseConfig(`jira: { base_url: example }\n${minimal}`)).toThrow(/jira\.base_url/);
+  });
+
+  it("names the field when a Jira project key is malformed", () => {
+    expect(() => parseConfig(`jira: { project_keys: [abc] }\n${minimal}`)).toThrow(/jira\.project_keys\[0\]/);
   });
 
   it("fills in defaults for the GitHub section", () => {
@@ -28,7 +43,12 @@ describe("parseConfig", () => {
     const config = parseConfig(minimal);
 
     expect(config.team).toEqual([]);
-    expect(config.review).toEqual({ requiredApprovals: 1 });
+    expect(config.review).toEqual({ requiredApprovals: 1, recentlyClosedWindowMs: 24 * 3_600_000 });
+  });
+
+  it("reads recently_closed_window as a duration", () => {
+    expect(parseConfig(`review: { recently_closed_window: 2h }\n${minimal}`).review.recentlyClosedWindowMs).toBe(7_200_000);
+    expect(() => parseConfig(`review: { recently_closed_window: 2d }\n${minimal}`)).toThrow(/review\.recently_closed_window/);
   });
 
   it("reads required_approvals", () => {
@@ -63,5 +83,32 @@ describe("parseConfig", () => {
 
   it("reports invalid YAML as a ConfigError", () => {
     expect(() => parseConfig("repos: [\n")).toThrow(ConfigError);
+  });
+});
+
+describe("parseConfig notifications", () => {
+  it("turns every event type on and has no quiet hours by default", () => {
+    expect(parseConfig(minimal).notifications).toEqual(ALL_ENABLED);
+  });
+
+  it("reads the example's toggles and quiet hours across midnight", () => {
+    const config = parseConfig(readFileSync("config.example.yaml", "utf8"));
+
+    expect(config.notifications).toEqual({ ...ALL_ENABLED, quietHours: { start: 19 * 60, end: 9 * 60 } });
+  });
+
+  it("turns off the types set to false and keeps the rest on", () => {
+    const { enabled } = parseConfig(`notifications: { team_pr_opened: false }\n${minimal}`).notifications;
+
+    expect(enabled.team_pr_opened).toBe(false);
+    expect(enabled.mention).toBe(true);
+  });
+
+  it("names the field when quiet_hours is malformed", () => {
+    expect(() => parseConfig(`notifications: { quiet_hours: "7pm-9am" }\n${minimal}`)).toThrow(/notifications\.quiet_hours/);
+  });
+
+  it("names a misspelled event type", () => {
+    expect(() => parseConfig(`notifications: { mentions: false }\n${minimal}`)).toThrow(/notifications.*mentions/);
   });
 });

@@ -6,3 +6,4 @@ data/
 .env
 config.yaml
 *.iml
+web/dist/

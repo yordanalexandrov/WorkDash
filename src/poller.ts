@@ -1,42 +1,109 @@
-import type { SnapshotStore } from "./db.js";
-import { fetchSnapshot } from "./github/client.js";
+import type { SnapshotStore, StoredSnapshot } from "./db.js";
+import { updateRecentlyClosed, vanishedPullRequests } from "./domain/closed.js";
+import { classifyPollError, nextPollDelay, type PollHealth } from "./domain/poll-error.js";
+import type { Snapshot } from "./domain/types.js";
+import { fetchClosedPullRequests, fetchSnapshot } from "./github/client.js";
 
-export type Poller = {
-  lastError(): string | null;
-  stop(): void;
-};
-
-/** Polls GitHub right away and then every `intervalMs`, saving each snapshot to the store. */
-export function startPoller(options: {
+export type PollerSettings = {
   repos: string[];
   token: string;
   intervalMs: number;
-  store: SnapshotStore;
-  log: { info(msg: string): void; error(msg: string): void };
-}): Poller {
-  const { repos, token, intervalMs, store, log } = options;
-  let lastError: string | null = null;
+  /** How long a merged or closed PR stays in the recently closed list. */
+  recentlyClosedWindowMs: number;
+};
+
+export type Poller = {
+  health(): PollHealth;
+  /** Switches to new settings and polls with them as soon as any poll under way has finished. */
+  reconfigure(settings: PollerSettings): void;
+  stop(): void;
+};
+
+/**
+ * Polls GitHub right away and then every `intervalMs` (longer while a rate limit lasts), saving each snapshot.
+ * A failed poll, a failed closed-PR lookup included, saves nothing, so the next poll looks again.
+ */
+export function startPoller(
+  options: PollerSettings & {
+    store: SnapshotStore;
+    log: { info(msg: string): void; error(msg: string): void };
+    onPoll?: () => void;
+    /** Runs after a successful poll saved its snapshot, with the snapshot saved before it (null on the first poll ever). */
+    onSnapshot?: (previous: StoredSnapshot | null, current: Snapshot) => void;
+    fetch?: typeof globalThis.fetch;
+  },
+): Poller {
+  const { store, log, onPoll = () => {}, onSnapshot = () => {}, fetch } = options;
+  let { repos, token, intervalMs, recentlyClosedWindowMs } = options;
+  let health: PollHealth = { error: null, problems: [] };
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
+  let polling = false;
+  let pollAgain = false;
 
   async function poll() {
+    polling = true;
     try {
-      const snapshot = await fetchSnapshot({ repos, token });
-      store.saveSnapshot(snapshot, new Date());
-      lastError = snapshot.problems.length ? snapshot.problems.join("; ") : null;
+      const before = store.loadSnapshot();
+      // A repo dropped from the config takes its PRs along; they did not close.
+      const followed = new Set(repos.map((repo) => repo.toLowerCase()));
+      const previous = (before?.pullRequests ?? []).filter((pr) => followed.has(pr.repo.toLowerCase()));
+      // Taken before the request, so a comment posted while it is under way stays unread.
+      const startedAt = new Date();
+      const snapshot = await fetchSnapshot({ repos, token, fetch, previous, observedAt: startedAt });
+      const vanished = vanishedPullRequests(previous, snapshot.pullRequests, snapshot.unreadRepos);
+      const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token, fetch });
+      const now = new Date();
+      // Marked before saving, so no reader sees a new PR without its mark.
+      store.markFirstSeen(snapshot.pullRequests, startedAt);
+      store.saveSnapshot(snapshot, now);
+      store.saveRecentlyClosed(
+        updateRecentlyClosed({
+          known: store.loadRecentlyClosed(),
+          newlyClosed: lookup.closed,
+          open: snapshot.pullRequests,
+          now,
+          windowMs: recentlyClosedWindowMs,
+        }),
+      );
+      try {
+        onSnapshot(before, snapshot);
+      } catch (error) {
+        log.error(`after snapshot: ${(error as Error).message}`);
+      }
+      const problems = [...snapshot.problems, ...lookup.problems];
+      health = { error: null, problems };
       log.info(`poll: ${snapshot.pullRequests.length} open PRs across ${repos.length} repos`);
-      if (lastError) log.error(`poll problems: ${lastError}`);
+      if (problems.length) log.error(`poll problems: ${problems.join("; ")}`);
     } catch (error) {
-      lastError = (error as Error).message;
-      log.error(`poll failed: ${lastError}`);
+      health = { error: classifyPollError(error, new Date()), problems: [] };
+      log.error(`poll failed (${health.error!.kind}): ${health.error!.message}`);
     }
-    if (!stopped) timer = setTimeout(poll, intervalMs);
+    polling = false;
+    if (stopped) return;
+    try {
+      onPoll();
+    } catch (error) {
+      log.error(`after poll: ${(error as Error).message}`);
+    }
+    timer = setTimeout(poll, pollAgain ? 0 : nextPollDelay(health.error, intervalMs, new Date()));
+    pollAgain = false;
   }
 
   void poll();
 
   return {
-    lastError: () => lastError,
+    health: () => health,
+    reconfigure(settings) {
+      ({ repos, token, intervalMs, recentlyClosedWindowMs } = settings);
+      if (stopped) return;
+      if (polling) {
+        pollAgain = true;
+      } else {
+        clearTimeout(timer);
+        void poll();
+      }
+    },
     stop() {
       stopped = true;
       clearTimeout(timer);

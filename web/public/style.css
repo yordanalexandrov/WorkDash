@@ -10,6 +10,7 @@
   --ok: #1a7f37;
   --bad: #cf222e;
   --pending: #9a6700;
+  --merged: #8250df;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +25,7 @@
     --ok: #3fb950;
     --bad: #f85149;
     --pending: #d29922;
+    --merged: #ab7df8;
   }
 }
 
@@ -52,11 +54,32 @@ h1 {
   color: var(--muted);
 }
 
-#error {
+#error,
+#config-error {
+  white-space: pre-wrap;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   color: var(--error-fg);
   background: var(--error-bg);
+}
+
+#notifications {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+}
+
+#notifications button {
+  padding: 0.125rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+#notifications button:hover {
+  border-color: var(--muted);
 }
 
 #repos {
@@ -150,6 +173,39 @@ h2 {
   color: var(--muted);
 }
 
+.badge.merged {
+  color: var(--merged);
+}
+
+#recently-closed {
+  max-width: 32rem;
+}
+
+#recently-closed h2 {
+  color: var(--muted);
+}
+
+#missed {
+  max-width: 32rem;
+  margin-top: 1rem;
+}
+
+.missed-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.missed-more {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
+.badge.jira {
+  color: var(--link);
+}
+
 .number {
   font-variant-numeric: tabular-nums;
   color: var(--muted);
@@ -162,4 +218,19 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+.seen {
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.seen:hover {
+  color: var(--fg);
+  border-color: var(--muted);
 }
