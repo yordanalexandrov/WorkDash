@@ -188,6 +188,20 @@ describe("startPoller recently closed", () => {
     expect(github.queries.filter((query) => query.startsWith("query ClosedPullRequests"))).toHaveLength(1);
   });
 
+  it("drops the PRs of a repo no longer followed without looking them up as closed", async () => {
+    const store = openStore(":memory:");
+    const removed = pullRequest({ repo: "my-org/repo-b", number: 1 });
+    store.saveSnapshot({ viewer: "me", pullRequests: [removed, pullRequest({ number: 2 })] }, new Date("2026-10-30T10:00:00Z"));
+    const github = fakeGitHubWithClosed([2], new Date().toISOString());
+
+    const poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch: github.fetch });
+    await vi.waitFor(() => expect(store.loadSnapshot()?.pullRequests.map((pr) => pr.repo)).toEqual(["my-org/repo-a"]));
+    poller.stop();
+
+    expect(github.queries.filter((query) => query.startsWith("query ClosedPullRequests"))).toEqual([]);
+    expect(store.loadRecentlyClosed()).toEqual([]);
+  });
+
   it("does not keep a PR that closed before the window", async () => {
     const store = openStore(":memory:");
     store.saveSnapshot({ viewer: "me", pullRequests: [pullRequest({ number: 1 })] }, new Date("2026-10-30T10:00:00Z"));

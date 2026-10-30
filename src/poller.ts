@@ -50,7 +50,9 @@ export function startPoller(
     polling = true;
     try {
       const before = store.loadSnapshot();
-      const previous = before?.pullRequests ?? [];
+      // A repo dropped from the config takes its PRs along; they did not close.
+      const followed = new Set(repos.map((repo) => repo.toLowerCase()));
+      const previous = (before?.pullRequests ?? []).filter((pr) => followed.has(pr.repo.toLowerCase()));
       // Taken before the request, so a comment posted while it is under way stays unread.
       const startedAt = new Date();
       const snapshot = await fetchSnapshot({ repos, token, fetch, previous, observedAt: startedAt });
