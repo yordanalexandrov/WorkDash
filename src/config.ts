@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
@@ -83,4 +83,75 @@ export function loadConfig(path: string): Config {
     throw new ConfigError(`cannot read ${path}: ${(error as Error).message}`);
   }
   return parseConfig(text);
+}
+
+export type ConfigWatcher = {
+  /** Why the file on disk is not in effect, or null when it is. */
+  error(): string | null;
+  close(): void;
+};
+
+/**
+ * Watches the config file and hands every valid change to `apply`. An invalid change, or `apply` throwing a
+ * ConfigError, leaves `current` in effect and is reported by `error()` until a later change is applied.
+ *
+ * The file is polled by path, so a change is seen even when an editor replaces the file with a new one.
+ */
+export function watchConfig(
+  path: string,
+  options: {
+    current: Config;
+    apply(config: Config): void;
+    intervalMs?: number;
+    log?: { info(msg: string): void; error(msg: string): void };
+  },
+): ConfigWatcher {
+  const { apply, intervalMs = 1_000, log } = options;
+  let current = JSON.stringify(options.current);
+  let error: string | null = null;
+
+  function reload() {
+    try {
+      const config = loadConfig(path);
+      const serialized = JSON.stringify(config);
+      if (serialized !== current) {
+        apply(config);
+        current = serialized;
+        log?.info(`${path}: reloaded`);
+      } else if (error) {
+        log?.info(`${path}: the config in effect is valid again`);
+      }
+      error = null;
+    } catch (caught) {
+      if (!(caught instanceof ConfigError)) throw caught;
+      const message = `${path}: ${caught.message}`;
+      if (message !== error) log?.error(`${message}\nkeeping the last valid config`);
+      error = message;
+    }
+  }
+
+  // Stat by path rather than fs.watch: a watch follows the inode, which is gone once an editor replaces the file.
+  let stamp = fileStamp(path);
+  reload();
+  const timer = setInterval(() => {
+    const next = fileStamp(path);
+    if (next === stamp) return;
+    stamp = next;
+    reload();
+  }, intervalMs);
+  timer.unref();
+
+  return {
+    error: () => error,
+    close: () => clearInterval(timer),
+  };
+}
+
+function fileStamp(path: string): string {
+  try {
+    const stats = statSync(path);
+    return `${stats.ino}:${stats.size}:${stats.mtimeMs}`;
+  } catch {
+    return "missing";
+  }
 }

@@ -10,6 +10,8 @@ export type DashboardState = {
   fetchedAt: string | null;
   pollIntervalMs: number;
   error: string | null;
+  /** Why the config.yaml on disk is not in effect; the last valid config still is. */
+  configError: string | null;
   sections: SectionOfPullRequests[];
 };
 
