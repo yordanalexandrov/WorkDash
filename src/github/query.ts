@@ -34,6 +34,7 @@ fragment openPullRequests on Repository {
       createdAt
       updatedAt
       mergeable
+      mergeStateStatus
       reviewDecision
       author { login }
       reviewRequests(first: ${REVIEWERS_PAGE_SIZE}) { nodes { requestedReviewer { ... on User { login } } } }

@@ -1,4 +1,12 @@
-import type { CiState, PullRequest, ReviewState, Snapshot } from "../domain/types.js";
+import type {
+  CiState,
+  Mergeable,
+  MergeStateStatus,
+  PullRequest,
+  ReviewDecision,
+  ReviewState,
+  Snapshot,
+} from "../domain/types.js";
 import { buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
@@ -10,8 +18,9 @@ type PullRequestNode = {
   isDraft: boolean;
   createdAt: string;
   updatedAt: string;
-  mergeable: PullRequest["mergeable"];
-  reviewDecision: PullRequest["reviewDecision"];
+  mergeable: Mergeable;
+  mergeStateStatus: MergeStateStatus;
+  reviewDecision: ReviewDecision | null;
   author: { login: string } | null;
   // A team (or a deleted user) matches no fragment field and comes back as {} or null.
   reviewRequests: { nodes: { requestedReviewer: { login?: string } | null }[] };
@@ -93,6 +102,7 @@ function toPullRequests(repository: RepositoryNode): PullRequest[] {
     createdAt: node.createdAt,
     updatedAt: node.updatedAt,
     mergeable: node.mergeable,
+    mergeStateStatus: node.mergeStateStatus,
     reviewDecision: node.reviewDecision,
     requestedReviewers: node.reviewRequests.nodes.flatMap((request) => request.requestedReviewer?.login ?? []),
     reviews: node.latestReviews.nodes.flatMap((review) =>

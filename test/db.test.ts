@@ -5,23 +5,10 @@ import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import type { PullRequest } from "../src/domain/types.js";
+import { pullRequest } from "./fixtures.js";
 
 function pr(repo: string, number: number): PullRequest {
-  return {
-    repo,
-    number,
-    title: `PR ${number}`,
-    url: `https://github.com/${repo}/pull/${number}`,
-    author: "colleague1",
-    isDraft: false,
-    createdAt: "2026-10-29T10:00:00Z",
-    updatedAt: "2026-10-30T10:00:00Z",
-    mergeable: "MERGEABLE",
-    reviewDecision: null,
-    requestedReviewers: [],
-    reviews: [],
-    ci: "SUCCESS",
-  };
+  return pullRequest({ repo, number, author: "colleague1" });
 }
 
 const dirs: string[] = [];

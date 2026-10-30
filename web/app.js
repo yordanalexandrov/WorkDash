@@ -18,6 +18,7 @@ const REASON_LABELS = {
   ci_failed: "CI failed",
   changes_requested: "changes requested",
   conflict: "conflict",
+  needs_rebase: "needs rebase",
   review_requested: "review requested",
 };
 
@@ -29,6 +30,16 @@ const CI_LABELS = {
   EXPECTED: ["CI …", "pending"],
 };
 
+// What the merge box would say: conflict, out of date, blocked by rules, or free to merge.
+const MERGE_STATES = {
+  DIRTY: ["conflict", "bad", "Има конфликт с base клона"],
+  BEHIND: ["needs rebase", "pending", "Клонът е изостанал от base и трябва rebase преди merge"],
+  BLOCKED: ["blocked", "muted", "Merge е блокиран от правилата на repo-то (review-та или задължителни проверки)"],
+  CLEAN: ["mergeable", "ok", "Може да се merge-не"],
+  HAS_HOOKS: ["mergeable", "ok", "Може да се merge-не"],
+  UNSTABLE: ["mergeable", "ok", "Може да се merge-не, но незадължителни проверки не минават"],
+};
+
 const REVIEW_MARKS = { APPROVED: ["✓", "ok"], CHANGES_REQUESTED: ["✗", "bad"], COMMENTED: ["💬", "muted"] };
 
 function element(tag, className, ...content) {
@@ -38,11 +49,10 @@ function element(tag, className, ...content) {
   return el;
 }
 
-function badge(text, kind) {
-  const span = document.createElement("span");
-  span.className = `badge ${kind}`;
-  span.textContent = text;
-  return span;
+function badge(text, kind, title) {
+  const el = element("span", `badge ${kind}`, text);
+  if (title) el.title = title;
+  return el;
 }
 
 function link(href, text) {
@@ -65,7 +75,11 @@ function statusBadges(pr) {
   const badges = [];
   if (pr.reason) badges.push(badge(REASON_LABELS[pr.reason] ?? pr.reason, "bad"));
   if (pr.isDraft) badges.push(badge("draft", "muted"));
-  if (pr.mergeable === "CONFLICTING" && pr.reason !== "conflict") badges.push(badge("conflict", "bad"));
+  // GitHub may still be computing DIRTY while `mergeable` already says CONFLICTING.
+  const state = pr.mergeable === "CONFLICTING" ? "DIRTY" : pr.mergeStateStatus;
+  const merge = MERGE_STATES[state];
+  const saidByReason = (pr.reason === "conflict" && state === "DIRTY") || (pr.reason === "needs_rebase" && state === "BEHIND");
+  if (merge && !saidByReason) badges.push(badge(...merge));
   return badges;
 }
 
@@ -107,7 +121,7 @@ function prItem(pr) {
  * Regroups the API's sections into one card per repo. Cards are ordered by the most urgent
  * section they hold, so a repo with something waiting on me comes first.
  */
-function repoCards(sections) {
+function groupByRepo(sections) {
   const cards = new Map();
   sections.forEach(({ section, pullRequests }, urgency) => {
     for (const pr of pullRequests) {
@@ -133,7 +147,7 @@ function repoCard({ repo, sections }) {
 }
 
 function render(state) {
-  const cards = repoCards(state.sections);
+  const cards = groupByRepo(state.sections);
   reposEl.replaceChildren(...cards.map(repoCard));
   emptyEl.hidden = cards.length > 0 || state.fetchedAt === null;
 

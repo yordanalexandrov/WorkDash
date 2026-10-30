@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fetchSnapshot } from "../src/github/client.js";
+import { pullRequest } from "./fixtures.js";
 
 type Call = { url: string; headers: Record<string, string>; query: string; variables: Record<string, string> };
 
@@ -35,6 +36,7 @@ function prNode(number: number, overrides: Record<string, unknown> = {}) {
     createdAt: "2026-10-29T10:00:00Z",
     updatedAt: "2026-10-30T10:00:00Z",
     mergeable: "MERGEABLE",
+    mergeStateStatus: "CLEAN",
     reviewDecision: null,
     author: { login: "colleague1" },
     reviewRequests: { nodes: [] },
@@ -58,36 +60,14 @@ describe("fetchSnapshot", () => {
     expect(github.calls[0]?.headers.Authorization).toBe("Bearer t0ken");
     expect(snapshot.viewer).toBe("me");
     expect(snapshot.pullRequests).toEqual([
-      {
-        repo: "my-org/repo-a",
-        number: 1,
-        title: "PR 1",
-        url: "https://github.com/x/y/pull/1",
-        author: "colleague1",
-        isDraft: false,
-        createdAt: "2026-10-29T10:00:00Z",
-        updatedAt: "2026-10-30T10:00:00Z",
-        mergeable: "MERGEABLE",
-        reviewDecision: null,
-        requestedReviewers: [],
-        reviews: [],
-        ci: "SUCCESS",
-      },
-      {
+      pullRequest({ url: "https://github.com/x/y/pull/1", author: "colleague1" }),
+      pullRequest({
         repo: "my-org/repo-b",
         number: 7,
         title: "Fix login",
         url: "https://github.com/x/y/pull/7",
         author: "colleague2",
-        isDraft: false,
-        createdAt: "2026-10-29T10:00:00Z",
-        updatedAt: "2026-10-30T10:00:00Z",
-        mergeable: "MERGEABLE",
-        reviewDecision: null,
-        requestedReviewers: [],
-        reviews: [],
-        ci: "SUCCESS",
-      },
+      }),
     ]);
   });
 
@@ -97,6 +77,7 @@ describe("fetchSnapshot", () => {
         prNode(1, {
           isDraft: true,
           mergeable: "CONFLICTING",
+          mergeStateStatus: "DIRTY",
           reviewDecision: "CHANGES_REQUESTED",
           reviewRequests: {
             nodes: [{ requestedReviewer: { login: "me" } }, { requestedReviewer: {} }, { requestedReviewer: null }],
@@ -118,6 +99,7 @@ describe("fetchSnapshot", () => {
     expect(pr).toMatchObject({
       isDraft: true,
       mergeable: "CONFLICTING",
+      mergeStateStatus: "DIRTY",
       reviewDecision: "CHANGES_REQUESTED",
       requestedReviewers: ["me"],
       reviews: [

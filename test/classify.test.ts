@@ -1,27 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { classify, groupIntoSections, type ClassifyRules } from "../src/domain/classify.js";
 import type { PullRequest, Review } from "../src/domain/types.js";
+import { pullRequest } from "./fixtures.js";
 
 const rules: ClassifyRules = { team: ["colleague1", "colleague2"], requiredApprovals: 1 };
 
-function pr(overrides: Partial<PullRequest> = {}): PullRequest {
-  return {
-    repo: "my-org/repo-a",
-    number: 1,
-    title: "PR 1",
-    url: "https://github.com/my-org/repo-a/pull/1",
-    author: "me",
-    isDraft: false,
-    createdAt: "2026-10-29T10:00:00Z",
-    updatedAt: "2026-10-30T10:00:00Z",
-    mergeable: "MERGEABLE",
-    reviewDecision: null,
-    requestedReviewers: [],
-    reviews: [],
-    ci: "SUCCESS",
-    ...overrides,
-  };
-}
+const pr = pullRequest;
 
 function review(author: string, state: Review["state"]): Review {
   return { author, state, submittedAt: "2026-10-30T09:00:00Z" };
@@ -58,6 +42,17 @@ describe("classify: my PR", () => {
 
   it("is ready to merge when approved, green, without conflict and not a draft", () => {
     expect(classify(pr({ reviewDecision: "APPROVED" }), "me", rules)).toEqual({ section: "ready_to_merge" });
+  });
+
+  it("waits on me when it is ready except that the branch is behind its base", () => {
+    expect(classify(pr({ reviewDecision: "APPROVED", mergeStateStatus: "BEHIND" }), "me", rules)).toEqual({
+      section: "waiting_on_me",
+      reason: "needs_rebase",
+    });
+  });
+
+  it("waits on others, not on a rebase, while it is behind but not yet approved", () => {
+    expect(classify(pr({ mergeStateStatus: "BEHIND" }), "me", rules)).toEqual({ section: "waiting_on_others" });
   });
 
   it("is ready to merge when the repo has no CI", () => {

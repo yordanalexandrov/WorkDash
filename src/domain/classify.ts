@@ -5,7 +5,7 @@ export const SECTIONS = ["waiting_on_me", "free_for_review", "ready_to_merge", "
 export type Section = (typeof SECTIONS)[number];
 
 /** Why a PR waits on me. */
-export type Reason = "ci_failed" | "changes_requested" | "conflict" | "review_requested";
+export type Reason = "ci_failed" | "changes_requested" | "conflict" | "needs_rebase" | "review_requested";
 
 export type Classification = { section: "waiting_on_me"; reason: Reason } | { section: Exclude<Section, "waiting_on_me"> };
 
@@ -37,8 +37,10 @@ export function classify(pr: PullRequest, me: string, rules: ClassifyRules): Cla
     if (pr.mergeable === "CONFLICTING") return { section: "waiting_on_me", reason: "conflict" };
     // A repo without CI reports no checks; that should not keep a PR from being merged.
     const ciGreen = pr.ci === "SUCCESS" || pr.ci === null;
-    if (isApproved(pr, rules) && ciGreen && !pr.isDraft) return { section: "ready_to_merge" };
-    return { section: "waiting_on_others" };
+    if (!isApproved(pr, rules) || !ciGreen || pr.isDraft) return { section: "waiting_on_others" };
+    // Branch protection that requires an up-to-date branch blocks the merge until I rebase.
+    if (pr.mergeStateStatus === "BEHIND") return { section: "waiting_on_me", reason: "needs_rebase" };
+    return { section: "ready_to_merge" };
   }
 
   if (pr.requestedReviewers.some((login) => sameLogin(login, me))) {
