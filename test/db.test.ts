@@ -4,6 +4,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
+import type { PrEvent } from "../src/domain/events.js";
 import type { PullRequest } from "../src/domain/types.js";
 import { pullRequest } from "./fixtures.js";
 
@@ -92,5 +93,58 @@ describe("SnapshotStore: seen marks", () => {
     db.close();
 
     expect(openStore(path).loadSeen()(pr("my-org/repo-a", 1))).toBe("2026-10-30T10:00:00.000Z");
+  });
+});
+
+describe("SnapshotStore: events", () => {
+  const event = (id: string, number = 1): PrEvent => ({
+    id,
+    type: "mention",
+    repo: "my-org/repo-a",
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/my-org/repo-a/pull/${number}`,
+    actor: "colleague1",
+  });
+
+  it("records each event once and hands back only the ones it had not seen", () => {
+    const store = openStore(":memory:");
+
+    expect(store.recordEvents([event("a"), event("b")], new Date("2026-10-30T10:00:00Z"))).toEqual([event("a"), event("b")]);
+    expect(store.recordEvents([event("b"), event("c")], new Date("2026-10-30T10:01:00Z"))).toEqual([event("c")]);
+  });
+
+  it("keeps undelivered events, oldest first, until they are marked delivered", () => {
+    const store = openStore(":memory:");
+    store.recordEvents([event("a"), event("b")], new Date("2026-10-30T10:00:00Z"));
+    store.recordEvents([event("c")], new Date("2026-10-30T10:01:00Z"));
+
+    expect(store.undeliveredEvents(10)).toEqual([event("a"), event("b"), event("c")]);
+    store.markDelivered(["a", "c"]);
+    expect(store.undeliveredEvents(10)).toEqual([event("b")]);
+  });
+
+  it("gives only the latest undelivered events when there are more than asked for", () => {
+    const store = openStore(":memory:");
+    store.recordEvents([event("a"), event("b"), event("c")], new Date("2026-10-30T10:00:00Z"));
+
+    expect(store.undeliveredEvents(2)).toEqual([event("b"), event("c")]);
+  });
+
+  it("remembers events across a restart and a snapshot format change, so none is repeated", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+    const first = openStore(path);
+    first.recordEvents([event("a"), event("b")], new Date("2026-10-30T10:00:00Z"));
+    first.markDelivered(["a"]);
+    first.close();
+    const db = new Database(path);
+    db.pragma("user_version = 0");
+    db.close();
+
+    const second = openStore(path);
+    expect(second.recordEvents([event("a")], new Date("2026-10-30T10:05:00Z"))).toEqual([]);
+    expect(second.undeliveredEvents(10)).toEqual([event("b")]);
   });
 });

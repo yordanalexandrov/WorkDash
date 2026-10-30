@@ -23,6 +23,16 @@ export function unreadComments(pr: PullRequest, me: string, seenAt: string | nul
 }
 
 /**
+ * Whether a comment on someone else's PR answers `me`: it is by the PR author, in a review thread
+ * I wrote in, or mentions me.
+ */
+export function repliesTo(pr: PullRequest, me: string): (comment: Comment) => boolean {
+  const myThreads = new Set(pr.comments.flatMap((comment) => (comment.thread && sameLogin(comment.author, me) ? [comment.thread] : [])));
+  return (comment) =>
+    sameLogin(comment.author, pr.author) || (comment.thread !== undefined && myThreads.has(comment.thread)) || mentions(comment.body, me);
+}
+
+/**
  * New commits and replies to me on someone else's PR after my last review that left comments or
  * requested changes, counted from whichever is later: that review or `seenAt`. A reply is a comment
  * by the PR author, a comment in a review thread I wrote in, or a comment that mentions me.
@@ -33,9 +43,7 @@ export function reReviewActivity(pr: PullRequest, me: string, seenAt: string | n
   if (!review || (review.state !== "COMMENTED" && review.state !== "CHANGES_REQUESTED")) return null;
   const since = seenAt !== null && after(seenAt, review.submittedAt) ? seenAt : review.submittedAt;
 
-  const myThreads = new Set(pr.comments.flatMap((comment) => (comment.thread && sameLogin(comment.author, me) ? [comment.thread] : [])));
-  const isReplyToMe = (comment: Comment) =>
-    sameLogin(comment.author, pr.author) || (comment.thread !== undefined && myThreads.has(comment.thread)) || mentions(comment.body, me);
+  const isReplyToMe = repliesTo(pr, me);
 
   const newCommits = pr.commits.filter((commit) => after(commit.committedAt, since)).length;
   const replies = pr.comments.filter(

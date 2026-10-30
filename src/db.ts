@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import type { SeenAt } from "./domain/classify.js";
+import type { PrEvent } from "./domain/events.js";
 import type { PullRequest, Snapshot } from "./domain/types.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
@@ -11,6 +12,11 @@ export type SnapshotStore = {
   markSeen(repo: string, number: number, seenAt: Date): void;
   /** When each PR was last marked seen, as of this call. */
   loadSeen(): SeenAt;
+  /** Saves the events; returns those it had not saved before, in the given order. */
+  recordEvents(events: PrEvent[], at: Date): PrEvent[];
+  /** The latest `limit` events not yet sent to a browser, oldest first. */
+  undeliveredEvents(limit: number): PrEvent[];
+  markDelivered(ids: string[]): void;
   close(): void;
 };
 
@@ -33,6 +39,16 @@ const SCHEMA = `
     number  INTEGER NOT NULL,
     seen_at TEXT    NOT NULL,
     PRIMARY KEY (repo, number)
+  );
+  -- Not a cache either: an event id kept here is never notified again.
+  CREATE TABLE IF NOT EXISTS event (
+    id           TEXT    PRIMARY KEY,
+    type         TEXT    NOT NULL,
+    repo         TEXT    NOT NULL,
+    number       INTEGER NOT NULL,
+    created_at   TEXT    NOT NULL,
+    payload_json TEXT    NOT NULL,
+    delivered    INTEGER NOT NULL DEFAULT 0
   );
 `;
 
@@ -68,6 +84,18 @@ export function openStore(path: string): SnapshotStore {
   );
   const selectSeen = db.prepare<[], { repo: string; number: number; seen_at: string }>("SELECT repo, number, seen_at FROM pr_seen");
 
+  const insertEvent = db.prepare(
+    "INSERT OR IGNORE INTO event (id, type, repo, number, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  const selectUndelivered = db.prepare<[number], { payload_json: string }>(
+    "SELECT payload_json FROM (SELECT payload_json, rowid AS n FROM event WHERE delivered = 0 ORDER BY rowid DESC LIMIT ?) ORDER BY n",
+  );
+  const updateDelivered = db.prepare("UPDATE event SET delivered = 1 WHERE id = ?");
+  const record = db.transaction((events: PrEvent[], at: string) =>
+    events.filter((event) => insertEvent.run(event.id, event.type, event.repo, event.number, at, JSON.stringify(event)).changes > 0),
+  );
+  const deliver = db.transaction((ids: string[]) => ids.forEach((id) => updateDelivered.run(id)));
+
   const save = db.transaction((snapshot: Snapshot, fetchedAt: string) => {
     deletePullRequests.run();
     for (const pr of snapshot.pullRequests) {
@@ -92,6 +120,15 @@ export function openStore(path: string): SnapshotStore {
     loadSeen() {
       const seen = new Map(selectSeen.all().map((row) => [`${row.repo}#${row.number}`, row.seen_at]));
       return (pr) => seen.get(`${pr.repo}#${pr.number}`) ?? null;
+    },
+    recordEvents(events, at) {
+      return record(events, at.toISOString());
+    },
+    undeliveredEvents(limit) {
+      return selectUndelivered.all(limit).map((row) => JSON.parse(row.payload_json) as PrEvent);
+    },
+    markDelivered(ids) {
+      deliver(ids);
     },
     close() {
       db.close();
