@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
-import { checkBadges, reviewBadges, statusBadges } from "../src/badges.js";
+import { checkBadges, closedBadge, reviewBadges, statusBadges } from "../src/badges.js";
 
 const pr = pullRequest;
 
@@ -57,5 +57,21 @@ describe("reviewBadges", () => {
       { text: "✓ colleague1", kind: "ok" },
       { text: "💬 colleague3", kind: "muted" },
     ]);
+  });
+});
+
+describe("closedBadge", () => {
+  const closed = {
+    repo: "my-org/repo-a",
+    number: 9,
+    title: "Ship it",
+    url: "https://github.com/my-org/repo-a/pull/9",
+    author: "me",
+    closedAt: "2026-10-30T11:00:00Z",
+  };
+
+  it("tells a merged PR from one closed without merging", () => {
+    expect(closedBadge({ ...closed, state: "MERGED" })).toEqual({ text: "merged", kind: "merged" });
+    expect(closedBadge({ ...closed, state: "CLOSED" })).toEqual({ text: "closed", kind: "bad", title: "Затворен без merge" });
   });
 });

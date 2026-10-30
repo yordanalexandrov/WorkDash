@@ -5,7 +5,7 @@ import { age, errorText, statusText } from "../src/format.js";
 const now = new Date("2026-10-30T12:00:00Z");
 
 function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
-  return { viewer: "me", fetchedAt: "2026-10-30T10:00:00Z", pollIntervalMs: 60_000, error: null, sections: [], ...overrides };
+  return { viewer: "me", fetchedAt: "2026-10-30T10:00:00Z", pollIntervalMs: 60_000, error: null, sections: [], recentlyClosed: [], ...overrides };
 }
 
 describe("statusText", () => {

@@ -10,6 +10,7 @@
   --ok: #1a7f37;
   --bad: #cf222e;
   --pending: #9a6700;
+  --merged: #8250df;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +25,7 @@
     --ok: #3fb950;
     --bad: #f85149;
     --pending: #d29922;
+    --merged: #ab7df8;
   }
 }
 
@@ -147,6 +149,18 @@ h2 {
 }
 
 .badge.muted {
+  color: var(--muted);
+}
+
+.badge.merged {
+  color: var(--merged);
+}
+
+#recently-closed {
+  max-width: 32rem;
+}
+
+#recently-closed h2 {
   color: var(--muted);
 }
 

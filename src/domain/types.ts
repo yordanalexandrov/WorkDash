@@ -30,6 +30,17 @@ export type PullRequest = {
   sonar: CiState | null; // the Sonar quality gate; null when the repo does not run Sonar
 };
 
+/** A PR that left the open list, with how it ended. */
+export type ClosedPullRequest = {
+  repo: string; // owner/name
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  state: "MERGED" | "CLOSED";
+  closedAt: string;
+};
+
 /** What one poll learns from GitHub. */
 export type Snapshot = {
   viewer: string;

@@ -6,7 +6,7 @@ export type Config = {
   github: { tokenEnv: string; pollIntervalMs: number };
   repos: string[];
   team: string[];
-  review: { requiredApprovals: number };
+  review: { requiredApprovals: number; recentlyClosedWindowMs: number };
 };
 
 export class ConfigError extends Error {
@@ -39,6 +39,7 @@ const schema = z
     review: z
       .object({
         required_approvals: z.number().int().min(1).default(1),
+        recently_closed_window: duration.default(24 * 3_600_000),
       })
       .prefault({}),
   })
@@ -47,7 +48,10 @@ const schema = z
       github: { tokenEnv: raw.github.token_env, pollIntervalMs: raw.github.poll_interval },
       repos: raw.repos,
       team: raw.team,
-      review: { requiredApprovals: raw.review.required_approvals },
+      review: {
+        requiredApprovals: raw.review.required_approvals,
+        recentlyClosedWindowMs: raw.review.recently_closed_window,
+      },
     }),
   );
 

@@ -1,3 +1,4 @@
+import { RecentlyClosedView } from "./components/RecentlyClosedView.js";
 import { RepoCardView } from "./components/RepoCardView.js";
 import { errorText, statusText } from "./format.js";
 import { groupByRepo } from "./group.js";
@@ -22,6 +23,7 @@ export function App() {
           ))}
         </div>
         {cards.length === 0 && state?.fetchedAt && <p id="empty">Няма PR-и, които да те засягат.</p>}
+        {state?.recentlyClosed.length ? <RecentlyClosedView pullRequests={state.recentlyClosed} /> : null}
       </main>
     </>
   );

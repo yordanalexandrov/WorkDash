@@ -1,7 +1,7 @@
-import type { CiState, MergeStateStatus, ReviewState } from "../../src/domain/types.js";
+import type { CiState, ClosedPullRequest, MergeStateStatus, ReviewState } from "../../src/domain/types.js";
 import type { ClassifiedPullRequest } from "./api.js";
 
-/** `kind` picks the colour: ok, bad, pending or muted. */
+/** `kind` picks the colour: ok, bad, pending, muted or merged. */
 export type Badge = { text: string; kind: string; title?: string };
 
 type Mark = [text: string, kind: string, title?: string];
@@ -77,4 +77,9 @@ export function reviewBadges(pr: ClassifiedPullRequest): Badge[] {
     const mark = REVIEW_MARKS[review.state];
     return mark ? [badge([`${mark[0]} ${review.author}`, mark[1]])] : [];
   });
+}
+
+/** How a recently closed PR ended: merged, or closed without merging. */
+export function closedBadge(pr: ClosedPullRequest): Badge {
+  return pr.state === "MERGED" ? badge(["merged", "merged"]) : badge(["closed", "bad", "Затворен без merge"]);
 }

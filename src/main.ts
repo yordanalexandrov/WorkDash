@@ -33,6 +33,7 @@ const server = buildServer({
   store,
   rules: { team: config.team, requiredApprovals: config.review.requiredApprovals },
   pollIntervalMs: config.github.pollIntervalMs,
+  recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
   lastPollError: () => poller.lastError(),
   logger: true,
 });
@@ -40,6 +41,7 @@ const poller = startPoller({
   repos: config.repos,
   token,
   intervalMs: config.github.pollIntervalMs,
+  recentlyClosedWindowMs: config.review.recentlyClosedWindowMs,
   store,
   log: server.log,
 });

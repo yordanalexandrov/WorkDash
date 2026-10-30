@@ -16,6 +16,7 @@ describe("parseConfig", () => {
     expect(config.github.pollIntervalMs).toBe(60_000);
     expect(config.team).toEqual(["colleague1", "colleague2"]);
     expect(config.review.requiredApprovals).toBe(1);
+    expect(config.review.recentlyClosedWindowMs).toBe(24 * 3_600_000);
   });
 
   it("fills in defaults for the GitHub section", () => {
@@ -28,7 +29,12 @@ describe("parseConfig", () => {
     const config = parseConfig(minimal);
 
     expect(config.team).toEqual([]);
-    expect(config.review).toEqual({ requiredApprovals: 1 });
+    expect(config.review).toEqual({ requiredApprovals: 1, recentlyClosedWindowMs: 24 * 3_600_000 });
+  });
+
+  it("reads recently_closed_window as a duration", () => {
+    expect(parseConfig(`review: { recently_closed_window: 2h }\n${minimal}`).review.recentlyClosedWindowMs).toBe(7_200_000);
+    expect(() => parseConfig(`review: { recently_closed_window: 2d }\n${minimal}`)).toThrow(/review\.recently_closed_window/);
   });
 
   it("reads required_approvals", () => {

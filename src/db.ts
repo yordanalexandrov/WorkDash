@@ -1,11 +1,14 @@
 import Database from "better-sqlite3";
-import type { PullRequest, Snapshot } from "./domain/types.js";
+import type { ClosedPullRequest, PullRequest, Snapshot } from "./domain/types.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
 
 export type SnapshotStore = {
   saveSnapshot(snapshot: Snapshot, fetchedAt: Date): void;
   loadSnapshot(): StoredSnapshot | null;
+  /** Replaces the list of recently merged or closed PRs, which is kept apart from the open ones. */
+  saveRecentlyClosed(pullRequests: ClosedPullRequest[]): void;
+  loadRecentlyClosed(): ClosedPullRequest[];
   close(): void;
 };
 
@@ -15,6 +18,12 @@ const SCHEMA = `
     number     INTEGER NOT NULL,
     data_json  TEXT    NOT NULL,
     fetched_at TEXT    NOT NULL,
+    PRIMARY KEY (repo, number)
+  );
+  CREATE TABLE IF NOT EXISTS pr_closed (
+    repo      TEXT    NOT NULL,
+    number    INTEGER NOT NULL,
+    data_json TEXT    NOT NULL,
     PRIMARY KEY (repo, number)
   );
   CREATE TABLE IF NOT EXISTS poll (
@@ -36,7 +45,7 @@ export function openStore(path: string): SnapshotStore {
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   if (db.pragma("user_version", { simple: true }) !== SNAPSHOT_FORMAT) {
-    db.exec("DELETE FROM pr_snapshot; DELETE FROM poll;");
+    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM poll;");
     db.pragma(`user_version = ${SNAPSHOT_FORMAT}`);
   }
 
@@ -49,6 +58,14 @@ export function openStore(path: string): SnapshotStore {
   );
   const selectPoll = db.prepare<[], { viewer: string; fetched_at: string }>("SELECT viewer, fetched_at FROM poll WHERE id = 1");
   const selectPullRequests = db.prepare<[], { data_json: string }>("SELECT data_json FROM pr_snapshot ORDER BY rowid");
+
+  const deleteClosed = db.prepare("DELETE FROM pr_closed");
+  const insertClosed = db.prepare("INSERT INTO pr_closed (repo, number, data_json) VALUES (?, ?, ?)");
+  const selectClosed = db.prepare<[], { data_json: string }>("SELECT data_json FROM pr_closed ORDER BY rowid");
+  const saveClosed = db.transaction((pullRequests: ClosedPullRequest[]) => {
+    deleteClosed.run();
+    for (const pr of pullRequests) insertClosed.run(pr.repo, pr.number, JSON.stringify(pr));
+  });
 
   const save = db.transaction((snapshot: Snapshot, fetchedAt: string) => {
     deletePullRequests.run();
@@ -67,6 +84,12 @@ export function openStore(path: string): SnapshotStore {
       if (!poll) return null;
       const pullRequests = selectPullRequests.all().map((row) => JSON.parse(row.data_json) as PullRequest);
       return { viewer: poll.viewer, pullRequests, fetchedAt: poll.fetched_at };
+    },
+    saveRecentlyClosed(pullRequests) {
+      saveClosed(pullRequests);
+    },
+    loadRecentlyClosed() {
+      return selectClosed.all().map((row) => JSON.parse(row.data_json) as ClosedPullRequest);
     },
     close() {
       db.close();
