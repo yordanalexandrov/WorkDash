@@ -6,7 +6,7 @@ import { createIssuePoller } from "../src/issue-poller.js";
  * A stand-in for GitHub that answers the issues query of any repo with one issue, and records which repos it was asked for;
  * with `comments`, the issue has one, and the comments queries it answers are recorded apart.
  */
-function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean; comments?: boolean } = {}) {
+function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean | string[]; comments?: boolean } = {}) {
   const calls: string[] = [];
   const commentCalls: string[] = [];
   /** Since when each request asked for the closed issues. */
@@ -22,7 +22,7 @@ function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean; comments?:
     calls.push(repo);
     sinces.push(variables.since);
     await new Promise((resolve) => setTimeout(resolve, 10));
-    if (options.rateLimited) {
+    if (options.rateLimited === true || (Array.isArray(options.rateLimited) && options.rateLimited.includes(repo))) {
       const reset = String(Math.floor(Date.now() / 1000) + 600);
       return Response.json({ message: "API rate limit exceeded" }, { status: 403, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": reset } });
     }
@@ -57,7 +57,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
   }
 }
 
-function setUp(options: { fail?: boolean; rateLimited?: boolean; comments?: boolean; token?: string | null; intervalMs?: number } = {}) {
+function setUp(options: { fail?: boolean; rateLimited?: boolean | string[]; comments?: boolean; token?: string | null; intervalMs?: number } = {}) {
   const github = fakeGitHub(options);
   const store = openStore(":memory:");
   const changes: { repo: string; polling: boolean }[] = [];
@@ -173,6 +173,19 @@ describe("createIssuePoller", () => {
     expect(poller.error("my-org/repo-a")).toMatchObject({ kind: "rate_limit" });
     expect(poller.demand("my-org/repo-b", "button").answer).toBe("skip");
     expect(github.calls).toEqual(["my-org/repo-a"]);
+  });
+
+  it("says a rate limit hit on one repo on every repo it holds back, and tells the pages on those repos", async () => {
+    const { poller, changes } = setUp({ rateLimited: ["my-org/repo-a"] });
+    poller.demand("my-org/repo-b", "open");
+    await waitFor(() => changes.length === 2);
+
+    poller.demand("my-org/repo-a", "open");
+    await waitFor(() => changes.length >= 4);
+
+    expect(poller.error("my-org/repo-b")).toMatchObject({ kind: "rate_limit" });
+    expect(poller.error("my-org/repo-c")).toMatchObject({ kind: "rate_limit" });
+    expect(changes.slice(2).map((change) => change.repo)).toContain("my-org/repo-b");
   });
 
   it("does not poll without a token", () => {

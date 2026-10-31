@@ -1,5 +1,6 @@
 import type { SnapshotStore } from "./db.js";
 import { answerIssueDemand, type IssueDemand, type IssuePollAnswer, nextIntervalPollAt } from "./domain/issue-poll.js";
+import { rateLimitLiftsAt } from "./domain/poll-mode.js";
 import { classifyPollError, type PollError } from "./domain/poll-error.js";
 import { fetchIssues } from "./github/issues.js";
 import { repoKey } from "./domain/repos.js";
@@ -10,11 +11,16 @@ export type IssuePoller = {
   demand(repo: string, demand: IssueDemand): IssuePollAnswer;
   /** Whether a poll of `repo` is under way. */
   polling(repo: string): boolean;
-  /** Why the last poll of `repo` failed; null when it succeeded or none has run since the server started. */
+  /**
+   * Why `repo` is not polled as asked: a rate limit while it holds every repo back, whichever repo hit it; else why the last
+   * poll of `repo` failed; null when it succeeded or none has run since the server started.
+   */
   error(repo: string): PollError | null;
 };
 
 type RepoPoll = {
+  /** The repo's name as first asked for. */
+  repo: string;
   polling: boolean;
   /** When the last poll of the repo started, whether it succeeded or not; when its saved issues were fetched, after a restart. */
   lastPolledAt: string | null;
@@ -27,7 +33,8 @@ type RepoPoll = {
  * is under way joins that poll, so two pages on one repo make one request. The page keeps the interval, as only it knows
  * whether the Issue dashboard shows; the answer tells it when to ask next. Each poll saves the repo's snapshot; a failed one keeps the last and is told by `error(repo)`.
  * A poll also fetches the repo's issues closed within `recentlyClosedWindowMs`.
- * A rate limit on any repo holds every repo back, as they share the token. `onChange` runs when a poll starts and ends.
+ * A rate limit on any repo holds every repo back, as they share the token, and every repo says so while it lasts.
+ * `onChange` runs when a poll of a repo starts and ends, and for every other repo asked for when a rate limit comes or goes.
  */
 export function createIssuePoller(options: {
   store: SnapshotStore;
@@ -50,7 +57,7 @@ export function createIssuePoller(options: {
     const key = repoKey(repo);
     let state = repos.get(key);
     if (!state) {
-      state = { polling: false, lastPolledAt: store.loadIssues(repo)?.fetchedAt ?? null, error: null };
+      state = { repo, polling: false, lastPolledAt: store.loadIssues(repo)?.fetchedAt ?? null, error: null };
       repos.set(key, state);
     }
     return state;
@@ -64,6 +71,14 @@ export function createIssuePoller(options: {
     }
   };
 
+  /** A rate limit comes (`error`) or goes (null) with a poll of `repo`; the other repos asked for change with it. */
+  const liftedOrHit = (repo: string, error: PollError | null) => {
+    rateLimit = error;
+    for (const [key, other] of repos) if (key !== repoKey(repo)) changed(other.repo);
+  };
+  /** The rate limit, while it holds the repos back. */
+  const holding = () => (rateLimitLiftsAt(rateLimit, new Date()) ? rateLimit : null);
+
   async function poll(repo: string, state: RepoPoll, withToken: string) {
     state.polling = true;
     state.lastPolledAt = new Date().toISOString();
@@ -74,11 +89,11 @@ export function createIssuePoller(options: {
       const snapshot = await fetchIssues({ repo, token: withToken, closedSince, fetch, previous: store.loadIssues(repo)?.issues });
       store.saveIssues(snapshot, new Date());
       state.error = null;
-      rateLimit = null;
+      if (rateLimit) liftedOrHit(repo, null);
       log.info(`issues: ${snapshot.issues.length} of ${snapshot.totalCount} open in ${repo}`);
     } catch (error) {
       state.error = classifyPollError(error, new Date());
-      if (state.error.kind === "rate_limit") rateLimit = state.error;
+      if (state.error.kind === "rate_limit") liftedOrHit(repo, state.error);
       log.error(`issues of ${repo} failed (${state.error.kind}): ${state.error.message}`);
     }
     state.polling = false;
@@ -98,6 +113,6 @@ export function createIssuePoller(options: {
       return { answer, dueAt: nextIntervalPollAt({ lastPolledAt: state.lastPolledAt, error: rateLimit, intervalMs: interval, now: new Date() }) };
     },
     polling: (repo) => repos.get(repoKey(repo))?.polling ?? false,
-    error: (repo) => repos.get(repoKey(repo))?.error ?? null,
+    error: (repo) => holding() ?? repos.get(repoKey(repo))?.error ?? null,
   };
 }
