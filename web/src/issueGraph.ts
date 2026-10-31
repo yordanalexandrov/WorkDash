@@ -108,7 +108,7 @@ export function hasDependencies(issue: Pick<Issue, "parent" | "subIssues" | "dep
 }
 
 /**
- * The section's summary line, "3/9 затворени": the head's sub-issues by GitHub's counts. Until the graph comes, by the open
+ * The section's summary line, "3/9 завършени": the head's sub-issues by GitHub's counts. Until the graph comes, by the open
  * repo's issues: the parent's when it is among them, else the issue's own; null when there is nothing to count.
  */
 export function graphSummary(issue: Pick<Issue, "repo" | "parent" | "subIssues">, board: IssueBoardState | null, family: IssueFamily | null): string | null {
@@ -118,7 +118,7 @@ export function graphSummary(issue: Pick<Issue, "repo" | "parent" | "subIssues">
     : parent
       ? nodeInSnapshot(parent, board)?.subIssues
       : issue.subIssues;
-  return progress?.total ? `${progress.completed}/${progress.total} затворени` : null;
+  return progress?.total ? `${progress.completed}/${progress.total} завършени` : null;
 }
 
 /**

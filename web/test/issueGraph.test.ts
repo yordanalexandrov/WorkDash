@@ -199,15 +199,15 @@ describe("graphSummary", () => {
     error: null,
   });
 
-  it("says how many of the head's sub-issues are closed, by the graph once it has come", () => {
-    expect(graphSummary(issue({ number: 3, parent }), null, family({ head: gi(1, { subIssues: { total: 9, completed: 3 } }) }))).toBe("3/9 затворени");
+  it("says how many of the head's sub-issues are completed, by the graph once it has come", () => {
+    expect(graphSummary(issue({ number: 3, parent }), null, family({ head: gi(1, { subIssues: { total: 9, completed: 3 } }) }))).toBe("3/9 завършени");
   });
 
   it("says it by the open repo's issues while the graph loads: the parent's, or the issue's own", () => {
     const board = state([issue({ number: 1, subIssues: { total: 4, completed: 1 } })]);
 
-    expect(graphSummary(issue({ number: 3, parent }), board, null)).toBe("1/4 затворени");
-    expect(graphSummary(issue({ number: 1, subIssues: { total: 4, completed: 1 } }), board, null)).toBe("1/4 затворени");
+    expect(graphSummary(issue({ number: 3, parent }), board, null)).toBe("1/4 завършени");
+    expect(graphSummary(issue({ number: 1, subIssues: { total: 4, completed: 1 } }), board, null)).toBe("1/4 завършени");
     expect(graphSummary(issue({ number: 3, parent: { ...parent, number: 77 } }), board, null)).toBeNull();
     expect(graphSummary(issue({ number: 5 }), board, null)).toBeNull();
   });
