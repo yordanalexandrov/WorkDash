@@ -12,6 +12,10 @@ This repository is public. Never put anything that identifies the author's emplo
 
 Real values belong only in the git-ignored `config.yaml` and `.env`. Examples use placeholders (`my-org/repo-a`, `colleague1`, `ABC-123`, `example.atlassian.net`). Before every commit, push or publish to GitHub, scan what is about to go out for such data and stop if anything matches.
 
+## UI design
+
+Before adding or changing anything the dashboard shows (`web/`), read `docs/design.md`: the board and table views, colour roles, motion and copy conventions every feature follows.
+
 ## Agent skills
 
 ### Issue tracker
