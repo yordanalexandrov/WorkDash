@@ -1,12 +1,12 @@
-import { join } from "node:path";
 import { app } from "electron";
 import { startWorkDash, type WorkDash } from "../../src/workdash.js";
 import { freshLog } from "./log.js";
+import { resources } from "./resources.js";
 import { openTokenStore } from "./tokens.js";
 
-/** The page and its assets: `web/` next to `desktop/` while running from the repository. */
+/** The page and its assets, from the repository or from the installed app's resources. */
 function webRoot(): string {
-  return join(app.getAppPath(), "..", "web");
+  return resources({ packaged: app.isPackaged, appPath: app.getAppPath(), resourcesPath: process.resourcesPath }).webRoot;
 }
 
 /**

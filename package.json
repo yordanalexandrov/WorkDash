@@ -13,12 +13,14 @@
     "watch:web": "npm run build:web -- --watch",
     "build:desktop": "esbuild desktop/src/main.ts --bundle --sourcemap --platform=node --format=cjs --target=node22 --external:electron --external:better-sqlite3 --outfile=desktop/dist/main.cjs",
     "desktop": "npm run build:web && npm run build:desktop && npm --prefix desktop start",
+    "build:deb": "npm run build:web && npm run build:desktop && npm --prefix desktop run deb",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc -p desktop",
     "lint": "oxlint --type-aware --deny-warnings",
     "knip": "knip",
     "guard": "node scripts/public-guard.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "version": "npm --prefix desktop version \"$npm_package_version\" --no-git-tag-version --allow-same-version && git add desktop/package.json desktop/package-lock.json"
   },
   "dependencies": {
     "@fastify/static": "^10.1.8",

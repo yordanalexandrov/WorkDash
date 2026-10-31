@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app, BrowserWindow, screen, shell } from "electron";
 import { linkTarget } from "./links.js";
+import { resources } from "./resources.js";
 import { loadWindowState, saveWindowState } from "./window-state.js";
 
 function stateFile(): string {
@@ -21,7 +22,7 @@ export function openWindow(url: string): BrowserWindow {
     minWidth: 480,
     minHeight: 360,
     title: "WorkDash",
-    icon: join(app.getAppPath(), "..", "web", "public", "icons", "icon-512.png"),
+    icon: resources({ packaged: app.isPackaged, appPath: app.getAppPath(), resourcesPath: process.resourcesPath }).icon,
     show: false,
     webPreferences: {
       contextIsolation: true,

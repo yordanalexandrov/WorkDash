@@ -17,3 +17,5 @@ web/prototype/out/
 
 # The desktop bundle
 desktop/dist/
+# The deb
+desktop/release/

@@ -16,5 +16,5 @@
       "rules": { "typescript/no-base-to-string": "off" }
     }
   ],
-  "ignorePatterns": ["dist", "web/dist", "web/prototype", "desktop/dist"]
+  "ignorePatterns": ["dist", "web/dist", "web/prototype", "desktop/dist", "desktop/release"]
 }
