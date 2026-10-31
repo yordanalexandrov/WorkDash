@@ -43,6 +43,18 @@ _Avoid_: Status, section, lane
 **Stage label**:
 A GitHub label configured as a stage. The issue's other labels are just labels.
 
+**Sub-issue**:
+An issue that GitHub keeps under another issue, its **parent issue**; one level of that tree, not the whole of it.
+_Avoid_: Subtask, child task, subticket
+
+**Blocker** (Блокира):
+An issue that has to be closed before another one can be done, as GitHub records it. An open issue with an open blocker is **blocked** (блокиран).
+_Avoid_: Dependency, prerequisite, "depends on"
+
+**Dependency graph** (Зависимости):
+The picture in an issue's detail sheet of the sub-issues of one parent issue and the blockers between them, with the issue itself marked; for an issue with no parent and no sub-issues, the issue with its own blockers and the issues it blocks.
+_Avoid_: Task graph, dependency tree, roadmap
+
 **Linked PR**:
 A pull request that will close an issue when it merges.
 _Avoid_: Related PR, attached PR
