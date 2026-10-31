@@ -4,7 +4,7 @@ import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { isClosed, issueDates, type ShownIssue } from "../issueDetail.js";
 import { Avatar } from "./Avatar.js";
-import { ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill } from "./IssueMarks.js";
+import { BlockedChip, ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill, SubIssuesChip } from "./IssueMarks.js";
 import { Markdown } from "./Markdown.js";
 
 /** How many comments the sheet lists, the latest first. */
@@ -50,6 +50,8 @@ export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
           <LabelChips labels={isClosed(issue) ? issue.labels : cardLabels(issue)} />
           <MilestoneChip issue={issue} />
           <LinkedPrs issue={issue} />
+          <SubIssuesChip issue={issue} />
+          {isClosed(issue) ? null : <BlockedChip issue={issue} />}
           {issue.comments ? <span class="ic muted">{`💬 ${count(issue.comments, "коментар", "коментара")}`}</span> : null}
         </div>
         <div class="meta people">

@@ -2,8 +2,8 @@ import type { ClosedIssue, StagedIssue } from "../api.js";
 import type { ShownIssue } from "../issueDetail.js";
 import { assignedToMe, stageMark } from "../issueMarks.js";
 import { issueFlipKey } from "../motion.js";
-import { ISSUE_GROUPINGS, issueGroups, type IssueRow as Row, issueRows, issueTableColumns } from "../issueTable.js";
-import { type GroupBy, nextSort, type Sort, sortItems } from "../table.js";
+import { ISSUE_GROUPINGS, issueGroups, type IssueRow as Row, issueRows, issueTableColumns, parentGroupLabel } from "../issueTable.js";
+import { type Group, type GroupBy, nextSort, type Sort, sortItems } from "../table.js";
 import { Avatar } from "./Avatar.js";
 import type { GroupHeadLook } from "./GroupHead.js";
 import { ClosedIssueRow, IssueRow } from "./IssueRow.js";
@@ -45,14 +45,15 @@ type IssueTableProps = {
 
 /**
  * The open repo's issues as a table: the open ones sorted and grouped (by assignee, an issue in the group of each of its
- * assignees), then "Наскоро затворени" folded at the bottom in the server's order.
+ * assignees; by parent, under `#n` and the parent's title), then "Наскоро затворени" folded at the bottom in the server's order.
  */
 export function IssueTable({ issues, closed, stages, hue, viewer, message, query, sort, onSort, groupBy, onGroupBy, collapsed, onToggle, onOpen, openFlip, booted }: IssueTableProps) {
   const columns = issueTableColumns(stages);
   const sorted = sortItems(issues, columns, sort, (issue) => issue.updatedAt);
-  const groups: TableGroup<TableRow>[] = issueRows(issueGroups(sorted, groupBy, stages), collapsed).map((group) => ({
+  const grouped = issueGroups(sorted, groupBy, stages);
+  const groups: TableGroup<TableRow>[] = issueRows(grouped, collapsed).map((group, i) => ({
     id: group.id,
-    ...(groupBy === "none" ? {} : { head: groupHead(groupBy, group.key) }),
+    ...(groupBy === "none" ? {} : { head: groupBy === "parent" ? parentHead(grouped[i]!) : groupHead(groupBy, group.key) }),
     items: group.rows,
   }));
   if (closed.length) {
@@ -98,6 +99,11 @@ export function IssueTable({ issues, closed, stages, hue, viewer, message, query
       }
     />
   );
+}
+
+/** A parent's head: `#n` and its title (`parentGroupLabel`); "Без родител" in `--faint`. */
+function parentHead(group: Group<StagedIssue>): GroupHeadLook {
+  return { color: group.key ? "var(--muted)" : "var(--faint)", label: parentGroupLabel(group, group.items[0]!.repo) };
 }
 
 /** A stage's head in its accent with the label's name; an assignee's with the avatar; a milestone's with ⚑. The empty key is "Без …". */

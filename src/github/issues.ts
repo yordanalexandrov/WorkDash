@@ -46,6 +46,9 @@ fragment IssueFields on Issue {
   closedByPullRequestsReferences(first: ${LINKED_PULL_REQUESTS_PAGE_SIZE}) {
     nodes { number url state isDraft repository { nameWithOwner } }
   }
+  parent { number title repository { nameWithOwner } }
+  subIssuesSummary { total completed }
+  issueDependenciesSummary { blockedBy blocking totalBlockedBy totalBlocking }
 }`;
 
 type IssueNode = {
@@ -62,6 +65,9 @@ type IssueNode = {
   comments: { totalCount: number };
   milestone: { title: string; dueOn: string | null } | null;
   closedByPullRequestsReferences: { nodes: LinkedPullRequestNode[] };
+  parent: { number: number; title: string; repository: { nameWithOwner: string } } | null;
+  subIssuesSummary: { total: number; completed: number };
+  issueDependenciesSummary: { blockedBy: number; blocking: number; totalBlockedBy: number; totalBlocking: number };
 };
 
 type LinkedPullRequestNode = {
@@ -188,6 +194,14 @@ function toIssue(repo: string, node: IssueNode): Issue {
       url: pr.url,
       status: linkedStatus(pr),
     })),
+    parent: node.parent && { repo: node.parent.repository.nameWithOwner, number: node.parent.number, title: node.parent.title },
+    subIssues: { total: node.subIssuesSummary.total, completed: node.subIssuesSummary.completed },
+    dependencies: {
+      blockedBy: node.issueDependenciesSummary.blockedBy,
+      totalBlockedBy: node.issueDependenciesSummary.totalBlockedBy,
+      blocking: node.issueDependenciesSummary.blocking,
+      totalBlocking: node.issueDependenciesSummary.totalBlocking,
+    },
     createdAt: node.createdAt,
     updatedAt: node.updatedAt,
     closedAt: node.closedAt,

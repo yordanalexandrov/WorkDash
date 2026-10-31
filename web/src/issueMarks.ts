@@ -1,7 +1,8 @@
 // The marks of an issue that the card, the table row and the detail sheet all show.
 
 import { sameLogin } from "../../src/domain/activity.js";
-import type { ClosedAs, Issue, LinkedPullRequest, LinkedPullRequestStatus, Milestone } from "../../src/domain/issues.js";
+import type { ClosedAs, Issue, IssueDependencies, LinkedPullRequest, LinkedPullRequestStatus, Milestone, SubIssueProgress } from "../../src/domain/issues.js";
+import { count } from "./badges.js";
 import { shortRepo } from "./format.js";
 import { sameRepo } from "../../src/domain/repos.js";
 
@@ -36,6 +37,19 @@ export function stageMark(stage: string | null): { accent: string; label: string
 /** How a closed issue was closed, as its card, row and sheet say it: completed in `--merged`, not planned in `--muted`. */
 export function closedAsMark(closedAs: ClosedAs): { kind: "merged" | "muted"; text: string } {
   return closedAs === "completed" ? { kind: "merged", text: "🎉 завършен" } : { kind: "muted", text: "не е планиран" };
+}
+
+/** How far the sub-issues are, "3/9" (completed of all), and whether all are done; nothing for an issue without sub-issues. */
+export function subIssuesMark(progress: SubIssueProgress): { text: string; title: string; done: boolean } | null {
+  if (!progress.total) return null;
+  const { total, completed } = progress;
+  return { text: `${completed}/${total}`, title: `sub-issues: ${completed} от ${total} завършени`, done: completed === total };
+}
+
+/** The quiet "блокиран" of an issue with an open blocker, saying by how many on hover; nothing when it has none open. */
+export function blockedMark(dependencies: IssueDependencies): { text: string; title: string } | null {
+  if (!dependencies.blockedBy) return null;
+  return { text: "блокиран", title: `блокиран от ${count(dependencies.blockedBy, "отворен issue", "отворени issues")}` };
 }
 
 /** The milestone's chip: its name, with its due date (GitHub's day, in UTC) on hover. */

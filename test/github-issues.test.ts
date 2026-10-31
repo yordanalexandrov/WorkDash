@@ -30,6 +30,9 @@ function issueNode(number: number, overrides: Record<string, unknown> = {}) {
     comments: { totalCount: 0 },
     milestone: null,
     closedByPullRequestsReferences: { nodes: [] },
+    parent: null,
+    subIssuesSummary: { total: 0, completed: 0 },
+    issueDependenciesSummary: { blockedBy: 0, blocking: 0, totalBlockedBy: 0, totalBlocking: 0 },
     ...overrides,
   };
 }
@@ -175,6 +178,35 @@ describe("fetchIssues", () => {
       { repo: "my-org/repo-a", number: 13, url: "https://github.com/my-org/repo-a/pull/13", status: "closed" },
       { repo: "my-org/repo-b", number: 4, url: "https://github.com/my-org/repo-b/pull/4", status: "open" },
     ]);
+  });
+
+  it("reads the parent, the progress of the sub-issues and how many blockers there are, open and in all, both ways", async () => {
+    const github = fakeGitHub(() =>
+      repository([
+        issueNode(1, {
+          parent: { number: 79, title: "Dependencies", repository: { nameWithOwner: "my-org/repo-a" } },
+          subIssuesSummary: { total: 9, completed: 3 },
+          issueDependenciesSummary: { blockedBy: 1, blocking: 2, totalBlockedBy: 3, totalBlocking: 4 },
+        }),
+        issueNode(2),
+      ]),
+    );
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(github.calls[0]!.query).toMatch(/parent \{ number title repository \{ nameWithOwner \} \}/);
+    expect(github.calls[0]!.query).toMatch(/subIssuesSummary \{ total completed \}/);
+    expect(github.calls[0]!.query).toMatch(/issueDependenciesSummary \{ blockedBy blocking totalBlockedBy totalBlocking \}/);
+    expect(snapshot.issues[0]).toMatchObject({
+      parent: { repo: "my-org/repo-a", number: 79, title: "Dependencies" },
+      subIssues: { total: 9, completed: 3 },
+      dependencies: { blockedBy: 1, blocking: 2, totalBlockedBy: 3, totalBlocking: 4 },
+    });
+    expect(snapshot.issues[1]).toMatchObject({
+      parent: null,
+      subIssues: { total: 0, completed: 0 },
+      dependencies: { blockedBy: 0, blocking: 0, totalBlockedBy: 0, totalBlocking: 0 },
+    });
   });
 
   it("says how many are open in all when there are more than one page", async () => {

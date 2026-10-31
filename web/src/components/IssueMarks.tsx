@@ -1,5 +1,5 @@
 import type { ClosedAs, Issue, IssueLabel } from "../../../src/domain/issues.js";
-import { closedAsMark, linkedPrMark, milestoneMark, stageMark } from "../issueMarks.js";
+import { blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../issueMarks.js";
 import { labelChip } from "../labels.js";
 import { SectionPill } from "./SectionPill.js";
 
@@ -35,6 +35,28 @@ export function StagePill({ stage }: { stage: string | null }) {
 export function ClosedAsMark({ closedAs }: { closedAs: ClosedAs }) {
   const { kind, text } = closedAsMark(closedAs);
   return <span class={`closed-st ${kind}`}>{text}</span>;
+}
+
+/** How far the issue's sub-issues are, "3/9", in `--merged` once all are done (`subIssuesMark`); nothing without sub-issues. */
+export function SubIssuesChip({ issue }: { issue: Pick<Issue, "subIssues"> }) {
+  const mark = subIssuesMark(issue.subIssues);
+  if (!mark) return null;
+  return (
+    <span class={mark.done ? "subs done" : "subs"} title={mark.title}>
+      {mark.text}
+    </span>
+  );
+}
+
+/** The quiet "блокиран" of an issue with an open blocker, in `--pending` and never pulsing (`blockedMark`); nothing without one. */
+export function BlockedChip({ issue }: { issue: Pick<Issue, "dependencies"> }) {
+  const mark = blockedMark(issue.dependencies);
+  if (!mark) return null;
+  return (
+    <span class="blocked" title={mark.title}>
+      {mark.text}
+    </span>
+  );
 }
 
 /** The issue's milestone as a quiet chip, its due date on hover; nothing when it has none. */

@@ -6,7 +6,7 @@ import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
-import { ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill } from "./IssueMarks.js";
+import { BlockedChip, ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill, SubIssuesChip } from "./IssueMarks.js";
 
 const none = <span class="dim">·</span>;
 
@@ -77,6 +77,8 @@ export function IssueRow({ issue, flip, hue, index, mine, onOpen, ghost }: Issue
       </span>
       <span class="tc">{issue.milestone ? <MilestoneChip issue={issue} /> : none}</span>
       <span class="tc">{issue.linkedPullRequests.length ? <LinkedPrs issue={issue} /> : none}</span>
+      <span class="tc">{issue.subIssues.total ? <SubIssuesChip issue={issue} /> : none}</span>
+      <span class="tc c">{issue.dependencies.blockedBy ? <BlockedChip issue={issue} /> : none}</span>
       <span class="tc r">
         <span class="age" title={`отворен ${new Date(issue.createdAt).toLocaleString()}`}>
           {age(issue.createdAt)}
@@ -135,7 +137,7 @@ export function ClosedIssueRow({ issue, hue, index, onOpen, ghost }: ClosedIssue
         <Avatar login={issue.author} title={`автор: ${issue.author}`} />
         <span>{issue.author}</span>
       </span>
-      <span class="tc span3">
+      <span class="tc span5">
         <ClosedAsMark closedAs={issue.closedAs} />
       </span>
       <span class="tc r span2">

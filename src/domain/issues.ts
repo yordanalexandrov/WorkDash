@@ -22,6 +22,18 @@ export type LinkedPullRequestStatus = "open" | "draft" | "merged" | "closed";
 /** A Linked PR: a pull request that will close the issue when it merges, perhaps in another repo. */
 export type LinkedPullRequest = { repo: string; number: number; url: string; status: LinkedPullRequestStatus };
 
+/** The parent issue of a sub-issue: its repo (perhaps another), number and title. */
+export type ParentIssue = { repo: string; number: number; title: string };
+
+/** How far an issue's sub-issues are: how many it has, and how many of them are closed as completed. */
+export type SubIssueProgress = { total: number; completed: number };
+
+/**
+ * An issue's blockers as GitHub counts them, both ways: the open issues blocking it and all of them, the open issues it
+ * blocks and all of them. An open issue with an open blocker is blocked.
+ */
+export type IssueDependencies = { blockedBy: number; totalBlockedBy: number; blocking: number; totalBlocking: number };
+
 /** An open issue of a followed repo. */
 export type Issue = {
   repo: string;
@@ -39,6 +51,10 @@ export type Issue = {
   latestComments: Comment[];
   milestone: Milestone | null;
   linkedPullRequests: LinkedPullRequest[];
+  /** The issue it is a sub-issue of; null when it is none's. */
+  parent: ParentIssue | null;
+  subIssues: SubIssueProgress;
+  dependencies: IssueDependencies;
   createdAt: string;
   updatedAt: string;
   /** When it was closed; null while it is open. */

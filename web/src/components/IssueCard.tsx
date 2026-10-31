@@ -6,7 +6,7 @@ import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
-import { LabelChips, LinkedPrs, MeChip, MilestoneChip } from "./IssueMarks.js";
+import { BlockedChip, LabelChips, LinkedPrs, MeChip, MilestoneChip, SubIssuesChip } from "./IssueMarks.js";
 
 type IssueCardProps = {
   issue: StagedIssue;
@@ -24,7 +24,8 @@ type IssueCardProps = {
 
 /**
  * An open issue on the Issue dashboard's board: number, age, title, its labels but the stage label, the author, the
- * comment count and the assignees; its milestone and Linked PRs when it has them, and "теб" when it is mine. No repo tag: the tab says the repo, the stripe and tint its project colour.
+ * comment count and the assignees; its milestone and Linked PRs when it has them, "теб" when it is mine, the progress of its
+ * sub-issues ("3/9") and a quiet "блокиран" when it has an open blocker. No repo tag: the tab says the repo, the stripe and tint its project colour.
  * The slot is what moves (entrance, FLIP), as on the PR board. A click or Enter on it opens its detail sheet.
  */
 export function IssueCard({ issue, hue, index, mine, onOpen, ghost }: IssueCardProps) {
@@ -36,6 +37,7 @@ export function IssueCard({ issue, hue, index, mine, onOpen, ghost }: IssueCardP
         <div class="card-top">
           <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>
           {mine ? <MeChip /> : null}
+          <BlockedChip issue={issue} />
           <span class="age" title={`отворен ${new Date(issue.createdAt).toLocaleString()} · обновен преди ${age(issue.updatedAt)}`}>
             {age(issue.createdAt)}
           </span>
@@ -61,6 +63,7 @@ export function IssueCard({ issue, hue, index, mine, onOpen, ghost }: IssueCardP
               {`💬 ${issue.comments}`}
             </span>
           ) : null}
+          <SubIssuesChip issue={issue} />
           <div class="people" title="назначени">
             {issue.assignees.map((login) => (
               <Avatar key={login} login={login} title={`назначен: ${login}`} />

@@ -1187,6 +1187,39 @@ kbd {
   line-height: 16px;
 }
 
+/* "блокиран": an open issue with an open blocker. Quiet like "теб", but in the status colour --pending; never a pulse. */
+.blocked {
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--pending) 45%, transparent);
+  border-radius: 999px;
+  color: var(--pending);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* The progress of an issue's sub-issues, "3/9": muted, --merged once all are completed. */
+.subs {
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.subs::before {
+  content: "☑ ";
+}
+
+.subs.done {
+  color: var(--merged);
+}
+
 /* An issue's milestone and its Linked PRs (the PRs as .ic chips in their status colours). */
 .issue-meta,
 .linked {
@@ -1464,14 +1497,14 @@ kbd {
   }
 }
 
-/* The Issue table: #, title, stage, labels, assignees, author, 💬, milestone, Linked PRs, age, updated. */
+/* The Issue table: #, title, stage, labels, assignees, author, 💬, milestone, Linked PRs, sub-issues, blocked by, age, updated. */
 .tgrid.issues {
-  grid-template-columns: 46px minmax(260px, 1fr) minmax(70px, 140px) minmax(110px, 240px) max-content max-content 40px minmax(60px, 140px) max-content 46px 50px;
+  grid-template-columns: 46px minmax(260px, 1fr) minmax(70px, 140px) minmax(110px, 240px) max-content max-content 40px minmax(60px, 140px) max-content max-content max-content 46px 50px;
 }
 
 @media (max-width: 1400px) {
   .tgrid.issues {
-    grid-template-columns: 46px minmax(170px, 1fr) minmax(70px, 120px) minmax(90px, 180px) max-content max-content 40px minmax(60px, 120px) max-content 46px 50px;
+    grid-template-columns: 46px minmax(170px, 1fr) minmax(70px, 120px) minmax(90px, 180px) max-content max-content 40px minmax(60px, 120px) max-content max-content max-content 46px 50px;
   }
 }
 
@@ -1715,8 +1748,8 @@ kbd {
   grid-column: span 2;
 }
 
-.tc.span3 {
-  grid-column: span 3;
+.tc.span5 {
+  grid-column: span 5;
 }
 
 /* An issue row's labels wrap rather than being cut, like the Jira keys; its assignees start at the cell's left. */

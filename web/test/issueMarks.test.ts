@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignedToMe, closedAsMark, linkedPrMark, milestoneMark, stageMark } from "../src/issueMarks.js";
+import { assignedToMe, blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../src/issueMarks.js";
 
 const linked = (status: "open" | "draft" | "merged" | "closed", repo = "my-org/repo-a", number = 12) => ({
   repo,
@@ -63,5 +63,33 @@ describe("closedAsMark", () => {
   it("says a completed issue in --merged and one not planned in --muted", () => {
     expect(closedAsMark("completed")).toEqual({ kind: "merged", text: "🎉 завършен" });
     expect(closedAsMark("not_planned")).toEqual({ kind: "muted", text: "не е планиран" });
+  });
+});
+
+describe("subIssuesMark", () => {
+  it("says how many of the sub-issues are completed, of how many", () => {
+    expect(subIssuesMark({ total: 9, completed: 3 })).toEqual({ text: "3/9", title: "sub-issues: 3 от 9 завършени", done: false });
+  });
+
+  it("says when every sub-issue is done", () => {
+    expect(subIssuesMark({ total: 2, completed: 2 })).toMatchObject({ text: "2/2", done: true });
+  });
+
+  it("is nothing for an issue without sub-issues", () => {
+    expect(subIssuesMark({ total: 0, completed: 0 })).toBeNull();
+  });
+});
+
+describe("blockedMark", () => {
+  const deps = (blockedBy: number, totalBlockedBy = blockedBy) => ({ blockedBy, totalBlockedBy, blocking: 0, totalBlocking: 0 });
+
+  it("marks an issue with an open blocker blocked, saying by how many", () => {
+    expect(blockedMark(deps(1))).toEqual({ text: "блокиран", title: "блокиран от 1 отворен issue" });
+    expect(blockedMark(deps(2, 3))).toEqual({ text: "блокиран", title: "блокиран от 2 отворени issues" });
+  });
+
+  it("is nothing when all its blockers are closed, or it has none", () => {
+    expect(blockedMark(deps(0, 2))).toBeNull();
+    expect(blockedMark(deps(0))).toBeNull();
   });
 });
