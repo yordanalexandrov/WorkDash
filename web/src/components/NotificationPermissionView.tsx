@@ -5,11 +5,9 @@ export function NotificationPermissionView({ permission, enable }: Notifications
   if (permission === "granted") return null;
   if (permission === "default") {
     return (
-      <p id="notifications">
-        <button type="button" onClick={enable}>
-          Включи нотификациите
-        </button>
-      </p>
+      <button type="button" id="notifications" class="chip" onClick={enable}>
+        Включи нотификациите
+      </button>
     );
   }
   return (

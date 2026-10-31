@@ -13,6 +13,11 @@ export function sectionTitle(section: Section): string {
   return SECTION_TITLES[section] ?? section;
 }
 
+/** The repo's name without its owner: "my-org/repo-a" → "repo-a". */
+export function shortRepo(repo: string): string {
+  return repo.slice(repo.indexOf("/") + 1);
+}
+
 /** How long ago `since` was, in whole hours under a day and whole days after that. */
 export function age(since: string, now: Date = new Date()): string {
   const hours = Math.floor((now.getTime() - new Date(since).getTime()) / 3_600_000);

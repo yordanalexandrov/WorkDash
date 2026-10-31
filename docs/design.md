@@ -1,6 +1,6 @@
 # Dashboard design
 
-The conventions every screen and feature of the dashboard follows. The target design is the **living board**: an animated kanban of PRs plus a table as a second view of the same PRs. Its reference implementation is the prototype `web/prototype/variants/H.tsx` on the `prototype/dashboard-layouts` branch (`git show prototype/dashboard-layouts:web/prototype/variants/H.tsx`); run it with `npm run prototype` there. Until the living board lands in `web/src`, the UI on `main` is the older repo-card layout; build new UI to this document, not to that layout.
+The conventions every screen and feature of the dashboard follows. The target design is the **living board**: an animated kanban of PRs plus a table as a second view of the same PRs. Its reference implementation is the prototype `web/prototype/variants/H.tsx` on the `prototype/dashboard-layouts` branch (`git show prototype/dashboard-layouts:web/prototype/variants/H.tsx`); run it with `npm run prototype` there. The board (without motion yet) lives in `web/src`: `board.ts`, `palette.ts`, `marks.ts` and the components in `web/src/components`; the tokens are in `web/public/style.css`.
 
 Once the implementation exists, the code holds the values (tokens, palette, springs) and this document keeps only the rules and the reasons. Update both together.
 
