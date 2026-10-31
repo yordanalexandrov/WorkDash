@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Banners } from "./components/Banners.js";
 import { DashboardToggle } from "./components/DashboardToggle.js";
-import { IssueDashboard } from "./components/IssueDashboard.js";
+import { ISSUE_DASHBOARD_KEPT, IssueDashboard } from "./components/IssueDashboard.js";
 import { PollControls } from "./components/PollControls.js";
 import { PrDashboard } from "./components/PrDashboard.js";
 import { Settings } from "./components/Settings.js";
@@ -53,6 +53,8 @@ export function App() {
   const [view, setView] = useState<View>(() => readView(location.search));
   // The Issue dashboard's filter lives here: the dashboard unmounts behind the PRs and Settings, and the filter outlasts that.
   const [issueFilter, setIssueFilter] = useState(NO_FILTER);
+  // So do its table settings and the size of its detail sheet.
+  const [issueKept, setIssueKept] = useState(ISSUE_DASHBOARD_KEPT);
   const hues = useMemo(() => projectHues(state), [state]);
   // Where each dashboard puts its part of the top bar (the toolbar, the repo tabs), under the toggles.
   const [topSlot, setTopSlot] = useState<HTMLDivElement | null>(null);
@@ -168,6 +170,8 @@ export function App() {
             filter={issueFilter}
             onFilter={setIssueFilter}
             viewer={state.viewer}
+            kept={issueKept}
+            onKept={setIssueKept}
             view={view}
             topSlot={topSlot}
             fx={fx}

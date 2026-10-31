@@ -12,7 +12,7 @@ import { findIssue, issueKey, type ShownIssue } from "../issueDetail.js";
 import { assignedToMe } from "../issueMarks.js";
 import { BOUNCE, issueFlipKey, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
-import { type GroupBy, toggleCollapsed } from "../table.js";
+import { type GroupBy, type Sort, toggleCollapsed } from "../table.js";
 import { ESCAPE, F, I, R, SLASH, T, useShortcuts } from "../useShortcuts.js";
 import type { View } from "../view.js";
 import { Board } from "./Board.js";
@@ -46,6 +46,15 @@ function refocus(sheet: OpenSheet): void {
   });
 }
 
+/**
+ * What of the dashboard outlasts it while it unmounts behind the PRs and Settings, until a reload: the table's sort, grouping
+ * and folded groups, and the detail sheet's size, as the PR dashboard keeps its own.
+ */
+type IssueDashboardKept = { sort: Sort; groupBy: GroupBy; collapsed: ReadonlySet<string>; expanded: boolean };
+
+/** How the dashboard first shows: the table sorted by stage, ungrouped, with "Наскоро затворени" folded; the sheet in its small size. */
+export const ISSUE_DASHBOARD_KEPT: IssueDashboardKept = { sort: ISSUE_DEFAULT_SORT, groupBy: "none", collapsed: new Set([CLOSED_ISSUES]), expanded: false };
+
 type IssueDashboardProps = {
   /** The followed repos whose issues are on, as the last poll read them. */
   issueRepos: string[];
@@ -63,6 +72,9 @@ type IssueDashboardProps = {
   onFilter(filter: Filter): void;
   /** Who I am, for "само моите" and the "теб" on the issues assigned to me; null until the first poll says. */
   viewer: string | null;
+  /** What outlasts the dashboard (`ISSUE_DASHBOARD_KEPT`); the app keeps it. */
+  kept: IssueDashboardKept;
+  onKept(update: (kept: IssueDashboardKept) => IssueDashboardKept): void;
   /** Board or table, as the app's toggle says. */
   view: View;
   /** Where in the top bar the tabs go, below the toggles. */
@@ -104,7 +116,7 @@ function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardS
  * table, and the detail sheet of one issue. Its own keys (`/` and Esc for the filter; Esc and `f` while the sheet is open,
  * which also takes `/`, `t`, `i` and `r`) come before the app's.
  */
-export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, view, topSlot, fx, booted }: IssueDashboardProps) {
+export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, kept, onKept, view, topSlot, fx, booted }: IssueDashboardProps) {
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
@@ -113,18 +125,15 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const columns = useMemo(() => (shown ? filterIssueColumns(issueColumns(shown), filter, viewer) : []), [shown, filter, viewer]);
   const keptIssues = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer) : []), [shown, filter, viewer]);
   const keptClosed = useMemo(() => (shown ? filterIssues(shown.closed, filter, viewer) : []), [shown, filter, viewer]);
-  // The table's sort, grouping and folded groups outlast a trip to the board and a change of tab, not one to the PRs.
-  const [sort, setSort] = useState(ISSUE_DEFAULT_SORT);
-  const [groupBy, setGroupBy] = useState<GroupBy>("none");
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set([CLOSED_ISSUES]));
+  // The table's sort, grouping and folded groups outlast a trip to the board, a change of tab and one to the PRs or Settings.
+  const { sort, groupBy, collapsed, expanded } = kept;
+  const setExpanded = (toggle: (current: boolean) => boolean) => onKept((current) => ({ ...current, expanded: toggle(current.expanded) }));
   const filterInput = useRef<HTMLInputElement>(null);
 
   // The detail sheet. A card opens it with `openSheet`, and so does a row of the table: both carry the issue's FLIP key, which
   // the sheet grows out of and shrinks back into; so do a closed card and row. It shows the issue as the state has it now (an
   // issue that closes while it is open shows closed), or as it last was once it is gone.
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
-  // The sheet's last size: the next one opens in it, while the dashboard shows.
-  const [expanded, setExpanded] = useState(false);
   const openKey = sheet ? issueKey(sheet.issue) : null;
   const live = openKey ? findIssue(shown, openKey) : undefined;
   const shownSheet = useRef<ShownIssue>();
@@ -198,11 +207,11 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
           message={boardMessage(open, fetched, shown) ?? (shown ? null : "")}
           query={filter.query}
           sort={sort}
-          onSort={setSort}
+          onSort={(next) => onKept((current) => ({ ...current, sort: next }))}
           groupBy={groupBy}
-          onGroupBy={setGroupBy}
+          onGroupBy={(by) => onKept((current) => ({ ...current, groupBy: by }))}
           collapsed={collapsed}
-          onToggle={(id) => setCollapsed((current) => toggleCollapsed(current, id))}
+          onToggle={(id) => onKept((current) => ({ ...current, collapsed: toggleCollapsed(current.collapsed, id) }))}
           onOpen={openSheet}
           openFlip={sheet?.flip ?? null}
           booted={booted}
