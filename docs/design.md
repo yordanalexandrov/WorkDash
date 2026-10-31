@@ -54,11 +54,12 @@ Surfaces: a slow gradient-mesh background with a faint dot grid; columns and the
 
 Motion explains change: where something came from, where it went, what needs attention. It is *alive but calm*: the board breathes, it never shouts.
 
-- Animate only `transform` and `opacity` so it stays at 60fps.
+- Animate only `transform` and `opacity` so it stays at 60fps. One exception: the flyers of the view switch move their box by `left`/`top`/`width`/`height`, so a card's stripe and tint stretch into a row without distortion; they are `position: fixed` copies in the `.fx` layer (`contain: strict`), outside the board's flow, so nothing on the board lays out again.
 - Two springs, sampled into CSS `linear()` easings: **glide** (stiffness 260, damping 24) for things moving to a new place, **bounce** (320, 16) for things arriving or being dropped. Reuse them; a new animation picks one of the two instead of inventing a curve: `GLIDE`/`BOUNCE` from `motion.ts` in script, `var(--glide)`/`var(--bounce)` with `--glide-ms`/`--bounce-ms` in CSS. Only endless keyframes (pulse, halo, drift, spinners) use a plain curve.
 - FLIP keys: `data-flip="pr:<repo>#<number>"` for a card (and later its row), `col:<id>` for a column; the same PR has the same key in every view. `useFlip` runs on the element with `data-flip-root`.
 - **FLIP** every reorder: when filtering, sorting, grouping, folding a column or removing a PR, the remaining items glide from their old position to the new one. Nothing jumps.
 - Entrances cascade: columns, then cards (or rows) with a short stagger.
+- **Card ↔ row morph** on switching the view: every card or row in sight is lifted into `.fx` (`liftFlyers`) and lands on the same PR in the new view (`land`), top to bottom; one with no place there falls away, one with no flyer bounces in. The entrance cascade plays once per page, never on a switch; a switch in mid-flight ends the last one at once (`finishLanding`).
 - Pulse and glow mean *urgent*: only "Чака теб" items pulse, harder for CI/Sonar failed, review requested, changes requested, conflict and mention. Decoration never pulses.
 - Delight (confetti on merged, sparks on "видях", the 3D tilt on hover) stays small and short, and never covers content.
 - `prefers-reduced-motion: reduce` turns off everything except instant state changes.

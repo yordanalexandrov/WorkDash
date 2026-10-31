@@ -303,3 +303,160 @@ export function slideOut(el: HTMLElement, left: () => Promise<void>, shape: "car
     .then(() => setTimeout(() => exit.cancel(), MAX_HOLD_MS))
     .catch(() => exit.cancel());
 }
+
+/** Whether `rect` has a width and crosses a viewport of `w` × `h`. */
+export function visibleIn(rect: DOMRectReadOnly, w: number, h: number): boolean {
+  return rect.width > 0 && rect.bottom > 0 && rect.top < h && rect.right > 0 && rect.left < w;
+}
+
+/** How far apart the flyers set off, top to bottom, and the latest any sets off. */
+const STAGGER_MS = 18;
+const MAX_STAGGER_MS = 260;
+
+export type Landing = { pairs: { key: string; delay: number }[]; leaving: string[]; arriving: string[] };
+
+/** Which lifted keys land on a target, which leave with none, and which targets arrive with no flyer. */
+export function planLanding(flyerKeys: string[], targetKeys: string[]): Landing {
+  const targets = new Set(targetKeys);
+  const lifted = new Set(flyerKeys);
+  return {
+    pairs: flyerKeys.filter((key) => targets.has(key)).map((key, i) => ({ key, delay: Math.min(i * STAGGER_MS, MAX_STAGGER_MS) })),
+    leaving: flyerKeys.filter((key) => !targets.has(key)),
+    arriving: targetKeys.filter((key) => !lifted.has(key)),
+  };
+}
+
+/** The CSS entrance keyframes (style.css): a view switched to lands instead of entering from the start. */
+const ENTRANCES = new Set(["col-enter", "enter", "row-enter"]);
+
+/** A copy of a card or row, lifted into the effects layer where the original was, by the original's FLIP key. */
+export type Flyer = { key: string; from: DOMRectReadOnly; el: HTMLElement };
+
+/** The box of an absolutely placed element at `rect`; the effects layer covers the viewport, so viewport coordinates. */
+function box(rect: DOMRectReadOnly): Keyframe {
+  return { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` };
+}
+
+/**
+ * Copies every [data-flip^="pr:"] under `root` that shows in the viewport into `layer`, on its rect, before the old view goes.
+ * A copy is only a picture: no key, id, focus or animations of its own. Nothing is lifted under reduced motion.
+ */
+export function liftFlyers(root: HTMLElement, layer: HTMLElement): Flyer[] {
+  if (reducedMotion()) return [];
+  const flyers: Flyer[] = [];
+  root.querySelectorAll<HTMLElement>('[data-flip^="pr:"]').forEach((el) => {
+    const from = el.getBoundingClientRect();
+    if (!visibleIn(from, innerWidth, innerHeight)) return;
+    const copy = el.cloneNode(true) as HTMLElement;
+    copy.removeAttribute("data-flip");
+    copy.classList.remove("ghost");
+    copy.classList.add("flyer");
+    copy.querySelectorAll("[id]").forEach((child) => child.removeAttribute("id"));
+    copy.removeAttribute("id");
+    copy.removeAttribute("tabindex");
+    copy.inert = true;
+    copy.setAttribute("aria-hidden", "true");
+    // A row lays its cells on the table's subgrid, which the layer has not: it keeps the tracks it had.
+    Object.assign(copy.style, box(from), { gridTemplateColumns: getComputedStyle(el).gridTemplateColumns });
+    layer.appendChild(copy);
+    flyers.push({ key: el.dataset.flip!, from, el: copy });
+  });
+  return flyers;
+}
+
+/** The landing under way: its flyers and every animation it started, so a switch in the middle can end it at once. */
+let landing: { flyers: HTMLElement[]; animations: Animation[] } | null = null;
+
+/** Ends the landing under way at once: the flyers go, the targets show. */
+export function finishLanding(): void {
+  const current = landing;
+  landing = null;
+  if (!current) return;
+  for (const animation of current.animations) animation.finish();
+  for (const el of current.flyers) el.remove();
+}
+
+/**
+ * The view under `root` has just replaced the one the flyers were lifted from: its entrances are dropped (nothing enters from the
+ * start), each flyer's box glides onto the element with its key and hands over to it, a flyer with none falls away, an element
+ * with no flyer bounces in, and the columns, panel and group heads rise a little. Holds the board's gate until it is all over.
+ */
+export function land(root: HTMLElement, flyers: Flyer[]): Promise<void> {
+  finishLanding();
+  if (reducedMotion()) {
+    flyers.forEach((flyer) => flyer.el.remove());
+    return Promise.resolve();
+  }
+  for (const animation of root.getAnimations({ subtree: true })) {
+    if (animation instanceof CSSAnimation && ENTRANCES.has(animation.animationName)) animation.cancel();
+  }
+  const targets = new Map<string, HTMLElement>();
+  root.querySelectorAll<HTMLElement>('[data-flip^="pr:"]').forEach((el) => targets.set(el.dataset.flip!, el));
+  const lifted = new Map(flyers.map((flyer) => [flyer.key, flyer]));
+  const plan = planLanding([...lifted.keys()], [...targets.keys()]);
+  // Measured before anything moves, so every flyer heads for where its target rests.
+  const rests = new Map(plan.pairs.map(({ key }) => [key, targets.get(key)!.getBoundingClientRect()]));
+  const animations: Animation[] = [];
+  const run = (el: Element, keyframes: Keyframe[], options: KeyframeAnimationOptions) => {
+    const animation = el.animate(keyframes, options);
+    animations.push(animation);
+    return animation;
+  };
+  // A flyer goes as soon as it has handed over or fallen away, not when the whole landing is over.
+  const drop = (flyer: Flyer, last: Animation) => {
+    void last.finished.then(
+      () => flyer.el.remove(),
+      () => {},
+    );
+  };
+  const handOver = Math.round(GLIDE.duration * 0.25);
+
+  for (const { key, delay } of plan.pairs) {
+    const flyer = lifted.get(key)!;
+    const arrive = delay + GLIDE.duration;
+    // The box (tint, stripe, shadow) travels; what it showed fades out early, and the target shows once the box is there.
+    flyer.el.querySelectorAll(":scope > .card > *, :scope > .tc").forEach((bit) =>
+      run(bit, [{ opacity: 1 }, { opacity: 0 }], { duration: GLIDE.duration * 0.2, delay, fill: "both" }),
+    );
+    run(flyer.el, [box(flyer.from), box(rests.get(key)!)], { duration: GLIDE.duration, delay, easing: GLIDE.easing, fill: "both" });
+    drop(flyer, run(flyer.el, [{ opacity: 1 }, { opacity: 0 }], { duration: handOver, delay: arrive, fill: "both" }));
+    run(targets.get(key)!, [{ opacity: 0 }, { opacity: 0, offset: arrive / (arrive + handOver) }, { opacity: 1 }], {
+      duration: arrive + handOver,
+    });
+  }
+  for (const key of plan.leaving) {
+    const flyer = lifted.get(key)!;
+    drop(
+      flyer,
+      run(flyer.el, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(12px) scale(.86)" }], {
+        duration: GLIDE.duration,
+        easing: GLIDE.easing,
+        fill: "both",
+      }),
+    );
+  }
+  plan.arriving.forEach((key, i) =>
+    run(targets.get(key)!, [{ opacity: 0, transform: "translateY(18px) scale(.96)" }, { opacity: 1, transform: "none" }], {
+      duration: BOUNCE.duration,
+      delay: 300 + Math.min(i, 24) * 28,
+      easing: BOUNCE.easing,
+      fill: "backwards",
+    }),
+  );
+  root.querySelectorAll(".col, .tpanel, .tgroup").forEach((el, i) =>
+    run(el, [{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], {
+      duration: GLIDE.duration,
+      delay: Math.min(i, 8) * 45,
+      easing: GLIDE.easing,
+      fill: "backwards",
+    }),
+  );
+
+  const current = { flyers: flyers.map((flyer) => flyer.el), animations };
+  landing = current;
+  const done = Promise.all(animations.map((animation) => animation.finished.catch(() => undefined))).then(() => {
+    if (landing === current) landing = null;
+  });
+  holdWhile(done);
+  return done;
+}
