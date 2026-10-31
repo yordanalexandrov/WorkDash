@@ -4,14 +4,19 @@ import { useEffect, useMemo, useRef } from "preact/hooks";
 import type { IssueBoardState } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
 import { confetti, middleOf, newlyCompleted } from "../effects.js";
+import type { Filter } from "../filter.js";
 import { shortRepo } from "../format.js";
 import { issueColumns } from "../issueBoard.js";
+import { filterIssueColumns, filterIssues } from "../issueFilter.js";
+import { assignedToMe } from "../issueMarks.js";
 import { BOUNCE, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
+import { ESCAPE, SLASH, useShortcuts } from "../useShortcuts.js";
 import { Board } from "./Board.js";
 import { ClosedIssueCard } from "./ClosedIssueCard.js";
 import { IssueCard } from "./IssueCard.js";
 import { IssueTabs } from "./IssueTabs.js";
+import { Toolbar } from "./Toolbar.js";
 
 type IssueDashboardProps = {
   /** The followed repos whose issues are on, as the last poll read them. */
@@ -25,6 +30,11 @@ type IssueDashboardProps = {
   /** The repo the URL asks for; the first tab opens when it has none. */
   repo: string | null;
   onRepo(repo: string): void;
+  /** The toolbar's filter, its own and not the PR dashboard's; the app keeps it, so it outlasts a trip to the PRs or Settings and a change of tab. */
+  filter: Filter;
+  onFilter(filter: Filter): void;
+  /** Who I am, for "само моите" and the "теб" on the issues assigned to me; null until the first poll says. */
+  viewer: string | null;
   /** Where in the top bar the tabs go, below the toggles. */
   topSlot: HTMLElement | null;
   /** The effects layer, for the confetti of an issue completed while the board shows. */
@@ -58,13 +68,26 @@ function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardS
   return issues.issues.length === 0 && issues.closed.length === 0 ? `${shortRepo(open)} няма отворени issues.` : null;
 }
 
-/** The Issue dashboard: a tab per repo in the top bar, and the open repo's issues on a board by stage. */
-export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, topSlot, fx, booted }: IssueDashboardProps) {
+/**
+ * The Issue dashboard: a tab per repo and the toolbar in the top bar, and the open repo's issues on a board by stage.
+ * Its own keys (`/` and Esc for the filter) come before the app's.
+ */
+export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, topSlot, fx, booted }: IssueDashboardProps) {
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
   const shown = issues && open && issues.repo.toLowerCase() === open.toLowerCase() ? issues : null;
-  const columns = useMemo(() => (shown ? issueColumns(shown) : []), [shown]);
+  // Every column the board has goes through the filter; the toolbar's "N от M" counts the open issues.
+  const columns = useMemo(() => (shown ? filterIssueColumns(issueColumns(shown), filter, viewer) : []), [shown, filter, viewer]);
+  const kept = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer).length : 0), [shown, filter, viewer]);
+  const filterInput = useRef<HTMLInputElement>(null);
+  useShortcuts(
+    [
+      { matches: SLASH, run: () => filterInput.current?.focus() },
+      { matches: ESCAPE, run: () => onFilter({ ...filter, query: "" }) },
+    ],
+    { first: true },
+  );
   const hue = open ? repoHue(hues, open) : 0;
   const note = shownOfTotal(shown);
 
@@ -83,11 +106,22 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
     <>
       {topSlot && tabs.length
         ? createPortal(
-            <IssueTabs
-              tabs={tabs.map((r) => ({ repo: r, name: shortRepo(r), hue: repoHue(hues, r), note: r === open ? note : null }))}
-              open={open}
-              onOpen={onRepo}
-            />,
+            <>
+              <IssueTabs
+                tabs={tabs.map((r) => ({ repo: r, name: shortRepo(r), hue: repoHue(hues, r), note: r === open ? note : null }))}
+                open={open}
+                onOpen={onRepo}
+              />
+              <Toolbar
+                placeholder="Филтър: #, заглавие, етикет, assignee, milestone…"
+                filter={filter}
+                onChange={onFilter}
+                canFilterMine={viewer !== null}
+                shown={kept}
+                total={shown?.issues.length ?? 0}
+                inputRef={filterInput}
+              />
+            </>,
             topSlot,
           )
         : null}
@@ -95,7 +129,9 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
         {(column) =>
           column.closed
             ? column.items.map((issue, index) => <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
-            : column.items.map((issue, index) => <IssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
+            : column.items.map((issue, index) => (
+                <IssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} mine={assignedToMe(issue, viewer)} />
+              ))
         }
       </Board>
     </>

@@ -26,6 +26,8 @@ function issueNode(number: number, overrides: Record<string, unknown> = {}) {
     labels: { nodes: [] },
     assignees: { nodes: [] },
     comments: { totalCount: 0 },
+    milestone: null,
+    closedByPullRequestsReferences: { nodes: [] },
     ...overrides,
   };
 }
@@ -116,6 +118,39 @@ describe("fetchIssues", () => {
         }),
       ],
     });
+  });
+
+  it("reads the milestone with its due date, and none when the issue has none", async () => {
+    const github = fakeGitHub(() =>
+      repository([issueNode(1, { milestone: { title: "v2.0", dueOn: "2026-11-30T00:00:00Z" } }), issueNode(2, { milestone: { title: "Someday", dueOn: null } }), issueNode(3)]),
+    );
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(snapshot.issues.map((i) => i.milestone)).toEqual([{ title: "v2.0", dueOn: "2026-11-30T00:00:00Z" }, { title: "Someday", dueOn: null }, null]);
+  });
+
+  it("reads the linked PRs, each with its repo and whether it is open, a draft, merged or closed", async () => {
+    const pr = (number: number, state: string, isDraft = false, repo = "my-org/repo-a") => ({
+      number,
+      url: `https://github.com/${repo}/pull/${number}`,
+      state,
+      isDraft,
+      repository: { nameWithOwner: repo },
+    });
+    const github = fakeGitHub(() =>
+      repository([issueNode(1, { closedByPullRequestsReferences: { nodes: [pr(10, "OPEN"), pr(11, "OPEN", true), pr(12, "MERGED"), pr(13, "CLOSED"), pr(4, "OPEN", false, "my-org/repo-b")] } })]),
+    );
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(snapshot.issues[0]!.linkedPullRequests).toEqual([
+      { repo: "my-org/repo-a", number: 10, url: "https://github.com/my-org/repo-a/pull/10", status: "open" },
+      { repo: "my-org/repo-a", number: 11, url: "https://github.com/my-org/repo-a/pull/11", status: "draft" },
+      { repo: "my-org/repo-a", number: 12, url: "https://github.com/my-org/repo-a/pull/12", status: "merged" },
+      { repo: "my-org/repo-a", number: 13, url: "https://github.com/my-org/repo-a/pull/13", status: "closed" },
+      { repo: "my-org/repo-b", number: 4, url: "https://github.com/my-org/repo-b/pull/4", status: "open" },
+    ]);
   });
 
   it("says how many are open in all when there are more than one page", async () => {

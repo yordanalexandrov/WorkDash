@@ -11,6 +11,15 @@ export type IssuesConfig = {
 /** A GitHub label: its name and its colour as GitHub gives it, six hex digits without "#". */
 export type IssueLabel = { name: string; color: string };
 
+/** A milestone: its name, and its due date when it has one, by which issues sort. */
+export type Milestone = { title: string; dueOn: string | null };
+
+/** What became of a linked PR: GitHub's state, with a draft told apart from an open PR ready for review. */
+export type LinkedPullRequestStatus = "open" | "draft" | "merged" | "closed";
+
+/** A Linked PR: a pull request that will close the issue when it merges, perhaps in another repo. */
+export type LinkedPullRequest = { repo: string; number: number; url: string; status: LinkedPullRequestStatus };
+
 /** An open issue of a followed repo. */
 export type Issue = {
   repo: string;
@@ -22,6 +31,8 @@ export type Issue = {
   assignees: string[];
   /** How many comments it has. */
   comments: number;
+  milestone: Milestone | null;
+  linkedPullRequests: LinkedPullRequest[];
   createdAt: string;
   updatedAt: string;
 };
