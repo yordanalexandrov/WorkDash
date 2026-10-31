@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { type ColumnHead, isStrip } from "../column.js";
+import { useFlip } from "../motion.js";
 import { Column } from "./Column.js";
 
 type BoardProps<C extends ColumnHead> = {
@@ -11,14 +12,33 @@ type BoardProps<C extends ColumnHead> = {
   message?: string | null;
 };
 
-/** One column per entry, side by side; a column folded or unfolded by hand stays so while the page is open. */
+/** How long the entrance cascade runs; cards that come later enter without its delay. */
+const CASCADE_MS = 2200;
+
+/**
+ * One column per entry, side by side; a column folded or unfolded by hand stays so while the page is open.
+ * Columns and cards glide to their new places after every change (FLIP) and cascade in when the board first shows.
+ */
 export function Board<C extends ColumnHead>({ columns, children, message }: BoardProps<C>) {
   const [folded, setFolded] = useState<Record<string, boolean>>({});
+  const [booted, setBooted] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+  useFlip(ref);
+  useEffect(() => {
+    const timer = setTimeout(() => setBooted(true), CASCADE_MS);
+    return () => clearTimeout(timer);
+  }, []);
   const toggle = (column: C) => setFolded((all) => ({ ...all, [column.id]: !isStrip(column.count, all[column.id]) }));
   return (
-    <main class="board">
-      {columns.map((column) => (
-        <Column key={column.id} column={column} strip={isStrip(column.count, folded[column.id])} onToggle={() => toggle(column)}>
+    <main ref={ref} class={`board${booted ? " booted" : ""}`} data-flip-root>
+      {columns.map((column, index) => (
+        <Column
+          key={column.id}
+          column={column}
+          index={index}
+          strip={isStrip(column.count, folded[column.id])}
+          onToggle={() => toggle(column)}
+        >
           {children(column)}
         </Column>
       ))}
