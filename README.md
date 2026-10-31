@@ -171,6 +171,9 @@ sudo apt install ./desktop/release/workdash_*_amd64.deb
 профил, който позволява user namespaces на `/opt/WorkDash/workdash`, така че sandbox-ът работи без горните
 `chown`/`chmod`. Dock-ът и Alt+Tab взимат иконата от `workdash.desktop` по WM_CLASS / app id `workdash`
 (`desktopName` в `desktop/package.json`); `npm run desktop` получава същата икона, ако пакетът е инсталиран.
+Без пакета `npm run desktop:dev-entry` пише `~/.local/share/applications/workdash-dev.desktop` със същия клас и
+иконата от repo-то (и запис „WorkDash (dev)“ в менюто, който пуска вече билднатия `desktop/`);
+`npm run desktop:dev-entry -- --remove` го маха, например след като инсталираш deb-а.
 
 Версията на `desktop/` следва тази на корена. Release: `npm version <patch|minor|major>` вдига и двете, прави
 commit и таг `v<версия>`; `git push --follow-tags` пуска `release.yml`, който прикача deb-а към draft Release.
