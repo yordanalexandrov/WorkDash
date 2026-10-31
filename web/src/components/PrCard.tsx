@@ -1,6 +1,7 @@
 import { useRef } from "preact/hooks";
 import type { DashboardPullRequest } from "../api.js";
 import { count, reasonBadge } from "../badges.js";
+import { sheetOpeners } from "../detail.js";
 import { age, shortRepo } from "../format.js";
 import { askedReviewers, checkRings, mergeMark, reviewMarks, unreadCount, urgency } from "../marks.js";
 import { prFlipKey, slideOut } from "../motion.js";
@@ -15,21 +16,30 @@ type PrCardProps = {
   index: number;
   /** Marks the PR seen; only "Чака теб" cards get the button. */
   onSeen?: (pr: DashboardPullRequest) => Promise<void>;
+  /** Opens the detail sheet, growing out of `from`. */
+  onOpen(pr: DashboardPullRequest, from: HTMLElement): void;
+  /** Hidden while its sheet is open, so the sheet looks like the card grown. */
+  ghost: boolean;
 };
 
 /**
  * An open PR on the board, laid out as "Anatomy" in docs/design.md describes. The slot around the card is what moves
  * (entrance, FLIP, leaving on "видях"); a "Чака теб" card pulses as urgently as its reason.
  */
-export function PrCard({ pr, hue, index, onSeen }: PrCardProps) {
+export function PrCard({ pr, hue, index, onSeen, onOpen, ghost }: PrCardProps) {
   const slot = useRef<HTMLDivElement>(null);
   const reason = reasonBadge(pr);
   const merge = mergeMark(pr);
   const unread = unreadCount(pr);
   const pulse = urgency(pr.reason);
   return (
-    <div ref={slot} class={`slot${pulse ? ` ${pulse}` : ""}`} data-flip={prFlipKey(pr)} style={{ "--ti": index }}>
-      <article class={`card${pr.isDraft ? " draft" : ""}`} style={{ "--rh": hue }} tabIndex={0}>
+    <div ref={slot} class={`slot${pulse ? ` ${pulse}` : ""}${ghost ? " ghost" : ""}`} data-flip={prFlipKey(pr)} style={{ "--ti": index }}>
+      <article
+        class={`card opens${pr.isDraft ? " draft" : ""}`}
+        style={{ "--rh": hue }}
+        tabIndex={0}
+        {...sheetOpeners(() => onOpen(pr, slot.current!))}
+      >
         <div class="card-top">
           <span class="tag" title={pr.repo}>
             {shortRepo(pr.repo)}

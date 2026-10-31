@@ -1,5 +1,6 @@
 import type { ClosedPullRequest, DashboardPullRequest, Section } from "../api.js";
 import { ACCENT } from "../board.js";
+import { prKey } from "../detail.js";
 import { sectionTitle, shortRepo } from "../format.js";
 import { prFlipKey } from "../motion.js";
 import { type PrItem, PR_COLUMNS, PR_GROUPINGS, prGroupKey, prGroupOrder } from "../prTable.js";
@@ -29,11 +30,14 @@ type PrTableProps = {
   collapsed: ReadonlySet<string>;
   onToggle(id: string): void;
   onSeen(pr: DashboardPullRequest): Promise<void>;
+  onOpen(pr: DashboardPullRequest, from: HTMLElement): void;
+  /** The key (`<repo>#<number>`) of the PR whose sheet is open, whose row hides meanwhile. */
+  openKey: string | null;
   booted: boolean;
 };
 
 /** The PRs as a table: the open ones sorted and grouped, then "Наскоро затворени" at the bottom in the server's order. */
-export function PrTable({ items, closed, hue, query, sort, onSort, groupBy, onGroupBy, collapsed, onToggle, onSeen, booted }: PrTableProps) {
+export function PrTable({ items, closed, hue, query, sort, onSort, groupBy, onGroupBy, collapsed, onToggle, onSeen, onOpen, openKey, booted }: PrTableProps) {
   const sorted = sortItems(items, PR_COLUMNS, sort, ({ pr }) => pr.updatedAt);
   const groups: TableGroup<Row>[] = groupItems(sorted, groupBy, prGroupKey, prGroupOrder(groupBy)).map((group) => ({
     id: group.id,
@@ -65,6 +69,8 @@ export function PrTable({ items, closed, hue, query, sort, onSort, groupBy, onGr
             section={row.open.section}
             hue={hue(row.open.pr.repo)}
             index={index}
+            onOpen={onOpen}
+            ghost={openKey === prKey(row.open.pr)}
             {...(row.open.section === "waiting_on_me" ? { onSeen } : {})}
           />
         ) : (

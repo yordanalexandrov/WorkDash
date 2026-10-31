@@ -85,9 +85,9 @@ describe("reviewMarks", () => {
       { author: "colleague4", state: "DISMISSED" as const, submittedAt: at },
     ];
     expect(reviewMarks(pr({ reviews }))).toEqual([
-      { login: "colleague1", kind: "ok", title: "colleague1 одобри" },
-      { login: "colleague2", kind: "bad", title: "colleague2 иска промени" },
-      { login: "colleague3", kind: "muted", title: "colleague3 коментира" },
+      { login: "colleague1", kind: "ok", title: "colleague1 одобри", verb: "одобри", submittedAt: at },
+      { login: "colleague2", kind: "bad", title: "colleague2 иска промени", verb: "иска промени", submittedAt: at },
+      { login: "colleague3", kind: "muted", title: "colleague3 коментира", verb: "коментира", submittedAt: at },
     ]);
   });
 });

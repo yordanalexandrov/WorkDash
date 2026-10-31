@@ -2,6 +2,7 @@ import { useRef } from "preact/hooks";
 import type { DashboardPullRequest, Section } from "../api.js";
 import { count, reasonBadge } from "../badges.js";
 import { ACCENT } from "../board.js";
+import { sheetOpeners } from "../detail.js";
 import { age, sectionTitle, shortRepo } from "../format.js";
 import { askedReviewers, checkRing, mergeMark, reviewMarks, sectionShort, urgency } from "../marks.js";
 import { prFlipKey, slideOut } from "../motion.js";
@@ -18,12 +19,16 @@ type PrRowProps = {
   index: number;
   /** Marks the PR seen; only "Чака теб" rows get the button. */
   onSeen?: (pr: DashboardPullRequest) => Promise<void>;
+  /** Opens the detail sheet, growing out of `from`. */
+  onOpen(pr: DashboardPullRequest, from: HTMLElement): void;
+  /** Hidden while its sheet is open, so the sheet looks like the row grown. */
+  ghost: boolean;
 };
 
 const none = <span class="dim">·</span>;
 
 /** An open PR in the table: the facts of its card, one per column ("Anatomy" → Row in docs/design.md), with the same stripe and tint. */
-export function PrRow({ pr, section, hue, index, onSeen }: PrRowProps) {
+export function PrRow({ pr, section, hue, index, onSeen, onOpen, ghost }: PrRowProps) {
   const ref = useRef<HTMLDivElement>(null);
   const reason = reasonBadge(pr);
   const merge = mergeMark(pr);
@@ -33,10 +38,11 @@ export function PrRow({ pr, section, hue, index, onSeen }: PrRowProps) {
     <div
       ref={ref}
       role="row"
-      class={`trow${pulse ? ` ${pulse}` : ""}${pr.isDraft ? " draft" : ""}`}
+      class={`trow opens${pulse ? ` ${pulse}` : ""}${pr.isDraft ? " draft" : ""}${ghost ? " ghost" : ""}`}
       data-flip={prFlipKey(pr)}
       style={{ "--rh": hue, "--ti": index }}
       tabIndex={0}
+      {...sheetOpeners(() => onOpen(pr, ref.current!))}
     >
       <span class="tc">
         <SectionPill accent={ACCENT[section]} label={sectionShort(section)} title={sectionTitle(section)} />

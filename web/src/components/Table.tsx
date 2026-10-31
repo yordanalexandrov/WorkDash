@@ -67,7 +67,7 @@ export function Table<R>(props: TableProps<R>) {
               </button>
             ))}
           </div>
-          <span class="hint">клик на колона сортира</span>
+          <span class="hint">клик на ред отваря детайли · клик на колона сортира</span>
         </div>
         <div ref={ref} class="tscroll" data-flip-root>
           <div class="tgrid" role="table">

@@ -56,7 +56,7 @@ export function initials(login: string): string {
 }
 
 /** A reviewer's avatar dot: how their latest review went. */
-export type ReviewMark = { login: string; kind: "ok" | "bad" | "muted"; title: string };
+export type ReviewMark = { login: string; kind: "ok" | "bad" | "muted"; title: string; verb: string; submittedAt: string };
 
 const REVIEW_MARKS: Partial<Record<ReviewState, [ReviewMark["kind"], string]>> = {
   APPROVED: ["ok", "одобри"],
@@ -68,7 +68,7 @@ const REVIEW_MARKS: Partial<Record<ReviewState, [ReviewMark["kind"], string]>> =
 export function reviewMarks(pr: ClassifiedPullRequest): ReviewMark[] {
   return pr.reviews.flatMap((review) => {
     const mark = REVIEW_MARKS[review.state];
-    return mark ? [{ login: review.author, kind: mark[0], title: `${review.author} ${mark[1]}` }] : [];
+    return mark ? [{ login: review.author, kind: mark[0], title: `${review.author} ${mark[1]}`, verb: mark[1], submittedAt: review.submittedAt }] : [];
   });
 }
 
