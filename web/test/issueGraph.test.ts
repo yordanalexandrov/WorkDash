@@ -60,7 +60,7 @@ describe("familyGraph", () => {
     ];
     const graph = familyGraph({ issue: member(1, { subIssues: { total: 3, completed: 1 } }), head: gi(1), members, totals: NO_TOTALS });
 
-    expect(graph.nodes.map((node) => node.marks)).toEqual([["completed"], [], ["not_planned"]]);
+    expect(graph.nodes.map((node) => node.marks)).toEqual([["current"], ["completed"], [], ["not_planned"]]);
     expect(graph.edges).toHaveLength(1);
   });
 
@@ -97,6 +97,28 @@ describe("familyGraph", () => {
       [5, 7],
       [7, 8],
       [7, 9],
+    ]);
+  });
+
+  it("draws the family's head as the open issue when its own sheet is open, with its blockers in and out of the family", () => {
+    // Head #1: its sub-issue #2 blocks it, it blocks its sub-issue #3; #50 outside blocks it, it blocks #51 outside.
+    const issue = member(1, { blockedBy: [gi(2), gi(50)], blocking: [gi(3), gi(51)], subIssues: { total: 2, completed: 0 } });
+    const members = [member(2, { blocking: [gi(1)] }), member(3, { blockedBy: [gi(1)] })];
+    const graph = familyGraph({ issue, head: gi(1, { subIssues: { total: 2, completed: 0 } }), members, totals: NO_TOTALS });
+    const number = (id: string) => graph.nodes.find((node) => node.id === id)!.issue.number;
+
+    expect(graph.nodes.map((node) => [node.issue.number, node.marks])).toEqual([
+      [1, ["current", "blocked"]],
+      [2, []],
+      [3, ["blocked"]],
+      [50, ["external"]],
+      [51, ["external"]],
+    ]);
+    expect(graph.edges.map(({ from, to }) => [number(from), number(to)])).toEqual([
+      [2, 1],
+      [50, 1],
+      [1, 3],
+      [1, 51],
     ]);
   });
 

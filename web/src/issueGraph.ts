@@ -39,13 +39,14 @@ const keyOf = (issue: { repo: string; number: number }) => `${issue.repo.toLower
 const sameIssue = (a: { repo: string; number: number }, b: { repo: string; number: number }) => a.number === b.number && sameRepo(a.repo, b.repo);
 
 /**
- * What is drawn of a family: the head's sub-issues (or the issue alone, when it has no family) and the blockers between
- * them, each arrow once though both its ends record it; and, one step out, the open issue's own blockers and the issues
- * it blocks that are outside the family (`external`). The other members' neighbours outside it are not drawn, but an open
- * blocker still makes its issue blocked.
+ * What is drawn of a family: the head's sub-issues (the head too when it is the open issue; the issue alone when it has no
+ * family) and the blockers between them, each arrow once though both its ends record it; and, one step out, the open
+ * issue's own blockers and the issues it blocks that are outside the family (`external`). The other members' neighbours
+ * outside it are not drawn, but an open blocker still makes its issue blocked.
  */
 export function familyGraph(family: IssueFamily): DrawnGraph {
-  const members: FamilyMember[] = family.head ? family.members : [family.issue];
+  const isHead = !family.head || sameIssue(family.head, family.issue);
+  const members: FamilyMember[] = isHead ? [family.issue, ...family.members] : family.members;
   const nodes: GraphNode[] = members.map((member, index) => ({ id: `n${index}`, issue: member, marks: marksOf(member, family.issue) }));
   const ids = new Map(nodes.map((node) => [keyOf(node.issue), node.id]));
   for (const neighbour of [...family.issue.blockedBy, ...family.issue.blocking]) {
