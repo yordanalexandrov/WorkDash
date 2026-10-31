@@ -312,8 +312,71 @@ h1 .live.ok::after {
 }
 
 /* "at-table", not "table": the modifier must not pick up the rules of the view it names (.board is the board itself). */
-.views.at-table .thumb {
+.views.at-table .thumb,
+.views.at-issues .thumb {
   transform: translateX(100%);
+}
+
+/* Where the dashboard shown puts its part of the bar (the toolbar, the repo tabs); it lays out as if they were the bar's own. */
+.top-slot {
+  display: contents;
+}
+
+/* The Issue dashboard's repo tabs: each in its project colour, the open one on its project tint, with an ink under it
+   that glides from tab to tab. The ink is 1px wide and scaled to the tab, so it moves by transform alone. */
+.repo-tabs {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  width: 100%;
+  padding-bottom: 3px;
+}
+
+.repo-tab {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 9px 9px 4px 4px;
+  color: hsl(var(--rh) 60% var(--tag-l));
+  background: transparent;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    transform var(--bounce-ms, 0.3s) var(--bounce, ease-out),
+    background-color 0.2s;
+}
+
+.repo-tab:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, hsl(var(--rh) 70% var(--tag-bg-l)) 55%, transparent);
+}
+
+.repo-tab.on {
+  background: hsl(var(--rh) 70% var(--tag-bg-l));
+}
+
+.repo-tab:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.repo-tabs .ink {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 3px;
+  margin-top: -1px;
+  background: hsl(var(--rh) 70% var(--stripe-l));
+  transform-origin: 0 0;
+  transition: transform var(--glide-ms, 0.4s) var(--glide, ease-out);
+  pointer-events: none;
+}
+
+.repo-tabs .ink[hidden] {
+  display: none;
 }
 
 /* Toolbar: the text filter, the repo chips (their dots are the colour legend) and "само моите"; wraps when the repos are many. */
@@ -2756,7 +2819,8 @@ kbd {
   .card,
   .card:hover,
   .card:focus-visible,
-  .toolbar .chip {
+  .toolbar .chip,
+  .repo-tab {
     transform: none !important;
   }
 

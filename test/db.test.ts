@@ -80,6 +80,20 @@ describe("SnapshotStore", () => {
     expect(openStore(path).loadRecentlyClosed()).toEqual([closed(1)]);
   });
 
+  it("keeps the repos whose issues are on across a restart, replacing the previous list", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+
+    const first = openStore(path);
+    expect(first.loadIssueRepos()).toEqual([]);
+    first.saveIssueRepos(["my-org/repo-a", "my-org/repo-b"]);
+    first.saveIssueRepos(["my-org/repo-c", "my-org/repo-a"]);
+    first.close();
+
+    expect(openStore(path).loadIssueRepos()).toEqual(["my-org/repo-c", "my-org/repo-a"]);
+  });
+
   it("drops a snapshot saved in an older format, so the next poll replaces it", () => {
     const dir = mkdtempSync(join(tmpdir(), "workdash-"));
     dirs.push(dir);

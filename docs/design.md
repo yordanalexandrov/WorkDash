@@ -1,8 +1,14 @@
 # Dashboard design
 
-The conventions every screen and feature of the dashboard follows. The target design is the **living board**: an animated kanban of PRs plus a table as a second view of the same PRs. Its reference implementation is the prototype `web/prototype/variants/H.tsx` on the `prototype/dashboard-layouts` branch (`git show prototype/dashboard-layouts:web/prototype/variants/H.tsx`); run it with `npm run prototype` there. The board lives in `web/src`: `board.ts`, `palette.ts`, `marks.ts` and the components in `web/src/components`; the table in `table.ts` (sorting and grouping, no PR types), `prTable.ts` (the PR columns) and `Table`, `GroupHead`, `PrTable`, `PrRow`, `ClosedRow`; the view in the URL in `view.ts`; the tokens and keyframes are in `web/public/style.css`, and the motion layer (springs, FLIP, the reduced-motion flag, the gate that holds snapshots while a card leaves) in `web/src/motion.ts`.
+The conventions every screen and feature of the dashboard follows. The target design is the **living board**: an animated kanban of PRs plus a table as a second view of the same PRs. Its reference implementation is the prototype `web/prototype/variants/H.tsx` on the `prototype/dashboard-layouts` branch (`git show prototype/dashboard-layouts:web/prototype/variants/H.tsx`); run it with `npm run prototype` there. The board lives in `web/src`: `board.ts`, `palette.ts`, `marks.ts` and the components in `web/src/components`; the table in `table.ts` (sorting and grouping, no PR types), `prTable.ts` (the PR columns) and `Table`, `GroupHead`, `PrTable`, `PrRow`, `ClosedRow`; the view in the URL in `view.ts`, the dashboard and the open repo in `dashboard.ts`; the app shell in `App.tsx`, the PR dashboard in `PrDashboard`, the Issue dashboard in `IssueDashboard` with its `IssueTabs`; the tokens and keyframes are in `web/public/style.css`, and the motion layer (springs, FLIP, the reduced-motion flag, the gate that holds snapshots while a card leaves) in `web/src/motion.ts`.
 
 Once the implementation exists, the code holds the values (tokens, palette, springs) and this document keeps only the rules and the reasons. Update both together.
+
+## Two dashboards
+
+- The app has two **dashboards**: the PR dashboard (PR-и) and the Issue dashboard (Issues). "PR-и / Issues" (`DashboardToggle`) is the first thing after the name in the top bar, a segmented control styled like the view toggle; key `i` switches. The choice lives in the URL (`dashboard=issues`; no parameter is the PR dashboard), and the view (board or table) stays as it is across a switch.
+- The top bar belongs to the app; each dashboard puts its own row under the toggles (the PR dashboard its toolbar, the Issue dashboard its repo tabs). The PR dashboard stays mounted behind Settings and the Issue dashboard, so its table settings, counts and confetti outlast a trip there; its sheet and "Пусни деня" close when it steps aside.
+- **Repo tabs**: the Issue dashboard shows one repo at a time. A tab per repo of `repos` whose issues are on in GitHub (the PR poll reads `hasIssuesEnabled`; a repo with them off has no tab), by the name shown, then by owner. No count and no "всички" tab. Each tab is in its project colour; the open one sits on its project tint with an ink in its stripe colour under it, which glides (glide spring, transform only) to the next tab opened. The open repo lives in the URL (`repo=owner/name`); without one, or with one that has no tab, the first tab opens.
 
 ## Two views, one set of PRs
 
@@ -28,9 +34,9 @@ Colour carries meaning, and each colour family has exactly one job:
 | --- | --- | --- |
 | Status: `--ok` green, `--bad` red, `--pending` amber, `--muted`, `--merged` violet | the state of a check, review or merge | badges, CI/Sonar rings, reason labels |
 | Section accent | which section a PR is in | column top border, section pill in the table, the "Чака теб" glow. `waiting_on_me` = `--bad`, `free_for_review` = `--blue`, `ready_to_merge` = `--ok`, `waiting_on_others` = `--pending`, `team` = `--faint`, closed = `--merged` |
-| Project | which repo a PR belongs to | 4px left stripe and light tint on the card and the row, the repo tag, the dot in the repo chip (which doubles as the legend) |
+| Project | which repo a PR or issue belongs to | 4px left stripe and light tint on the card and the row, the repo tag, the dot in the repo chip (which doubles as the legend), the repo tabs of the Issue dashboard |
 
-- **Project colours** come from a fixed palette of well-separated hues (`215, 28, 155, 285, 345, 190, 95, 50`), assigned to the repos in name order, so a repo keeps its colour between reloads and two repos never look alike. A hash of the name is only the fallback for a repo outside the current set.
+- **Project colours** come from a fixed palette of well-separated hues (`215, 28, 155, 285, 345, 190, 95, 50`), assigned in name order to the repos of both dashboards (those with PRs and those with an issue tab), so a repo has one colour on both, so a repo keeps its colour between reloads and two repos never look alike. A hash of the name is only the fallback for a repo outside the current set.
 - The tint is `color-mix` of the project hue into the card background: 17% light / 24% dark on cards, 11% / 15% on table rows. Status badges stay legible on top of it; keep them solid.
 - Status colours never mark a project, and project colours never mark a status.
 
@@ -81,7 +87,7 @@ Motion explains change: where something came from, where it went, what needs att
 
 ## Interaction
 
-- Shortcuts: `/` focuses the filter, Esc clears it or closes the sheet, `t` toggles the view, `f` expands or shrinks the open sheet, `r` polls now ("Обнови"), Enter on a focused card or row opens the sheet. Shortcuts are ignored while typing in an input. Match `t`, `f` and `r` by `event.code` (`KeyT`, `KeyF`, `KeyR`) as well, so they work on a Bulgarian layout.
+- Shortcuts: `/` focuses the filter, Esc clears it or closes the sheet, `t` toggles the view, `i` switches the dashboard, `f` expands or shrinks the open sheet, `r` polls now ("Обнови"), Enter on a focused card or row opens the sheet. Shortcuts are ignored while typing in an input. The dashboard shown has its keys first and can take one from the app (an open sheet takes `/`, `t`, `i` and `r`). Match `t`, `i`, `f` and `r` by `event.code` (`KeyT`, `KeyI`, `KeyF`, `KeyR`) as well, so they work on a Bulgarian layout.
 - **Poll mode** (`PollControls`, `usePolling.ts`): in the top bar, after the status, "⟳ На всеки 60s / ✋ При поискване" is a segmented control styled like the view toggle (the interval comes from `poll_interval`), and "Обнови" next to it spins while a poll is under way in any open page. The mode is the server's, so switching it switches every open page. In On-demand the page asks for a poll on load, when the stream reconnects, on window focus and when the tab is shown again; the server ignores a focus within 30s of a successful poll, and "Обнови" waits out a rate limit, saying until when. Since nothing polls on its own there, the status says how long ago the last poll was and turns `--pending` after an hour.
 - Every PR title and number links to GitHub in a new tab.
 - "видях" is reachable both as a button and by dragging a "Чака теб" card onto the "видях" drop zone (pointer events, so touch works).

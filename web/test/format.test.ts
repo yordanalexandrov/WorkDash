@@ -14,6 +14,7 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     configError: null,
     missing: [],
     pollMode: "periodic",
+    issueRepos: [],
     polling: false,
     sections: [],
     recentlyClosed: [],

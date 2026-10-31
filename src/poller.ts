@@ -84,6 +84,7 @@ export function startPoller(
       // Marked before saving, so no reader sees a new PR without its mark.
       store.markFirstSeen(snapshot.pullRequests, startedAt);
       store.saveSnapshot(snapshot, now);
+      store.saveIssueRepos(snapshot.issueRepos);
       store.saveRecentlyClosed(
         updateRecentlyClosed({
           known: store.loadRecentlyClosed(),

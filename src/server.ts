@@ -99,6 +99,8 @@ export function dashboardState({
     })),
     // Filtered here too, so an entry expires on time even while polling fails.
     recentlyClosed: withinWindow(store.loadRecentlyClosed(), now(), recentlyClosedWindowMs()),
+    /** The followed repos whose issues are on in GitHub: the Issue dashboard's tabs. */
+    issueRepos: store.loadIssueRepos(),
   };
 }
 

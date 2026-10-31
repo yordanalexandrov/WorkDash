@@ -33,6 +33,8 @@ export type DashboardState = {
   sections: SectionOfPullRequests[];
   /** Merged or closed PRs within the configured window, most recently closed first; never part of `sections`. */
   recentlyClosed: ClosedPullRequest[];
+  /** The followed repos whose issues are on in GitHub, as the last poll read them: the Issue dashboard's tabs. */
+  issueRepos: string[];
 };
 
 /** Marks a PR seen as of `fetchedAt`, the snapshot the page showed when I clicked "видях". */

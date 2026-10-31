@@ -9,7 +9,7 @@ const THREADS_PAGE_SIZE = 30;
 const THREAD_COMMENTS_PAGE_SIZE = 10;
 const COMMITS_PAGE_SIZE = 20;
 
-/** One query for the viewer and the open PRs of every repo (alias `rN`), without comments and commits. */
+/** One query for the viewer and the open PRs of every repo (alias `rN`) and whether its issues are on, without comments and commits. */
 export function buildSnapshotQuery(repos: string[]): { query: string; variables: Record<string, string> } {
   const variables: Record<string, string> = {};
   const params: string[] = [];
@@ -30,6 +30,7 @@ ${fields.join("\n")}
 
 fragment openPullRequests on Repository {
   nameWithOwner
+  hasIssuesEnabled
   pullRequests(states: OPEN, first: ${PAGE_SIZE}, orderBy: { field: UPDATED_AT, direction: DESC }) {
     nodes {
       number

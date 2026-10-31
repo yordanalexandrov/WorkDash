@@ -12,6 +12,10 @@ export type SnapshotStore = {
   /** Replaces the list of recently merged or closed PRs, which is kept apart from the open ones. */
   saveRecentlyClosed(pullRequests: ClosedPullRequest[]): void;
   loadRecentlyClosed(): ClosedPullRequest[];
+  /** Replaces the list of repos whose issues are on in GitHub, as the last poll read them; only they get an Issue dashboard tab. */
+  saveIssueRepos(repos: string[]): void;
+  /** The repos whose issues are on, in the order saved; none before the first poll. */
+  loadIssueRepos(): string[];
   /** Records that I have seen a PR as it was at `seenAt`; a later mark wins over an earlier one. */
   markSeen(repo: string, number: number, seenAt: Date): void;
   /** Marks PRs without a seen mark as seen at `at`, when first observed, so only later comments are unread. */
@@ -43,6 +47,9 @@ const SCHEMA = `
     number    INTEGER NOT NULL,
     data_json TEXT    NOT NULL,
     PRIMARY KEY (repo, number)
+  );
+  CREATE TABLE IF NOT EXISTS issue_repo (
+    repo TEXT PRIMARY KEY
   );
   CREATE TABLE IF NOT EXISTS poll (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
@@ -77,7 +84,7 @@ const SCHEMA = `
  * Bumped whenever the stored PullRequest shape changes. A snapshot in an older format is
  * dropped on open: it is only a cache, and the poller refetches it right away.
  */
-const SNAPSHOT_FORMAT = 7;
+const SNAPSHOT_FORMAT = 8;
 
 /** Opens (and creates if needed) the SQLite file that holds the latest snapshot. */
 export function openStore(path: string): SnapshotStore {
@@ -85,7 +92,7 @@ export function openStore(path: string): SnapshotStore {
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   if (db.pragma("user_version", { simple: true }) !== SNAPSHOT_FORMAT) {
-    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM poll;");
+    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM issue_repo; DELETE FROM poll;");
     db.pragma(`user_version = ${SNAPSHOT_FORMAT}`);
   }
 
@@ -105,6 +112,13 @@ export function openStore(path: string): SnapshotStore {
   const saveClosed = db.transaction((pullRequests: ClosedPullRequest[]) => {
     deleteClosed.run();
     for (const pr of pullRequests) insertClosed.run(pr.repo, pr.number, JSON.stringify(pr));
+  });
+  const deleteIssueRepos = db.prepare("DELETE FROM issue_repo");
+  const insertIssueRepo = db.prepare("INSERT OR IGNORE INTO issue_repo (repo) VALUES (?)");
+  const selectIssueRepos = db.prepare<[], { repo: string }>("SELECT repo FROM issue_repo ORDER BY rowid");
+  const saveIssues = db.transaction((repos: string[]) => {
+    deleteIssueRepos.run();
+    for (const repo of repos) insertIssueRepo.run(repo);
   });
   // Both sides come from Date.toISOString, so comparing the strings compares the instants.
   const upsertSeen = db.prepare(
@@ -152,6 +166,12 @@ export function openStore(path: string): SnapshotStore {
     },
     loadRecentlyClosed() {
       return selectClosed.all().map((row) => JSON.parse(row.data_json) as ClosedPullRequest);
+    },
+    saveIssueRepos(repos) {
+      saveIssues(repos);
+    },
+    loadIssueRepos() {
+      return selectIssueRepos.all().map((row) => row.repo);
     },
     markSeen(repo, number, seenAt) {
       upsertSeen.run(repo, number, seenAt.toISOString());

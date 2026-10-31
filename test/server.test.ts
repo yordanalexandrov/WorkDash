@@ -44,6 +44,7 @@ describe("GET /api/prs", () => {
         ...emptySections.slice(1),
       ],
       recentlyClosed: [],
+      issueRepos: [],
     });
   });
 
@@ -115,7 +116,16 @@ describe("GET /api/prs", () => {
       polling: false,
       sections: emptySections,
       recentlyClosed: [],
+      issueRepos: [],
     });
+  });
+
+  it("names the repos whose issues are on, as the last poll saved them", async () => {
+    const store = openStore(":memory:");
+    store.saveIssueRepos(["my-org/repo-b", "my-org/repo-a"]);
+    const server = buildServer({ store, rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null });
+
+    expect((await server.inject("/api/prs")).json().issueRepos).toEqual(["my-org/repo-b", "my-org/repo-a"]);
   });
 
   it("serves the rules and poll interval in effect now, and why config.yaml is not in effect", async () => {
