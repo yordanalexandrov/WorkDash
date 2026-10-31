@@ -4,7 +4,9 @@ import { count, reasonBadge } from "../badges.js";
 import { sheetOpeners } from "../detail.js";
 import { age, shortRepo } from "../format.js";
 import { askedReviewers, checkRings, mergeMark, reviewMarks, unreadCount, urgency } from "../marks.js";
-import { prFlipKey, slideOut } from "../motion.js";
+import { middleOf } from "../effects.js";
+import { type Pos, prFlipKey, reducedMotion, slideOut } from "../motion.js";
+import { lean, straighten } from "../tilt.js";
 import { Avatar } from "./Avatar.js";
 import { Ring } from "./Ring.js";
 
@@ -22,13 +24,16 @@ type PrCardProps = {
   ghost: boolean;
   /** Makes the card draggable onto "видях" (only in "Чака теб"): a press on it, handed the slot that moves. */
   onGrab?: (event: PointerEvent, slot: HTMLElement) => void;
+  /** Sparks for "видях" at a point in the viewport. */
+  onSpark?: (at: Pos) => void;
 };
 
 /**
  * An open PR on the board, laid out as "Anatomy" in docs/design.md describes. The slot around the card is what moves
- * (entrance, FLIP, leaving on "видях"); a "Чака теб" card pulses as urgently as its reason.
+ * (entrance, FLIP, leaving on "видях"); a "Чака теб" card pulses as urgently as its reason. The card inside it leans towards
+ * the mouse, so the lean never fights what moves the slot.
  */
-export function PrCard({ pr, hue, index, onSeen, onOpen, ghost, onGrab }: PrCardProps) {
+export function PrCard({ pr, hue, index, onSeen, onOpen, ghost, onGrab, onSpark }: PrCardProps) {
   const slot = useRef<HTMLDivElement>(null);
   const reason = reasonBadge(pr);
   const merge = mergeMark(pr);
@@ -46,6 +51,9 @@ export function PrCard({ pr, hue, index, onSeen, onOpen, ghost, onGrab }: PrCard
         class={`card opens${pr.isDraft ? " draft" : ""}`}
         style={{ "--rh": hue }}
         tabIndex={0}
+        onPointerMove={(event) => slot.current && lean(event.currentTarget, slot.current, event, reducedMotion())}
+        onPointerLeave={(event) => straighten(event.currentTarget)}
+        onPointerDown={(event) => straighten(event.currentTarget)}
         {...sheetOpeners(() => onOpen(pr, slot.current!))}
       >
         <div class="card-top">
@@ -109,7 +117,11 @@ export function PrCard({ pr, hue, index, onSeen, onOpen, ghost, onGrab }: PrCard
               type="button"
               class="seen"
               title="Маркирай всичко досега като видяно"
-              onClick={() => slot.current && slideOut(slot.current, () => onSeen(pr))}
+              onClick={() => {
+                if (!slot.current) return;
+                onSpark?.(middleOf(slot.current.getBoundingClientRect()));
+                slideOut(slot.current, () => onSeen(pr));
+              }}
             >
               видях
             </button>

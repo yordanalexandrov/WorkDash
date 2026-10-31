@@ -85,7 +85,7 @@ describe("happenings", () => {
         key: "my-org/repo-b#7",
         project: "my-org/repo-b",
         tag: "#7",
-        kind: "closed",
+        kind: "merged",
         who: "colleague1",
         what: "merge-на",
         color: "var(--merged)",

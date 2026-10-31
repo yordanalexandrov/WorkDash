@@ -5,7 +5,8 @@ import { ACCENT } from "../board.js";
 import { sheetOpeners } from "../detail.js";
 import { age, sectionTitle, shortRepo } from "../format.js";
 import { askedReviewers, checkRing, mergeMark, reviewMarks, sectionShort, urgency } from "../marks.js";
-import { prFlipKey, slideOut } from "../motion.js";
+import { middleOf } from "../effects.js";
+import { type Pos, prFlipKey, slideOut } from "../motion.js";
 import { Avatar } from "./Avatar.js";
 import { Ring } from "./Ring.js";
 import { SectionPill } from "./SectionPill.js";
@@ -23,12 +24,14 @@ type PrRowProps = {
   onOpen(pr: DashboardPullRequest, from: HTMLElement): void;
   /** Hidden while its sheet is open, so the sheet looks like the row grown. */
   ghost: boolean;
+  /** Sparks for "видях" at a point in the viewport. */
+  onSpark?: (at: Pos) => void;
 };
 
 const none = <span class="dim">·</span>;
 
 /** An open PR in the table: the facts of its card, one per column ("Anatomy" → Row in docs/design.md), with the same stripe and tint. */
-export function PrRow({ pr, section, hue, index, onSeen, onOpen, ghost }: PrRowProps) {
+export function PrRow({ pr, section, hue, index, onSeen, onOpen, ghost, onSpark }: PrRowProps) {
   const ref = useRef<HTMLDivElement>(null);
   const reason = reasonBadge(pr);
   const merge = mergeMark(pr);
@@ -125,7 +128,12 @@ export function PrRow({ pr, section, hue, index, onSeen, onOpen, ghost }: PrRowP
             type="button"
             class="seen"
             title="Маркирай всичко досега като видяно"
-            onClick={() => ref.current && slideOut(ref.current, () => onSeen(pr), "row")}
+            onClick={(event) => {
+              if (!ref.current) return;
+              // From the button, near the row's right end, where the eye is.
+              onSpark?.(middleOf(event.currentTarget.getBoundingClientRect()));
+              slideOut(ref.current, () => onSeen(pr), "row");
+            }}
           >
             видях
           </button>

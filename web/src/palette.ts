@@ -1,7 +1,7 @@
 // Project colours: each repo gets a hue of its own, the same between reloads.
 
 // Well-apart hues, handed out in repo name order; each round after the first is shifted by ROUND_SHIFT.
-const PALETTE = [215, 28, 155, 285, 345, 190, 95, 50];
+export const PALETTE = [215, 28, 155, 285, 345, 190, 95, 50];
 const ROUND_SHIFT = 17;
 
 /** The hue of every repo in the set, by name order. */

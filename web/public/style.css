@@ -842,6 +842,11 @@ kbd {
   text-align: center;
 }
 
+/* A column's count counts up to its value (CountUp): wide enough for the most digits it passes, so its head does not move. */
+.col-head .count {
+  min-width: max(24px, calc(var(--digits, 1) * 1ch + 16px));
+}
+
 .cards {
   position: relative;
   display: flex;
@@ -909,15 +914,37 @@ kbd {
   background: var(--tint);
   box-shadow: var(--shadow);
   outline: none;
+  /* The lean towards the mouse (--rx, --ry, set by tilt.ts) and the lift on hover, on the card and not its slot, which FLIP moves. */
+  transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift, 0px));
   transition:
     transform var(--glide-ms) var(--glide),
     box-shadow 0.25s ease-out;
 }
 
+/* While it leans, the card follows the mouse closely; it eases back with the glide spring once the mouse has left. */
+.card.leaning {
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.25s ease-out;
+}
+
 .card:hover,
 .card:focus-visible {
-  transform: translateY(-3px);
+  --lift: -3px;
   box-shadow: var(--lifted);
+}
+
+/* The soft shine that follows the mouse over a leaning card (--mx, --my, --shine from tilt.ts). */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--shine, 0);
+  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 255, 255, 0.55), transparent 45%);
+  mix-blend-mode: soft-light;
+  transition: opacity 0.25s ease-out;
 }
 
 .card:focus-visible {
@@ -1878,6 +1905,11 @@ kbd {
   box-shadow: var(--lifted);
 }
 
+.flyer .card::before,
+.clone .card::before {
+  display: none;
+}
+
 .flyer.trow {
   box-shadow: var(--lifted);
 }
@@ -1917,6 +1949,30 @@ kbd {
   height: 100%;
   transform: none;
   box-shadow: var(--lifted), 0 0 0 2px var(--bad);
+}
+
+/* Confetti and sparks: particles in .fx that move by transform and opacity and are removed at their end (effects.ts). */
+.bit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 2px;
+  will-change: transform, opacity;
+}
+
+.bit.spark {
+  border-radius: 50%;
+}
+
+.bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--ok);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+  will-change: transform, opacity;
 }
 
 /* Under the copy, over the board. Its halo and turning border are the hot column's, in --ok and faster. */
@@ -2147,10 +2203,16 @@ kbd {
     transition: none !important;
   }
 
+  .card,
   .card:hover,
   .card:focus-visible,
   .toolbar .chip {
     transform: none !important;
+  }
+
+  /* No lean, so no shine either. */
+  .card::before {
+    display: none;
   }
 
   .trow {
