@@ -12,6 +12,10 @@ This repository is public. Never put anything that identifies the author's emplo
 
 Real values belong only in the git-ignored `config.yaml` and `.env`. Examples use placeholders (`my-org/repo-a`, `colleague1`, `ABC-123`, `example.atlassian.net`). Before every commit, push or publish to GitHub, scan what is about to go out for such data and stop if anything matches. `npm run guard -- main..HEAD` does that scan for emails, Jira hosts and the private terms in `.public-guard-denylist`; the `Public` workflow runs it on every PR, but a PR is already public, so run it before pushing.
 
+## One worktree per session
+
+Sessions run side by side on this machine. Start the work on an issue in its own worktree (`git worktree add ../workdash-<issue> -b issue-<n>-<slug> main`), never in a checkout another session is using.
+
 ## UI design
 
 Before adding or changing anything the dashboard shows (`web/`), read `docs/design.md`: the board and table views, colour roles, motion and copy conventions every feature follows.
