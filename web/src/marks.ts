@@ -65,3 +65,8 @@ export function reviewMarks(pr: ClassifiedPullRequest): ReviewMark[] {
     return mark ? [{ login: review.author, kind: mark[0], title: `${review.author} ${mark[1]}` }] : [];
   });
 }
+
+/** How many comments are unread, or 0 when the reason label already says it. */
+export function unreadCount(pr: ClassifiedPullRequest): number {
+  return pr.reason === "unread_comments" ? 0 : (pr.unreadComments ?? 0);
+}

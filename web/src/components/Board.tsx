@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { type ColumnHead, isStrip } from "../board.js";
+import { type ColumnHead, isStrip } from "../column.js";
 import { Column } from "./Column.js";
 
 type BoardProps<C extends ColumnHead> = {

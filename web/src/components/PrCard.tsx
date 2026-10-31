@@ -1,7 +1,7 @@
 import type { DashboardPullRequest } from "../api.js";
-import { count, statusBadges } from "../badges.js";
+import { count, reasonBadge } from "../badges.js";
 import { age, shortRepo } from "../format.js";
-import { askedReviewers, checkRings, mergeMark, reviewMarks } from "../marks.js";
+import { askedReviewers, checkRings, mergeMark, reviewMarks, unreadCount } from "../marks.js";
 import { Avatar } from "./Avatar.js";
 import { Ring } from "./Ring.js";
 
@@ -15,9 +15,9 @@ type PrCardProps = {
 
 /** An open PR on the board, laid out as "Anatomy" in docs/design.md describes. */
 export function PrCard({ pr, hue, onSeen }: PrCardProps) {
-  const reason = onSeen && pr.reason ? statusBadges(pr)[0] : undefined;
+  const reason = reasonBadge(pr);
   const merge = mergeMark(pr);
-  const unread = pr.reason === "unread_comments" ? 0 : (pr.unreadComments ?? 0);
+  const unread = unreadCount(pr);
   return (
     <article class={`card${pr.isDraft ? " draft" : ""}`} style={{ "--rh": hue }} tabIndex={0}>
       <div class="card-top">

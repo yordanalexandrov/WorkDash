@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import type { ColumnHead } from "../board.js";
+import type { ColumnHead } from "../column.js";
 
 type ColumnProps = { column: ColumnHead; strip: boolean; onToggle(): void; children: ComponentChildren };
 

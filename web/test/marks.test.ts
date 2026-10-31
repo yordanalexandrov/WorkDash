@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
-import { askedReviewers, checkRings, initials, mergeMark, reviewMarks } from "../src/marks.js";
+import { askedReviewers, checkRings, initials, mergeMark, reviewMarks, unreadCount } from "../src/marks.js";
 
 const pr = pullRequest;
 
@@ -76,5 +76,13 @@ describe("reviewMarks", () => {
       { login: "colleague2", kind: "bad", title: "colleague2 иска промени" },
       { login: "colleague3", kind: "muted", title: "colleague3 коментира" },
     ]);
+  });
+});
+
+describe("unreadCount", () => {
+  it("counts the unread comments, unless the reason already says how many", () => {
+    expect(unreadCount({ ...pr(), unreadComments: 2 })).toBe(2);
+    expect(unreadCount({ ...pr(), reason: "unread_comments", unreadComments: 2 })).toBe(0);
+    expect(unreadCount(pr())).toBe(0);
   });
 });

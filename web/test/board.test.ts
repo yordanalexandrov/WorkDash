@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
 import type { ClosedPullRequest, DashboardPullRequest, DashboardState } from "../src/api.js";
-import { boardColumns, isStrip } from "../src/board.js";
+import { boardColumns } from "../src/board.js";
 
 const open = (number: number): DashboardPullRequest => ({ ...pullRequest({ number }), jira: [] });
 
@@ -57,17 +57,5 @@ describe("boardColumns", () => {
     expect(boardColumns(dashboard()).filter((column) => column.hot).map((column) => column.id)).toEqual(["waiting_on_me"]);
     const quiet = dashboard({ sections: dashboard().sections.map((group) => ({ ...group, pullRequests: [] })) });
     expect(boardColumns(quiet).some((column) => column.hot)).toBe(false);
-  });
-});
-
-describe("isStrip", () => {
-  it("folds an empty column to a strip and leaves a full one open", () => {
-    expect(isStrip(0, undefined)).toBe(true);
-    expect(isStrip(3, undefined)).toBe(false);
-  });
-
-  it("lets a fold by hand win either way", () => {
-    expect(isStrip(3, true)).toBe(true);
-    expect(isStrip(0, false)).toBe(false);
   });
 });

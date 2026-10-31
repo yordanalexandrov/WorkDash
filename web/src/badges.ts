@@ -1,4 +1,3 @@
-import type { MergeStateStatus } from "../../src/domain/types.js";
 import type { ClassifiedPullRequest } from "./api.js";
 
 /** `kind` picks the colour: ok, bad, pending, muted or merged. */
@@ -6,7 +5,7 @@ export type Badge = { text: string; kind: string; title?: string };
 
 type Mark = [text: string, kind: string, title?: string];
 
-// Same colour as the matching merge-state badge, so "needs rebase" looks alike wherever it shows.
+// "needs rebase" is amber like the merge mark for a branch that is behind.
 const REASONS: Record<string, Mark> = {
   ci_failed: ["CI failed", "bad"],
   sonar_failed: ["Sonar failed", "bad"],
@@ -38,29 +37,9 @@ function reasonMark(pr: ClassifiedPullRequest): Mark | undefined {
   return pr.reason ? REASONS[pr.reason] : undefined;
 }
 
-// What the merge box would say: conflict, out of date, blocked by rules, or free to merge.
-const MERGE_STATES: Partial<Record<MergeStateStatus, Mark>> = {
-  DIRTY: ["conflict", "bad", "Има конфликт с base клона"],
-  BEHIND: ["needs rebase", "pending", "Клонът е изостанал от base и трябва rebase преди merge"],
-  BLOCKED: ["blocked", "muted", "Merge е блокиран от правилата на repo-то (review-та или задължителни проверки)"],
-  CLEAN: ["mergeable", "ok", "Може да се merge-не"],
-  HAS_HOOKS: ["mergeable", "ok", "Може да се merge-не"],
-  UNSTABLE: ["mergeable", "ok", "Може да се merge-не, но незадължителни проверки не минават"],
-};
-
-function badge([text, kind, title]: Mark): Badge {
-  return title ? { text, kind, title } : { text, kind };
-}
-
-/** Why the PR waits on me, whether it is a draft, and whether it can be merged. */
-export function statusBadges(pr: ClassifiedPullRequest): Badge[] {
-  const badges: Badge[] = [];
-  if (pr.reason) badges.push(badge(reasonMark(pr) ?? [pr.reason, "bad"]));
-  if (pr.isDraft) badges.push(badge(["draft", "muted"]));
-  // GitHub may still be computing DIRTY while `mergeable` already says CONFLICTING.
-  const state = pr.mergeable === "CONFLICTING" ? "DIRTY" : pr.mergeStateStatus;
-  const merge = MERGE_STATES[state];
-  const saidByReason = (pr.reason === "conflict" && state === "DIRTY") || (pr.reason === "needs_rebase" && state === "BEHIND");
-  if (merge && !saidByReason) badges.push(badge(merge));
-  return badges;
+/** Why the PR waits on me, as the label on its card; undefined when it does not. */
+export function reasonBadge(pr: ClassifiedPullRequest): Badge | undefined {
+  if (!pr.reason) return undefined;
+  const [text, kind] = reasonMark(pr) ?? [pr.reason, "bad"];
+  return { text, kind };
 }
