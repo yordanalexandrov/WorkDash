@@ -9,7 +9,7 @@ import { TopBar } from "./components/TopBar.js";
 import { ViewToggle } from "./components/ViewToggle.js";
 import type { DashboardState } from "./api.js";
 import { type Dashboard, type DashboardPlace, issueTabs, pickRepo, readDashboard, writeDashboard } from "./dashboard.js";
-import { configErrorText, errorText, intervalText, missingText, needsNewToken, pollButton, statusText } from "./format.js";
+import { configErrorText, errorText, intervalText, issueErrorText, issueStatusText, missingText, needsNewToken, pollButton, statusText } from "./format.js";
 import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, useBooted } from "./motion.js";
 import { repoHues } from "./palette.js";
 import { useDashboard } from "./useDashboard.js";
@@ -44,8 +44,8 @@ export function App() {
   // The Issue dashboard's open repo, while it shows: only then are its issues loaded and polled.
   const onIssues = state !== null && !settings.open && place.dashboard === "issues";
   const issueRepo = useMemo(() => (onIssues ? pickRepo(issueTabs(state.issueRepos), place.repo) : null), [onIssues, state?.issueRepos, place.repo]);
-  const issues = useIssues(issueRepo);
-  // "Обнови" (and `r`) polls what the dashboard shown shows: the PRs, or the open repo's issues.
+  const issues = useIssues(issueRepo, state?.pollMode === "periodic");
+  // The status line, the error banner and "Обнови" (and `r`) are of the dashboard shown: the PRs, or the open repo's issues.
   const pollNowButton = pollButton(onIssues ? issues.state : state, polling.now);
   const pollNow = () => !pollNowButton.disabled && (onIssues ? issues.pollNow() : polling.pollNow());
   const [view, setView] = useState<View>(() => readView(location.search));
@@ -98,7 +98,7 @@ export function App() {
         <i />
       </div>
       <TopBar
-        status={statusText(state, polling.now)}
+        status={issueRepo ? issueStatusText(issues.state, polling.now) : statusText(state, polling.now)}
         stream={stream}
         notifications={notifications}
         toggle={
@@ -126,8 +126,8 @@ export function App() {
         <div class="top-slot" ref={setTopSlot} />
       </TopBar>
       <Banners
-        error={errorText(state, stream)}
-        errorInSettings={needsNewToken(state) && !settings.open}
+        error={onIssues ? issueErrorText(issues.state, state.pollMode, stream) : errorText(state, stream)}
+        errorInSettings={needsNewToken(onIssues ? issues.state : state) && !settings.open}
         configError={settings.open ? null : configErrorText(state)}
         setup={settings.open ? null : missingText(state)}
         missed={notifications.missed}

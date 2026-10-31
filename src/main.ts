@@ -129,7 +129,13 @@ const server = buildServer({
   issues,
   logger: true,
 });
-const issuePoller = createIssuePoller({ store, token: () => token, log: server.log, onChange: publishIssues });
+const issuePoller = createIssuePoller({
+  store,
+  token: () => token,
+  intervalMs: () => config.github.pollIntervalMs,
+  log: server.log,
+  onChange: publishIssues,
+});
 const poller = startPoller({
   ...pollerSettings(config, token),
   store,

@@ -35,7 +35,8 @@ function shownOfTotal(issues: IssueBoardState | null): string | null {
 function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardState | null): string | null {
   if (!open) return fetched ? "Нито едно repo няма включени issues." : null;
   if (!issues) return null;
-  if (issues.fetchedAt === null) return issues.error ? `Issues на ${shortRepo(open)} не се взеха: ${issues.error.message}` : `Взимам issues на ${shortRepo(open)}…`;
+  // Why a poll failed is in the banner above, with issues saved or not.
+  if (issues.fetchedAt === null) return issues.error ? `Issues на ${shortRepo(open)} още не са взети.` : `Взимам issues на ${shortRepo(open)}…`;
   return issues.issues.length === 0 ? `${shortRepo(open)} няма отворени issues.` : null;
 }
 

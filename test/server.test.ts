@@ -601,7 +601,7 @@ describe("the issues API", () => {
     return {
       demands,
       poller: {
-        demand: (repo: string, demand: IssueDemand) => (demands.push({ repo, demand }), answer),
+        demand: (repo: string, demand: IssueDemand) => (demands.push({ repo, demand }), { answer, dueAt: "2026-10-31T12:05:00.000Z" }),
         polling: (repo: string) => repo === "my-org/repo-b",
         error: () => null,
       },
@@ -673,15 +673,15 @@ describe("the issues API", () => {
     expect((await server.inject("/api/issues")).statusCode).toBe(400);
   });
 
-  it("hands a demand for a repo's issues to the issue poller and says what came of it", async () => {
+  it("hands a demand for a repo's issues to the issue poller and says what came of it and when the interval is next due", async () => {
     const { demands, poller } = fakeIssuePoller("join");
     const { server } = serverWith({ poller });
 
-    const response = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "my-org/repo-a", reason: "open" } });
+    const response = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "my-org/repo-a", reason: "interval" } });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ answer: "join" });
-    expect(demands).toEqual([{ repo: "my-org/repo-a", demand: "open" }]);
+    expect(response.json()).toEqual({ answer: "join", dueAt: "2026-10-31T12:05:00.000Z" });
+    expect(demands).toEqual([{ repo: "my-org/repo-a", demand: "interval" }]);
   });
 
   it("refuses a demand with an unknown reason or for a repo not followed", async () => {

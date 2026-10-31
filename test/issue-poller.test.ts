@@ -41,13 +41,14 @@ async function waitFor(condition: () => boolean): Promise<void> {
   }
 }
 
-function setUp(options: { fail?: boolean; rateLimited?: boolean; token?: string | null } = {}) {
+function setUp(options: { fail?: boolean; rateLimited?: boolean; token?: string | null; intervalMs?: number } = {}) {
   const github = fakeGitHub(options);
   const store = openStore(":memory:");
   const changes: { repo: string; polling: boolean }[] = [];
   const poller = createIssuePoller({
     store,
     token: () => (options.token === undefined ? "t" : options.token),
+    intervalMs: () => options.intervalMs ?? 60_000,
     log: quietLog,
     fetch: github.fetch,
     onChange: (repo) => changes.push({ repo, polling: poller.polling(repo) }),
@@ -59,7 +60,7 @@ describe("createIssuePoller", () => {
   it("polls a repo when it is opened, saves its issues and tells when the poll starts and ends", async () => {
     const { github, store, poller, changes } = setUp();
 
-    expect(poller.demand("my-org/repo-a", "open")).toBe("poll");
+    expect(poller.demand("my-org/repo-a", "open").answer).toBe("poll");
 
     await waitFor(() => changes.length === 2);
     expect(github.calls).toEqual(["my-org/repo-a"]);
@@ -73,8 +74,8 @@ describe("createIssuePoller", () => {
   it("makes one request for a repo that two pages open at once", async () => {
     const { github, poller, changes } = setUp();
 
-    expect(poller.demand("my-org/repo-a", "open")).toBe("poll");
-    expect(poller.demand("my-org/repo-a", "open")).toBe("join");
+    expect(poller.demand("my-org/repo-a", "open").answer).toBe("poll");
+    expect(poller.demand("my-org/repo-a", "open").answer).toBe("join");
 
     await waitFor(() => changes.length === 2);
     expect(github.calls).toEqual(["my-org/repo-a"]);
@@ -95,8 +96,8 @@ describe("createIssuePoller", () => {
     poller.demand("my-org/repo-a", "open");
     await waitFor(() => changes.length === 2);
 
-    expect(poller.demand("my-org/repo-a", "open")).toBe("skip");
-    expect(poller.demand("my-org/repo-a", "button")).toBe("poll");
+    expect(poller.demand("my-org/repo-a", "open").answer).toBe("skip");
+    expect(poller.demand("my-org/repo-a", "button").answer).toBe("poll");
 
     await waitFor(() => changes.length === 4);
     expect(github.calls).toEqual(["my-org/repo-a", "my-org/repo-a"]);
@@ -105,9 +106,9 @@ describe("createIssuePoller", () => {
   it("does not poll a repo saved less than a minute ago, after a restart", async () => {
     const { github, store } = setUp();
     store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 0 }, new Date());
-    const poller = createIssuePoller({ store, token: () => "t", log: quietLog, fetch: github.fetch, onChange: () => {} });
+    const poller = createIssuePoller({ store, token: () => "t", intervalMs: () => 60_000, log: quietLog, fetch: github.fetch, onChange: () => {} });
 
-    expect(poller.demand("my-org/repo-a", "open")).toBe("skip");
+    expect(poller.demand("my-org/repo-a", "open").answer).toBe("skip");
   });
 
   it("keeps the saved issues and says why when a poll fails, for that repo only", async () => {
@@ -128,14 +129,46 @@ describe("createIssuePoller", () => {
     await waitFor(() => changes.length === 2);
 
     expect(poller.error("my-org/repo-a")).toMatchObject({ kind: "rate_limit" });
-    expect(poller.demand("my-org/repo-b", "button")).toBe("skip");
+    expect(poller.demand("my-org/repo-b", "button").answer).toBe("skip");
     expect(github.calls).toEqual(["my-org/repo-a"]);
   });
 
   it("does not poll without a token", () => {
     const { github, poller } = setUp({ token: null });
 
-    expect(poller.demand("my-org/repo-a", "open")).toBe("skip");
+    expect(poller.demand("my-org/repo-a", "open").answer).toBe("skip");
     expect(github.calls).toEqual([]);
+  });
+
+  it("polls a repo on the interval only once the poll interval has passed, and says when the interval is next due", async () => {
+    const { github, store, poller, changes } = setUp({ intervalMs: 300_000 });
+    const polledAt = new Date(Date.now() - 240_000);
+    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 0 }, polledAt);
+
+    const early = poller.demand("my-org/repo-a", "interval");
+
+    expect(early.answer).toBe("skip");
+    expect(Date.parse(early.dueAt)).toBe(polledAt.getTime() + 300_000);
+
+    store.saveIssues({ repo: "my-org/repo-b", issues: [], totalCount: 0 }, new Date(Date.now() - 300_000));
+    const before = Date.now();
+    const due = poller.demand("my-org/repo-b", "interval");
+
+    expect(due.answer).toBe("poll");
+    expect(Date.parse(due.dueAt)).toBeGreaterThanOrEqual(before + 300_000);
+    await waitFor(() => changes.length === 2);
+    expect(github.calls).toEqual(["my-org/repo-b"]);
+  });
+
+  it("tells a page that joins a poll on the interval when the next one is due", async () => {
+    const { poller } = setUp({ intervalMs: 120_000 });
+    const before = Date.now();
+    poller.demand("my-org/repo-a", "open");
+
+    const joined = poller.demand("my-org/repo-a", "interval");
+
+    expect(joined.answer).toBe("join");
+    expect(Date.parse(joined.dueAt) - before).toBeGreaterThanOrEqual(120_000);
+    expect(Date.parse(joined.dueAt) - before).toBeLessThan(121_000);
   });
 });

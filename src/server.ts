@@ -68,7 +68,7 @@ export type IssueSource = {
 const NO_ISSUES: IssueSource = {
   repos: () => [],
   config: () => ({ columns: [], repos: {} }),
-  poller: { demand: () => "skip", polling: () => false, error: () => null },
+  poller: { demand: () => ({ answer: "skip", dueAt: new Date(Date.now() + 3_600_000).toISOString() }), polling: () => false, error: () => null },
 };
 
 /** What GET /api/issues returns and the `issues` event carries for `repo`: its saved issues, each in its stage, and how its poll goes. */
@@ -262,7 +262,7 @@ function registerIssues(server: FastifyInstance, store: SnapshotStore, source: I
     const parsed = IssuePollRequest.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
     if (!follows(source, parsed.data.repo)) return reply.code(404).send({ error: "not a followed repo" });
-    return { answer: source.poller.demand(parsed.data.repo, parsed.data.reason) };
+    return source.poller.demand(parsed.data.repo, parsed.data.reason);
   });
 }
 
