@@ -2,6 +2,7 @@ import type { SnapshotStore, StoredSnapshot } from "./db.js";
 import { updateRecentlyClosed, vanishedPullRequests } from "./domain/closed.js";
 import { classifyPollError, nextPollDelay, type PollHealth } from "./domain/poll-error.js";
 import { answerDemand, delayAfterSwitch, type Demand, type DemandAnswer, type PollMode } from "./domain/poll-mode.js";
+import { issueReposAfterPoll, repoKey } from "./domain/repos.js";
 import type { Snapshot } from "./domain/types.js";
 import { fetchClosedPullRequests, fetchSnapshot } from "./github/client.js";
 
@@ -73,8 +74,8 @@ export function startPoller(
     try {
       const before = store.loadSnapshot();
       // A repo dropped from the config takes its PRs along; they did not close.
-      const followed = new Set(repos.map((repo) => repo.toLowerCase()));
-      const previous = (before?.pullRequests ?? []).filter((pr) => followed.has(pr.repo.toLowerCase()));
+      const followed = new Set(repos.map(repoKey));
+      const previous = (before?.pullRequests ?? []).filter((pr) => followed.has(repoKey(pr.repo)));
       // Taken before the request, so a comment posted while it is under way stays unread.
       const startedAt = new Date();
       const snapshot = await fetchSnapshot({ repos, token: token!, fetch, previous, observedAt: startedAt });
@@ -84,7 +85,7 @@ export function startPoller(
       // Marked before saving, so no reader sees a new PR without its mark.
       store.markFirstSeen(snapshot.pullRequests, startedAt);
       store.saveSnapshot(snapshot, now);
-      store.saveIssueRepos(snapshot.issueRepos);
+      store.saveIssueRepos(issueReposAfterPoll({ repos, read: snapshot.issueRepos, unread: snapshot.unreadRepos, previous: store.loadIssueRepos() }));
       store.saveRecentlyClosed(
         updateRecentlyClosed({
           known: store.loadRecentlyClosed(),
