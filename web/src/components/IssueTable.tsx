@@ -50,10 +50,9 @@ type IssueTableProps = {
 export function IssueTable({ issues, closed, stages, hue, viewer, message, query, sort, onSort, groupBy, onGroupBy, collapsed, onToggle, onOpen, openFlip, booted }: IssueTableProps) {
   const columns = issueTableColumns(stages);
   const sorted = sortItems(issues, columns, sort, (issue) => issue.updatedAt);
-  const grouped = issueGroups(sorted, groupBy, stages);
-  const groups: TableGroup<TableRow>[] = issueRows(grouped, collapsed).map((group, i) => ({
+  const groups: TableGroup<TableRow>[] = issueRows(issueGroups(sorted, groupBy, stages), collapsed).map((group) => ({
     id: group.id,
-    ...(groupBy === "none" ? {} : { head: groupBy === "parent" ? parentHead(grouped[i]!) : groupHead(groupBy, group.key) }),
+    ...(groupBy === "none" ? {} : { head: groupHead(groupBy, group) }),
     items: group.rows,
   }));
   if (closed.length) {
@@ -101,13 +100,13 @@ export function IssueTable({ issues, closed, stages, hue, viewer, message, query
   );
 }
 
-/** A parent's head: `#n` and its title (`parentGroupLabel`); "Без родител" in `--faint`. */
-function parentHead(group: Group<StagedIssue>): GroupHeadLook {
-  return { color: group.key ? "var(--muted)" : "var(--faint)", label: parentGroupLabel(group, group.items[0]!.repo) };
-}
-
-/** A stage's head in its accent with the label's name; an assignee's with the avatar; a milestone's with ⚑. The empty key is "Без …". */
-function groupHead(by: GroupBy, key: string): GroupHeadLook {
+/**
+ * A stage's head in its accent with the label's name; an assignee's with the avatar; a milestone's with ⚑; a parent's with
+ * `#n` and its title (`parentGroupLabel`). The empty key is "Без …".
+ */
+function groupHead(by: GroupBy, group: Group<StagedIssue>): GroupHeadLook {
+  const { key } = group;
+  if (by === "parent") return { color: key ? "var(--muted)" : "var(--faint)", label: parentGroupLabel(group, group.items[0]!.repo) };
   if (by === "stage") return { color: stageMark(key || null).accent, label: key || "Без етап" };
   if (by === "assignee") return key ? { color: "var(--text)", label: key, lead: <Avatar login={key} /> } : { color: "var(--faint)", label: "Без assignee" };
   return key ? { color: "var(--muted)", label: `⚑ ${key}` } : { color: "var(--faint)", label: "Без milestone" };

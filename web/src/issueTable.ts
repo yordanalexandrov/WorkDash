@@ -92,11 +92,11 @@ export function parentGroupLabel(group: Group<StagedIssue>, repo: string): strin
 export type IssueRow = { issue: StagedIssue; flip: string };
 
 /**
- * The groups' rows with their FLIP keys, unique in the table though an issue can be in several groups: of an issue's rows,
+ * The groups with their rows and the rows' FLIP keys, unique in the table though an issue can be in several groups: of an issue's rows,
  * the first in an open group has the key of its card (`issueFlipKey`), so a switch of view lands the card on it and a regroup
  * glides it; any other has the group's id after it.
  */
-export function issueRows(groups: Group<StagedIssue>[], collapsed: ReadonlySet<string>): { id: string; key: string; rows: IssueRow[] }[] {
+export function issueRows(groups: Group<StagedIssue>[], collapsed: ReadonlySet<string>): (Group<StagedIssue> & { rows: IssueRow[] })[] {
   const taken = new Set<string>();
   const shownFirst = [...groups.filter((g) => !collapsed.has(g.id)), ...groups.filter((g) => collapsed.has(g.id))];
   const flips = new Map<Group<StagedIssue>, string[]>();
@@ -111,5 +111,5 @@ export function issueRows(groups: Group<StagedIssue>[], collapsed: ReadonlySet<s
       }),
     );
   }
-  return groups.map((group) => ({ id: group.id, key: group.key, rows: group.items.map((issue, i) => ({ issue, flip: flips.get(group)![i]! })) }));
+  return groups.map((group) => ({ ...group, rows: group.items.map((issue, i) => ({ issue, flip: flips.get(group)![i]! })) }));
 }
