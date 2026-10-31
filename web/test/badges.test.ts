@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
-import { checkBadges, closedBadge, reviewBadges, statusBadges, unreadBadges } from "../src/badges.js";
+import { statusBadges } from "../src/badges.js";
 
 const pr = pullRequest;
 
@@ -43,70 +43,5 @@ describe("statusBadges", () => {
     expect(statusBadges({ ...pr({ mergeStateStatus: "BEHIND" }), reason: "needs_rebase" })).toEqual([
       { text: "needs rebase", kind: "pending" },
     ]);
-  });
-});
-
-describe("checkBadges", () => {
-  it("shows CI and Sonar results", () => {
-    expect(checkBadges(pr({ ci: "PENDING", sonar: "SUCCESS" }))).toEqual([
-      { text: "CI …", kind: "pending" },
-      { text: "Sonar ✓", kind: "ok" },
-    ]);
-  });
-
-  it("marks a PR without CI checks and leaves Sonar out when the repo does not run it", () => {
-    expect(checkBadges(pr({ ci: null, sonar: null }))).toEqual([{ text: "CI –", kind: "muted", title: "Няма CI проверки" }]);
-  });
-
-  it("leaves out a failure the reason badge already names", () => {
-    expect(checkBadges({ ...pr({ ci: "FAILURE", sonar: "FAILURE" }), reason: "ci_failed" })).toEqual([
-      { text: "Sonar ✗", kind: "bad" },
-    ]);
-  });
-});
-
-describe("unreadBadges", () => {
-  it("shows how many comments are unread", () => {
-    expect(unreadBadges({ ...pr(), unreadComments: 2 })).toEqual([{ text: "💬 2", kind: "pending", title: "2 непрочетени коментара" }]);
-  });
-
-  it("shows nothing when every comment is read", () => {
-    expect(unreadBadges({ ...pr(), unreadComments: 0 })).toEqual([]);
-    expect(unreadBadges(pr())).toEqual([]);
-  });
-
-  it("does not repeat the count the reason already names", () => {
-    expect(unreadBadges({ ...pr(), reason: "unread_comments", unreadComments: 2 })).toEqual([]);
-  });
-});
-
-describe("reviewBadges", () => {
-  it("marks each reviewer's latest review and skips dismissed ones", () => {
-    const reviews = [
-      { author: "colleague1", state: "APPROVED", submittedAt: "2026-10-30T09:00:00Z" },
-      { author: "colleague2", state: "DISMISSED", submittedAt: "2026-10-30T09:00:00Z" },
-      { author: "colleague3", state: "COMMENTED", submittedAt: "2026-10-30T09:00:00Z" },
-    ] as const;
-
-    expect(reviewBadges(pr({ reviews: [...reviews] }))).toEqual([
-      { text: "✓ colleague1", kind: "ok" },
-      { text: "💬 colleague3", kind: "muted" },
-    ]);
-  });
-});
-
-describe("closedBadge", () => {
-  const closed = {
-    repo: "my-org/repo-a",
-    number: 9,
-    title: "Ship it",
-    url: "https://github.com/my-org/repo-a/pull/9",
-    author: "me",
-    closedAt: "2026-10-30T11:00:00Z",
-  };
-
-  it("tells a merged PR from one closed without merging", () => {
-    expect(closedBadge({ ...closed, state: "MERGED" })).toEqual({ text: "merged", kind: "merged" });
-    expect(closedBadge({ ...closed, state: "CLOSED" })).toEqual({ text: "closed", kind: "bad", title: "Затворен без merge" });
   });
 });

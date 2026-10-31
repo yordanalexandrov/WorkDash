@@ -1,4 +1,4 @@
-import type { CiState, ClosedPullRequest, MergeStateStatus, ReviewState } from "../../src/domain/types.js";
+import type { MergeStateStatus } from "../../src/domain/types.js";
 import type { ClassifiedPullRequest } from "./api.js";
 
 /** `kind` picks the colour: ok, bad, pending, muted or merged. */
@@ -18,7 +18,7 @@ const REASONS: Record<string, Mark> = {
 };
 
 /** "1 нов коментар", "2 нови коментара": Bulgarian counts take a different form after one. */
-function count(n: number, one: string, many: string): string {
+export function count(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
@@ -38,14 +38,6 @@ function reasonMark(pr: ClassifiedPullRequest): Mark | undefined {
   return pr.reason ? REASONS[pr.reason] : undefined;
 }
 
-const CHECK_MARKS: Record<CiState, Mark> = {
-  SUCCESS: ["✓", "ok"],
-  FAILURE: ["✗", "bad"],
-  ERROR: ["✗", "bad"],
-  PENDING: ["…", "pending"],
-  EXPECTED: ["…", "pending"],
-};
-
 // What the merge box would say: conflict, out of date, blocked by rules, or free to merge.
 const MERGE_STATES: Partial<Record<MergeStateStatus, Mark>> = {
   DIRTY: ["conflict", "bad", "Има конфликт с base клона"],
@@ -54,12 +46,6 @@ const MERGE_STATES: Partial<Record<MergeStateStatus, Mark>> = {
   CLEAN: ["mergeable", "ok", "Може да се merge-не"],
   HAS_HOOKS: ["mergeable", "ok", "Може да се merge-не"],
   UNSTABLE: ["mergeable", "ok", "Може да се merge-не, но незадължителни проверки не минават"],
-};
-
-const REVIEW_MARKS: Partial<Record<ReviewState, Mark>> = {
-  APPROVED: ["✓", "ok"],
-  CHANGES_REQUESTED: ["✗", "bad"],
-  COMMENTED: ["💬", "muted"],
 };
 
 function badge([text, kind, title]: Mark): Badge {
@@ -77,38 +63,4 @@ export function statusBadges(pr: ClassifiedPullRequest): Badge[] {
   const saidByReason = (pr.reason === "conflict" && state === "DIRTY") || (pr.reason === "needs_rebase" && state === "BEHIND");
   if (merge && !saidByReason) badges.push(badge(merge));
   return badges;
-}
-
-/** CI and Sonar badges; a failure the reason badge already names is not repeated. */
-export function checkBadges(pr: ClassifiedPullRequest): Badge[] {
-  const badges: Badge[] = [];
-  if (pr.reason !== "ci_failed") {
-    const [mark, kind] = pr.ci ? (CHECK_MARKS[pr.ci] ?? [pr.ci, "muted"]) : ["–", "muted"];
-    badges.push(badge([`CI ${mark}`, kind, pr.ci ? undefined : "Няма CI проверки"]));
-  }
-  if (pr.sonar && pr.reason !== "sonar_failed") {
-    const [mark, kind] = CHECK_MARKS[pr.sonar] ?? [pr.sonar, "muted"];
-    badges.push(badge([`Sonar ${mark}`, kind]));
-  }
-  return badges;
-}
-
-/** How many comments are unread, unless the reason badge already says it. */
-export function unreadBadges(pr: ClassifiedPullRequest): Badge[] {
-  const unread = pr.unreadComments ?? 0;
-  if (!unread || pr.reason === "unread_comments") return [];
-  return [badge([`💬 ${unread}`, "pending", count(unread, "непрочетен коментар", "непрочетени коментара")])];
-}
-
-/** One badge per reviewer's latest review; dismissed reviews are left out. */
-export function reviewBadges(pr: ClassifiedPullRequest): Badge[] {
-  return pr.reviews.flatMap((review) => {
-    const mark = REVIEW_MARKS[review.state];
-    return mark ? [badge([`${mark[0]} ${review.author}`, mark[1]])] : [];
-  });
-}
-
-/** How a recently closed PR ended: merged, or closed without merging. */
-export function closedBadge(pr: ClosedPullRequest): Badge {
-  return pr.state === "MERGED" ? badge(["merged", "merged"]) : badge(["closed", "bad", "Затворен без merge"]);
 }
