@@ -3,16 +3,11 @@ import { app, BrowserWindow, ipcMain, type IpcMainEvent, screen, shell } from "e
 import { SHOW_WINDOW } from "./ipc.js";
 import { linkTarget } from "./links.js";
 import { allowsPermission } from "./permissions.js";
-import { resources } from "./resources.js";
+import { appIcon } from "./resources.js";
 import { loadWindowState, saveWindowState } from "./window-state.js";
 
 function stateFile(): string {
   return join(app.getPath("userData"), "window-state.json");
-}
-
-/** The app's icon, for the window and the tray: from the repository or from the installed app's resources. */
-export function appIcon(): string {
-  return resources({ packaged: app.isPackaged, appPath: app.getAppPath(), resourcesPath: process.resourcesPath }).icon;
 }
 
 /**

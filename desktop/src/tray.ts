@@ -1,7 +1,7 @@
 import { app, Menu, nativeImage, type MenuItemConstructorOptions, Tray } from "electron";
 import { trayTooltip, withDot } from "./tray-look.js";
 import { type TrayActions, trayMenu } from "./tray-menu.js";
-import { appIcon } from "./window.js";
+import { appIcon } from "./resources.js";
 
 /** Panels draw the icon at 16 to 24 pixels; a larger bitmap stays sharp on HiDPI ones. */
 const ICON_SIZE = 64;

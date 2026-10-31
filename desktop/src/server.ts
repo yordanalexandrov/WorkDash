@@ -1,13 +1,8 @@
 import { app, safeStorage } from "electron";
 import { startWorkDash, type WorkDash } from "../../src/workdash.js";
 import { freshLog, logInfo } from "./log.js";
-import { resources } from "./resources.js";
+import { appResources } from "./resources.js";
 import { openTokenStore } from "./tokens.js";
-
-/** The page and its assets, from the repository or from the installed app's resources. */
-function webRoot(): string {
-  return resources({ packaged: app.isPackaged, appPath: app.getAppPath(), resourcesPath: process.resourcesPath }).webRoot;
-}
 
 /**
  * Starts the dashboard in this process on a free port of 127.0.0.1, with its data in `userData`. Nothing is taken in
@@ -22,7 +17,7 @@ export function startServer(): Promise<WorkDash> {
     tokens: openTokenStore(userData, safeStorage, (line) => logInfo(log, line)),
     host: "127.0.0.1",
     port: 0,
-    webRoot: webRoot(),
+    webRoot: appResources().webRoot,
     logger: { file: log },
   });
 }
