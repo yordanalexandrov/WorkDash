@@ -1,6 +1,6 @@
-import { app } from "electron";
+import { app, safeStorage } from "electron";
 import { startWorkDash, type WorkDash } from "../../src/workdash.js";
-import { freshLog } from "./log.js";
+import { freshLog, logInfo } from "./log.js";
 import { resources } from "./resources.js";
 import { openTokenStore } from "./tokens.js";
 
@@ -16,12 +16,13 @@ function webRoot(): string {
  */
 export function startServer(): Promise<WorkDash> {
   const userData = app.getPath("userData");
+  const log = freshLog(userData);
   return startWorkDash({
     dataDir: userData,
-    tokens: openTokenStore(userData),
+    tokens: openTokenStore(userData, safeStorage, (line) => logInfo(log, line)),
     host: "127.0.0.1",
     port: 0,
     webRoot: webRoot(),
-    logger: { file: freshLog(userData) },
+    logger: { file: log },
   });
 }

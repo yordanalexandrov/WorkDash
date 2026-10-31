@@ -1,12 +1,15 @@
 import { app, dialog, Menu, type BrowserWindow } from "electron";
 import type { WorkDash } from "../../src/workdash.js";
 import { startServer } from "./server.js";
+import { openTray, type WorkDashTray } from "./tray.js";
 import { openWindow, showWindow } from "./window.js";
 
 // The desktop app: the dashboard's server in this process, its page in a window (ADR 0002).
 
 let workdash: WorkDash | undefined;
 let window: BrowserWindow | undefined;
+let tray: WorkDashTray | undefined;
+let quitting = false;
 
 if (!app.requestSingleInstanceLock()) {
   // Already running: the first instance shows its window (below), this one leaves.
@@ -26,10 +29,18 @@ if (!app.requestSingleInstanceLock()) {
       app.exit(1);
       return;
     }
-    window = openWindow(workdash.url);
+    window = openWindow(workdash.url, () => quitting);
+    tray = openTray({
+      open: () => {
+        if (window && !window.isDestroyed()) showWindow(window);
+      },
+      quit: () => app.quit(),
+    });
+    workdash.onWaitingOnMe((count) => tray?.showCount(count));
   });
 
-  // Closing the window ends the app.
+  // Closing the window only hides it; the app ends from the tray's "Изход" (or a signal), which closes the window for good.
+  app.on("before-quit", () => (quitting = true));
   app.on("window-all-closed", () => app.quit());
 
   // Stop the poller, the watcher and the server and close the database before leaving.

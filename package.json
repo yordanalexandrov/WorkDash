@@ -11,7 +11,7 @@
     "build:server": "tsc -p tsconfig.build.json",
     "build:web": "esbuild web/src/main.tsx --bundle --minify --sourcemap --format=esm --target=es2022 --tsconfig=web/tsconfig.json --splitting --outdir=web/dist --entry-names=app",
     "watch:web": "npm run build:web -- --watch",
-    "build:desktop": "esbuild desktop/src/main.ts --bundle --sourcemap --platform=node --format=cjs --target=node22 --external:electron --external:better-sqlite3 --outfile=desktop/dist/main.cjs",
+    "build:desktop": "esbuild desktop/src/main.ts desktop/src/preload.ts --bundle --sourcemap --platform=node --format=cjs --target=node22 --external:electron --external:better-sqlite3 --outdir=desktop/dist --out-extension:.js=.cjs",
     "desktop": "npm run build:web && npm run build:desktop && npm --prefix desktop start",
     "build:deb": "npm run build:web && npm run build:desktop && npm --prefix desktop run deb",
     "start": "node dist/main.js",

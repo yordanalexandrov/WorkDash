@@ -1,6 +1,8 @@
 import { join } from "node:path";
-import { app, BrowserWindow, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, type IpcMainEvent, screen, shell } from "electron";
+import { SHOW_WINDOW } from "./ipc.js";
 import { linkTarget } from "./links.js";
+import { allowsPermission } from "./permissions.js";
 import { resources } from "./resources.js";
 import { loadWindowState, saveWindowState } from "./window-state.js";
 
@@ -8,8 +10,16 @@ function stateFile(): string {
   return join(app.getPath("userData"), "window-state.json");
 }
 
-/** Opens the dashboard at `url` in a window that comes back at its last size and position, and keeps other sites out of it. */
-export function openWindow(url: string): BrowserWindow {
+/** The app's icon, for the window and the tray: from the repository or from the installed app's resources. */
+export function appIcon(): string {
+  return resources({ packaged: app.isPackaged, appPath: app.getAppPath(), resourcesPath: process.resourcesPath }).icon;
+}
+
+/**
+ * Opens the dashboard at `url` in a window that comes back at its last size and position, and keeps other sites out of
+ * it. Closing it only hides it, so the page goes on polling and notifying, unless the app is quitting.
+ */
+export function openWindow(url: string, quitting: () => boolean): BrowserWindow {
   const state = loadWindowState(
     stateFile(),
     screen.getAllDisplays().map((display) => display.workArea),
@@ -22,12 +32,14 @@ export function openWindow(url: string): BrowserWindow {
     minWidth: 480,
     minHeight: 360,
     title: "WorkDash",
-    icon: resources({ packaged: app.isPackaged, appPath: app.getAppPath(), resourcesPath: process.resourcesPath }).icon,
+    icon: appIcon(),
     show: false,
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // Built next to main.cjs by `npm run build:desktop`.
+      preload: join(app.getAppPath(), "dist", "preload.cjs"),
       // SSE and notifications keep going while the window is hidden or in the background.
       backgroundThrottling: false,
     },
@@ -35,8 +47,11 @@ export function openWindow(url: string): BrowserWindow {
   if (state.maximized) window.maximize();
   window.once("ready-to-show", () => window.show());
 
-  window.on("close", () => {
+  window.on("close", (event) => {
     saveWindowState(stateFile(), { ...window.getNormalBounds(), maximized: window.isMaximized() });
+    if (quitting()) return;
+    event.preventDefault();
+    window.hide();
   });
 
   // Links to GitHub, Jira and the rest open in the default browser; the window only ever shows the dashboard.
@@ -52,6 +67,18 @@ export function openWindow(url: string): BrowserWindow {
     event.preventDefault();
     toBrowser(event.url);
   });
+
+  // The page's web notifications show as native ones; it may ask for nothing else.
+  const session = window.webContents.session;
+  session.setPermissionRequestHandler((_contents, permission, callback) => callback(allowsPermission(permission)));
+  session.setPermissionCheckHandler((_contents, permission) => allowsPermission(permission));
+
+  // A click on the missed summary shows the window, also when it is hidden.
+  const onShowWindow = (event: IpcMainEvent) => {
+    if (event.sender === window.webContents) showWindow(window);
+  };
+  ipcMain.on(SHOW_WINDOW, onShowWindow);
+  window.once("closed", () => ipcMain.off(SHOW_WINDOW, onShowWindow));
 
   void window.loadURL(url);
   return window;
