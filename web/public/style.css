@@ -2079,6 +2079,26 @@ kbd {
   stroke-width: 3px !important;
 }
 
+/* A node opens its issue: the pointer, a faint `--blue` fill on hover (no lift: a transform would undo mermaid's placing
+   of it) and the `--blue` focus ring of everything clickable. */
+.graph g.node[role="link"] {
+  cursor: pointer;
+}
+
+.graph g.node[role="link"]:hover :is(rect, path, polygon, circle) {
+  fill: color-mix(in srgb, var(--blue) 8%, var(--card)) !important;
+}
+
+.graph g.node[role="link"]:focus {
+  outline: none;
+}
+
+.graph g.node[role="link"]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 .graph :is(.flowchart-link, .edgePath path) {
   stroke: var(--muted) !important;
 }

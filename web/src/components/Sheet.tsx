@@ -15,6 +15,11 @@ type SheetProps = {
   expanded: boolean;
   /** ⤢ / ⤡ asks to switch the size. */
   onToggleSize(): void;
+  /**
+   * What it shows, by a key: a new key fades the content out, puts the new content in and fades it back in, the box
+   * staying where it is (no grow, no FLIP); at once under reduced motion.
+   */
+  showing: string;
   /** ✕ or a click on the shade asks to close. */
   onClose(): void;
   onClosed(): void;
@@ -32,7 +37,7 @@ const FADE_IN = { duration: 160, easing: "linear", fill: "backwards" } as const;
  * a shade behind it, ✕ with the focus on it, and Tab kept inside. ⤢ / ⤡ expand it to nearly the whole window and back.
  * It knows nothing of PRs; Esc and `f` are the page's shortcuts.
  */
-export function Sheet({ label, from, closing, target, expanded, onToggleSize, onClose, onClosed, children }: SheetProps) {
+export function Sheet({ label, from, closing, target, expanded, onToggleSize, onClose, onClosed, showing, children }: SheetProps) {
   const sheet = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const shade = useRef<HTMLDivElement>(null);
@@ -41,6 +46,12 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
   const [boxExpanded, setBoxExpanded] = useState(expanded);
   const before = useRef<DOMRectReadOnly | null>(null);
   const fading = useRef<Animation | null>(null);
+  // What the content shows: it follows `showing` once the old content has faded out, which shows until then.
+  const [shown, setShown] = useState(showing);
+  const shownChildren = useRef(children);
+  if (showing === shown) shownChildren.current = children;
+  const wanted = useRef(showing);
+  wanted.current = showing;
 
   useLayoutEffect(() => {
     close.current?.focus({ preventScroll: true });
@@ -102,6 +113,31 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
     content.animate([{ opacity: 0 }, { opacity: 1 }], { ...FADE_IN, delay: Math.round(GLIDE.duration * 0.6) });
   }, [boxExpanded]);
 
+  // Another issue to show: the old content fades out, the new one comes in faded and fades in, with the focus on ✕ as on
+  // opening (what had it, say a node of the graph, has gone). A size switch or closing cancels the fade: it swaps at once.
+  useLayoutEffect(() => {
+    if (showing === shown || closing) return;
+    const swap = () => setShown(wanted.current);
+    if (reducedMotion()) return swap();
+    const fade = inner.current!.animate([{ opacity: 1 }, { opacity: 0 }], FADE_OUT);
+    fade.finished.then(swap, swap);
+    return () => fade.cancel();
+  }, [showing]);
+
+  const swapped = useRef(false);
+  useLayoutEffect(() => {
+    if (!swapped.current) {
+      swapped.current = true;
+      return;
+    }
+    if (closing) return;
+    close.current?.focus({ preventScroll: true });
+    // The fade-out holds its end (`fill: forwards`) until it is cancelled.
+    const content = inner.current!;
+    for (const animation of content.getAnimations()) animation.cancel();
+    if (!reducedMotion()) content.animate([{ opacity: 0 }, { opacity: 1 }], FADE_IN);
+  }, [shown]);
+
   const sizeButton = expanded ? { label: "Свий", glyph: "⤡" } : { label: "Разпъни", glyph: "⤢" };
 
   // Tab and Shift+Tab go round the sheet's own controls.
@@ -139,7 +175,7 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
           >
             {sizeButton.glyph}
           </button>
-          {children}
+          {showing === shown ? children : shownChildren.current}
         </div>
       </div>
     </>

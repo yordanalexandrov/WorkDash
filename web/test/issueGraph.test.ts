@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FamilyMember, GraphIssue, IssueFamily } from "../../src/domain/issue-graph.js";
 import type { IssueBoardState } from "../src/api.js";
-import { familyChanged, familyGraph, graphMermaid, graphSummary, hasDependencies } from "../src/issueGraph.js";
+import { familyChanged, familyGraph, graphMermaid, graphNodeAt, graphSummary, nodeInSnapshot, hasDependencies } from "../src/issueGraph.js";
 import { closedIssue, issue } from "../../test/fixtures.js";
 
 const gi = (number: number, overrides: Partial<GraphIssue> = {}): GraphIssue => ({
@@ -165,5 +165,39 @@ describe("graphMermaid", () => {
     const [label] = lines(graphMermaid(familyGraph({ issue: members[0]!, head: gi(1), members }))).filter((line) => line.startsWith("n0["));
 
     expect(label).toBe('n0["#35;2 Fix #quot;quotes#quot;#58; a#35;b#59; #lt;tag#gt; and a title…"]');
+  });
+});
+
+describe("graphNodeAt", () => {
+  it("finds the node mermaid drew under an SVG id, by the node id it ends in", () => {
+    const graph = familyGraph(family());
+
+    expect(graphNodeAt(graph, "graph-3-flowchart-n1-7")?.issue.number).toBe(3);
+    expect(graphNodeAt(graph, "graph-3-flowchart-n12-0")).toBeUndefined();
+    expect(graphNodeAt(graph, "graph-3-flowchart-n1-7-label")).toBeUndefined();
+  });
+});
+
+describe("nodeInSnapshot", () => {
+  const board: IssueBoardState = {
+    repo: "my-org/repo-a",
+    fetchedAt: "2026-11-01T10:00:00Z",
+    stages: [],
+    issues: [{ ...issue({ number: 2 }), stage: null }],
+    totalCount: 1,
+    closed: [closedIssue({ number: 4 })],
+    polling: false,
+    error: null,
+  };
+
+  it("finds a node's issue among the open repo's open and recently closed issues, whatever the case of GitHub's repo name", () => {
+    expect(nodeInSnapshot(gi(2, { repo: "My-Org/Repo-A" }), board)?.number).toBe(2);
+    expect(nodeInSnapshot(gi(4, { state: "completed" }), board)?.number).toBe(4);
+  });
+
+  it("finds nothing for an issue closed before the window, one of another repo, or before the repo's issues come", () => {
+    expect(nodeInSnapshot(gi(9, { state: "completed" }), board)).toBeUndefined();
+    expect(nodeInSnapshot(gi(2, { repo: "my-org/repo-b" }), board)).toBeUndefined();
+    expect(nodeInSnapshot(gi(2), null)).toBeUndefined();
   });
 });

@@ -5,6 +5,7 @@ import type { FamilyMember, GraphIssue, IssueFamily } from "../../src/domain/iss
 import type { Issue } from "../../src/domain/issues.js";
 import { sameRepo } from "../../src/domain/repos.js";
 import type { IssueBoardState } from "./api.js";
+import type { ShownIssue } from "./issueDetail.js";
 import { subIssuesMark } from "./issueMarks.js";
 
 /**
@@ -55,6 +56,24 @@ export function familyGraph(family: IssueFamily): DrawnGraph {
   return { nodes, edges };
 }
 
+/** Mermaid's id of a drawn node: `<svg id>-flowchart-<node id>-<n>`. */
+const DRAWN_NODE = /-flowchart-(n\d+)-\d+$/;
+
+/** The node mermaid drew as the SVG element with id `domId`, so a click on it finds its issue; undefined for any other. */
+export function graphNodeAt(graph: DrawnGraph, domId: string): GraphNode | undefined {
+  const id = DRAWN_NODE.exec(domId)?.[1];
+  return id ? graph.nodes.find((node) => node.id === id) : undefined;
+}
+
+/**
+ * A node's issue as the open repo's issues have it (open, or closed within the window), so opening the node switches the
+ * sheet to it; undefined when it is not among them (closed before the window, of another repo), and GitHub opens instead.
+ */
+export function nodeInSnapshot(issue: { repo: string; number: number }, board: IssueBoardState | null): ShownIssue | undefined {
+  // GitHub's name of the repo may differ in case from the followed one the state is under.
+  return [...(board?.issues ?? []), ...(board?.closed ?? [])].find((shown) => sameIssue(shown, issue));
+}
+
 /** Whether the sheet has a "Зависимости" section: the issue has a parent, sub-issues, or blockers either way. */
 export function hasDependencies(issue: Pick<Issue, "parent" | "subIssues" | "dependencies">): boolean {
   return issue.parent !== null || issue.subIssues.total > 0 || issue.dependencies.totalBlockedBy > 0 || issue.dependencies.totalBlocking > 0;
@@ -69,7 +88,7 @@ export function graphSummary(issue: Pick<Issue, "repo" | "parent" | "subIssues">
   const progress = family
     ? family.head?.subIssues
     : parent
-      ? [...(board?.issues ?? []), ...(board?.closed ?? [])].find((shown) => sameIssue(shown, parent))?.subIssues
+      ? nodeInSnapshot(parent, board)?.subIssues
       : issue.subIssues;
   return progress?.total ? `${progress.completed}/${progress.total} затворени` : null;
 }
@@ -82,8 +101,7 @@ export function graphSummary(issue: Pick<Issue, "repo" | "parent" | "subIssues">
 export function familyChanged(family: IssueFamily, before: IssueBoardState | null, after: IssueBoardState): boolean {
   const drawn = [family.issue, ...(family.head ? [family.head] : []), ...family.members];
   const fingerprint = (state: IssueBoardState | null, issue: GraphIssue) => {
-    // GitHub's name of the repo may differ in case from the followed one the state is under.
-    const found = [...(state?.issues ?? []), ...(state?.closed ?? [])].find((shown) => sameIssue(shown, issue));
+    const found = nodeInSnapshot(issue, state);
     return found ? JSON.stringify([found.updatedAt, found.closedAt, found.parent, found.subIssues, found.dependencies]) : "";
   };
   return drawn.some((issue) => fingerprint(before, issue) !== fingerprint(after, issue));
@@ -114,7 +132,8 @@ export function graphMermaid(graph: DrawnGraph): string {
   return out.join("\n");
 }
 
-function nodeLabel(issue: GraphIssue): string {
+/** A node's text: `#n`, the title shortened, and its own sub-issues' progress. */
+export function nodeLabel(issue: GraphIssue): string {
   const progress = subIssuesMark(issue.subIssues);
   return `#${issue.number} ${shorten(issue.title)}${progress ? ` · ${progress.text}` : ""}`;
 }
