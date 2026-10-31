@@ -65,8 +65,8 @@ export function App() {
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
   const viewRoot = useRef<HTMLDivElement>(null);
   const fx = useRef<HTMLDivElement>(null);
-  const zone = useRef<HTMLDivElement>(null);
-  const drag = useDrag(fx, zone);
+  const dropZone = useRef<HTMLDivElement>(null);
+  const drag = useDrag(fx, dropZone);
   // The cards or rows lifted off the view being left, to land once the next one is in.
   const lifted = useRef<Flyer[] | null>(null);
   // A switch while the last one still flies ends it at once and lifts from the real cards or rows.
@@ -83,7 +83,7 @@ export function App() {
     lifted.current = null;
     if (flyers && viewRoot.current) void land(viewRoot.current, flyers);
   }, [view]);
-  // While the sheet is open, Esc closes it and `/` and `t` do nothing; while a card is dragged, Esc puts it back.
+  // While the sheet is open, Esc closes it and `/` and `t` do nothing. While a card is dragged, Esc puts it back (`useDrag`).
   useShortcuts(
     sheet
       ? [
@@ -91,7 +91,6 @@ export function App() {
           { matches: (event) => SLASH(event) || T(event), run: () => {} },
         ]
       : [
-          ...(drag.zone === "off" ? [] : [{ matches: ESCAPE, run: drag.cancel }]),
           { matches: SLASH, run: () => filterInput.current?.focus() },
           { matches: ESCAPE, run: () => setFilter((current) => ({ ...current, query: "" })) },
           { matches: T, run: () => switchView(view === "board" ? "table" : "board") },
@@ -168,9 +167,11 @@ export function App() {
                       index={index}
                       onOpen={openSheet}
                       ghost={openKey === prKey(pr) || drag.held.has(prFlipKey(pr))}
-                      {...(column.id === "waiting_on_me" ? { onSeen: seen } : {})}
-                      {...(column.id === "waiting_on_me" && !sheet
-                        ? { onGrab: (event: PointerEvent, slot: HTMLElement) => drag.grab(event, slot, () => seen(pr)) }
+                      {...(column.id === "waiting_on_me"
+                        ? {
+                            onSeen: seen,
+                            ...(sheet ? {} : { onGrab: (event: PointerEvent, slot: HTMLElement) => drag.grab(event, slot, () => seen(pr)) }),
+                          }
                         : {})}
                     />
                   ))
@@ -180,7 +181,7 @@ export function App() {
       </div>
       {drag.zone === "off" ? null : (
         <DropZone
-          zoneRef={zone}
+          zoneRef={dropZone}
           over={drag.zone === "over"}
           label="↓ Хвърли тук · видях"
           overLabel="Пусни! ✓"

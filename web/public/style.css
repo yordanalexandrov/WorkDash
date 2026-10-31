@@ -1636,10 +1636,9 @@ kbd {
   margin: 0;
   pointer-events: none;
   translate: none;
-  transition: none !important;
-  animation: none !important;
 }
 
+.clone,
 .clone *,
 .clone *::before,
 .clone *::after {
@@ -1669,7 +1668,8 @@ kbd {
   font-weight: 750;
   text-align: center;
   pointer-events: none;
-  animation: zone-enter var(--bounce-ms, 650ms) var(--bounce, ease-out) both;
+  /* Backwards only: once in, the "over" growth is a transition of the zone's own transform. */
+  animation: zone-enter var(--bounce-ms, 650ms) var(--bounce, ease-out) backwards;
   transition: transform var(--bounce-ms, 650ms) var(--bounce, ease-out);
 }
 
@@ -1702,7 +1702,7 @@ kbd {
 }
 
 .drop > .ring::before {
-  background: conic-gradient(from 0deg, var(--ok), var(--blue), var(--merged), var(--ok));
+  background: conic-gradient(from 0deg, var(--ok), color-mix(in srgb, var(--ok) 25%, transparent), var(--ok));
   animation-duration: 2.5s;
 }
 

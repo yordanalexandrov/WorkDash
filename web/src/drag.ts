@@ -1,5 +1,5 @@
 // The arithmetic of dragging something onto a drop zone: when a press becomes a drag, the tilt, the hit test and the spin of
-// the drop. It knows nothing of PRs; see "Drag to видях" in docs/design.md.
+// the drop. It knows nothing of PRs; see "Motion" and "Interaction" in docs/design.md.
 
 /** How far the pointer must go from where it pressed before a press becomes a drag; until then a click stays a click. */
 const THRESHOLD = 7;
