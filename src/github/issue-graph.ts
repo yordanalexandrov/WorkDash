@@ -11,6 +11,7 @@ const familyQuery = (number: number) => `query IssueGraph($owner: String!, $name
   repository(owner: $owner, name: $name) {
     issue(number: ${number}) {
       ...member
+      issueDependenciesSummary { totalBlockedBy totalBlocking }
       parent { ...ref subIssues(first: ${SUB_ISSUES_PAGE_SIZE}) { nodes { ...member } } }
       subIssues(first: ${SUB_ISSUES_PAGE_SIZE}) { nodes { ...member } }
     }
@@ -47,7 +48,11 @@ type MemberNode = RefNode & { blockedBy: { nodes: RefNode[] }; blocking: { nodes
 
 type FamilyData = {
   repository: {
-    issue: (MemberNode & { parent: (RefNode & { subIssues: { nodes: MemberNode[] } }) | null; subIssues: { nodes: MemberNode[] } }) | null;
+    issue: (MemberNode & {
+      issueDependenciesSummary: { totalBlockedBy: number; totalBlocking: number };
+      parent: (RefNode & { subIssues: { nodes: MemberNode[] } }) | null;
+      subIssues: { nodes: MemberNode[] };
+    }) | null;
   } | null;
 };
 
@@ -65,7 +70,8 @@ export async function fetchIssueFamily(options: { repo: string; number: number; 
   const parent = issue.parent;
   const own = issue.subIssues.nodes;
   const family = parent ? { head: toIssue(parent), members: parent.subIssues.nodes } : own.length ? { head: toIssue(issue), members: own } : { head: null, members: [] };
-  return { issue: toMember(issue), head: family.head, members: family.members.map(toMember) };
+  const totals = { blockedBy: issue.issueDependenciesSummary.totalBlockedBy, blocking: issue.issueDependenciesSummary.totalBlocking };
+  return { issue: toMember(issue), head: family.head, members: family.members.map(toMember), totals };
 }
 
 /** A closed issue's reason as the poll reads it (`toClosedIssue`): not planned or a duplicate, else completed. */

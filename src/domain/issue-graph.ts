@@ -35,4 +35,9 @@ export type IssueFamily = {
   head: GraphIssue | null;
   /** The head's sub-issues, closed ones too, the issue itself among them when it is a sub-issue. */
   members: FamilyMember[];
+  /**
+   * GitHub's counts of the issue's blockers both ways, open and closed, those the token cannot see too: more than
+   * `issue.blockedBy` / `issue.blocking` hold means some are not drawn.
+   */
+  totals: { blockedBy: number; blocking: number };
 };

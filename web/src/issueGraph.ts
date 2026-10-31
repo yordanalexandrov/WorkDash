@@ -5,6 +5,7 @@ import type { FamilyMember, GraphIssue, IssueFamily } from "../../src/domain/iss
 import type { Issue } from "../../src/domain/issues.js";
 import { sameRepo } from "../../src/domain/repos.js";
 import type { IssueBoardState } from "./api.js";
+import { count } from "./badges.js";
 import type { ShownIssue } from "./issueDetail.js";
 import { subIssuesMark } from "./issueMarks.js";
 
@@ -12,9 +13,10 @@ import { subIssuesMark } from "./issueMarks.js";
  * How a node is drawn, each a class `dep-<mark>` on its SVG node (prefixed, so the page's own `.blocked` and the like do
  * not reach it) that style.css colours from the tokens: the open sheet's issue
  * (`current`, a thick `--blue` border), open with an open blocker (`blocked`, `--pending`), closed as `completed`
- * (`--merged`) or as `not_planned` (`--muted`, dashed). An open issue with none is drawn plain.
+ * (`--merged`) or as `not_planned` (`--muted`, dashed), and a neighbour from outside the family (`external`, dotted). An
+ * open issue with none is drawn plain.
  */
-export type NodeMark = "current" | "blocked" | "completed" | "not_planned";
+export type NodeMark = "current" | "blocked" | "completed" | "not_planned" | "external";
 
 /** A node: its mermaid id (`n0`, `n1`, …), the issue, and how it is drawn. */
 export type GraphNode = { id: string; issue: GraphIssue; marks: NodeMark[] };
@@ -22,7 +24,12 @@ export type GraphNode = { id: string; issue: GraphIssue; marks: NodeMark[] };
 /** An arrow from a blocker to the issue it blocks, by node id. */
 export type GraphEdge = { from: string; to: string };
 
-export type DrawnGraph = { nodes: GraphNode[]; edges: GraphEdge[] };
+export type DrawnGraph = {
+  /** The open issue's repo: a node of another one is labelled `owner/name#n`. */
+  repo: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+};
 
 /** How long a title may be on its node before it is shortened. */
 const TITLE_LENGTH = 40;
@@ -33,13 +40,20 @@ const sameIssue = (a: { repo: string; number: number }, b: { repo: string; numbe
 
 /**
  * What is drawn of a family: the head's sub-issues (or the issue alone, when it has no family) and the blockers between
- * them, each arrow once though both its ends record it. A blocker outside the family is not drawn, but an open one still
- * makes its issue blocked.
+ * them, each arrow once though both its ends record it; and, one step out, the open issue's own blockers and the issues
+ * it blocks that are outside the family (`external`). The other members' neighbours outside it are not drawn, but an open
+ * blocker still makes its issue blocked.
  */
 export function familyGraph(family: IssueFamily): DrawnGraph {
   const members: FamilyMember[] = family.head ? family.members : [family.issue];
-  const nodes = members.map((member, index) => ({ id: `n${index}`, issue: member, marks: marksOf(member, family.issue) }));
+  const nodes: GraphNode[] = members.map((member, index) => ({ id: `n${index}`, issue: member, marks: marksOf(member, family.issue) }));
   const ids = new Map(nodes.map((node) => [keyOf(node.issue), node.id]));
+  for (const neighbour of [...family.issue.blockedBy, ...family.issue.blocking]) {
+    if (ids.has(keyOf(neighbour))) continue;
+    const id = `n${nodes.length}`;
+    nodes.push({ id, issue: neighbour, marks: ["external", ...(neighbour.state === "open" ? [] : [neighbour.state])] });
+    ids.set(keyOf(neighbour), id);
+  }
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();
   const connect = (blocker: GraphIssue, blocked: GraphIssue) => {
@@ -53,7 +67,20 @@ export function familyGraph(family: IssueFamily): DrawnGraph {
     for (const blocker of member.blockedBy) connect(blocker, member);
     for (const blocked of member.blocking) connect(member, blocked);
   }
-  return { nodes, edges };
+  return { repo: family.issue.repo, nodes, edges };
+}
+
+/**
+ * The note under the graph when GitHub counts more than it holds, "още 3 issues": the head's sub-issues and the issue's
+ * blockers both ways that the token cannot see (or past a page); null when nothing is missing.
+ */
+export function hiddenNote(family: IssueFamily): string | null {
+  const more = (total: number, drawn: number) => Math.max(0, total - drawn);
+  const hidden =
+    (family.head ? more(family.head.subIssues.total, family.members.length) : 0) +
+    more(family.totals.blockedBy, family.issue.blockedBy.length) +
+    more(family.totals.blocking, family.issue.blocking.length);
+  return hidden ? `още ${count(hidden, "issue", "issues")}` : null;
 }
 
 /** Mermaid's id of a drawn node: `<svg id>-flowchart-<node id>-<n>`. */
@@ -121,10 +148,10 @@ function marksOf(member: FamilyMember, current: GraphIssue): NodeMark[] {
  */
 export function graphMermaid(graph: DrawnGraph): string {
   const out = ["flowchart LR"];
-  for (const { id, issue } of graph.nodes) out.push(`  ${id}["${escape(nodeLabel(issue))}"]`);
+  for (const { id, issue } of graph.nodes) out.push(`  ${id}["${escape(nodeLabel(issue, graph.repo))}"]`);
   for (const { from, to } of graph.edges) out.push(`  ${from} --> ${to}`);
   // One line per class, apart from the nodes: mermaid mangles a line that looks like a style with an entity in it.
-  const MARKS: NodeMark[] = ["current", "blocked", "completed", "not_planned"];
+  const MARKS: NodeMark[] = ["current", "blocked", "completed", "not_planned", "external"];
   for (const mark of MARKS) {
     const ids = graph.nodes.filter((node) => node.marks.includes(mark)).map((node) => node.id);
     if (ids.length) out.push(`  class ${ids.join(",")} dep-${mark}`);
@@ -132,10 +159,11 @@ export function graphMermaid(graph: DrawnGraph): string {
   return out.join("\n");
 }
 
-/** A node's text: `#n`, the title shortened, and its own sub-issues' progress. */
-export function nodeLabel(issue: GraphIssue): string {
+/** A node's text: `#n`, or `owner/name#n` for an issue of another repo than `repo`, then the title shortened and its own sub-issues' progress. */
+export function nodeLabel(issue: GraphIssue, repo: string): string {
   const progress = subIssuesMark(issue.subIssues);
-  return `#${issue.number} ${shorten(issue.title)}${progress ? ` · ${progress.text}` : ""}`;
+  const ref = `${sameRepo(issue.repo, repo) ? "" : issue.repo}#${issue.number}`;
+  return `${ref} ${shorten(issue.title)}${progress ? ` · ${progress.text}` : ""}`;
 }
 
 /** A title cut to TITLE_LENGTH at a word's end, with "…". */

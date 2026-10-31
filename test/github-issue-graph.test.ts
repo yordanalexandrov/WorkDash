@@ -32,7 +32,8 @@ function member(number: number, overrides: Record<string, unknown> = {}) {
   return { ...ref(number), blockedBy: { nodes: [] }, blocking: { nodes: [] }, ...overrides };
 }
 
-const answer = (issue: unknown) => ({ data: { repository: { issue } } });
+/** GitHub's answer for the sheet's issue, with no blockers by its counts unless told otherwise. */
+const answer = (issue: object) => ({ data: { repository: { issue: { issueDependenciesSummary: { totalBlockedBy: 0, totalBlocking: 0 }, ...issue } } } });
 
 const asIssue = (number: number, overrides: Record<string, unknown> = {}) => ({
   repo: "my-org/repo-a",
@@ -83,7 +84,7 @@ describe("fetchIssueFamily", () => {
 
     const family = await fetchIssueFamily({ repo: "my-org/repo-a", number: 3, token: "t", fetch: github.fetch });
 
-    expect(family).toEqual({ issue: { ...asIssue(3), blockedBy: [], blocking: [] }, head: null, members: [] });
+    expect(family).toEqual({ issue: { ...asIssue(3), blockedBy: [], blocking: [] }, head: null, members: [], totals: { blockedBy: 0, blocking: 0 } });
   });
 
   it("tells completed from not planned as the poll does, and keeps another repo's name and a node's own sub-issues", async () => {
@@ -100,6 +101,22 @@ describe("fetchIssueFamily", () => {
 
     expect(family.members.map((m) => m.state)).toEqual(["completed", "not_planned", "not_planned", "completed", "open"]);
     expect(family.members[4]).toMatchObject({ repo: "my-org/repo-b", subIssues: { total: 5, completed: 3 } });
+  });
+
+  it("keeps GitHub's counts of the issue's blockers both ways, those it could not see too", async () => {
+    const github = fakeGitHub(
+      answer({
+        ...member(3, { blockedBy: { nodes: [ref(4)] } }),
+        issueDependenciesSummary: { totalBlockedBy: 3, totalBlocking: 2 },
+        parent: null,
+        subIssues: { nodes: [] },
+      }),
+    );
+
+    const family = await fetchIssueFamily({ repo: "my-org/repo-a", number: 3, token: "t", fetch: github.fetch });
+
+    expect(github.calls[0]!.query).toContain("issueDependenciesSummary { totalBlockedBy totalBlocking }");
+    expect(family.totals).toEqual({ blockedBy: 3, blocking: 2 });
   });
 
   it("fails when GitHub returns no such issue", async () => {

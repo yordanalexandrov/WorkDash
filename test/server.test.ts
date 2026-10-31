@@ -768,6 +768,7 @@ describe("the dependency graph API", () => {
           subIssuesSummary: { total: 0, completed: 0 },
           blockedBy: { nodes: [] },
           blocking: { nodes: [] },
+          issueDependenciesSummary: { totalBlockedBy: 0, totalBlocking: 0 },
           parent: null,
           subIssues: { nodes: [] },
         },

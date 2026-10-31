@@ -2035,6 +2035,13 @@ kbd {
   overflow-x: auto;
 }
 
+/* "още N" under the graph: issues GitHub counts that the token cannot see. */
+.detail .deps-more {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .detail .graph svg {
   display: block;
   padding: 8px;
@@ -2072,6 +2079,13 @@ kbd {
 
 .graph g.node.dep-not_planned .nodeLabel {
   color: var(--muted) !important;
+}
+
+/* A neighbour from outside the family: dotted, apart from not planned's dashes; its state's colour stays. */
+.graph g.node.dep-external :is(rect, path, polygon, circle) {
+  stroke-dasharray: 1 3 !important;
+  stroke-linecap: round;
+  stroke-width: 1.5px !important;
 }
 
 .graph g.node.dep-current :is(rect, path, polygon, circle) {

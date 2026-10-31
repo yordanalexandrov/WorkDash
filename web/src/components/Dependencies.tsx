@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { GraphIssue } from "../../../src/domain/issue-graph.js";
 import type { IssueBoardState } from "../api.js";
 import type { ShownIssue } from "../issueDetail.js";
-import { type DrawnGraph, familyGraph, graphMermaid, graphNodeAt, graphSummary, nodeLabel } from "../issueGraph.js";
+import { type DrawnGraph, familyGraph, graphMermaid, graphNodeAt, graphSummary, hiddenNote, nodeLabel } from "../issueGraph.js";
 import { useIssueGraph } from "../useIssueGraph.js";
 import { atNaturalWidth, draw, mermaidTheme } from "./Markdown.js";
 
@@ -18,12 +18,14 @@ type DependenciesProps = {
 
 /**
  * The detail sheet's "Зависимости" ("Anatomy" → Detail sheet in docs/design.md): the summary line, with a spinner while
- * the graph loads, then the Dependency graph at its natural width. A failure says so here and nowhere else.
+ * the graph loads, then the Dependency graph at its natural width, and "още N" under it when GitHub counts issues the
+ * token cannot see. A failure says so here and nowhere else.
  */
 export function Dependencies({ issue, board, onOpen }: DependenciesProps) {
   const { family, loading, failed } = useIssueGraph(issue, board);
   const graph = useMemo(() => (family ? familyGraph(family) : null), [family]);
   const summary = graphSummary(issue, board, family);
+  const more = family ? hiddenNote(family) : null;
   return (
     <section class="deps" aria-busy={loading}>
       <h3>Зависимости</h3>
@@ -35,6 +37,11 @@ export function Dependencies({ issue, board, onOpen }: DependenciesProps) {
       ) : null}
       {failed ? <p class="none">{FAILED}</p> : null}
       {graph ? <GraphDrawing graph={graph} onOpen={onOpen} /> : null}
+      {more ? (
+        <p class="deps-more" title="GitHub ги брои, но токенът не ги вижда">
+          {more}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -74,7 +81,7 @@ function GraphDrawing({ graph, onOpen }: { graph: DrawnGraph; onOpen(issue: Grap
     if (!node) return;
     g.setAttribute("tabindex", "0");
     g.setAttribute("role", "link");
-    g.setAttribute("aria-label", nodeLabel(node.issue));
+    g.setAttribute("aria-label", nodeLabel(node.issue, latest.current.graph.repo));
     const open = () => {
       const now = graphNodeAt(latest.current.graph, g.id);
       if (now) latest.current.onOpen(now.issue);
