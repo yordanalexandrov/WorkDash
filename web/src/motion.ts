@@ -2,7 +2,7 @@
 // Only transform and opacity move; see "Motion" in docs/design.md and docs/research/motion.md for why there is no library.
 
 import { type RefObject } from "preact";
-import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 
 export type Spring = { easing: string; duration: number };
 
@@ -224,24 +224,44 @@ function skipEntrance(el: HTMLElement): void {
   for (const animation of el.getAnimations()) if (animation instanceof CSSAnimation) animation.finish();
 }
 
+/** How long the entrance cascade runs (the delays of .col, .slot, .trow and .tgroup in style.css). */
+const CASCADE_MS = 2200;
+
+/** Whether the first entrance cascade is over; after it, whatever comes (cards, rows, a view switched to) enters without its delay. */
+export function useBooted(): boolean {
+  const [booted, setBooted] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setBooted(true), CASCADE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return booted;
+}
+
+// A card slides out to the right and shrinks; a row slides out and folds flat.
+const LEAVE: Record<"card" | "row", Keyframe[]> = {
+  card: [
+    { transform: "none", opacity: 1 },
+    { transform: "translateX(30px) scale(.96) rotate(2deg)", opacity: 1, offset: 0.35 },
+    { transform: "translateX(260px) scale(.5) rotate(10deg)", opacity: 0 },
+  ],
+  row: [
+    { transform: "none", opacity: 1 },
+    { transform: "translateX(18px)", opacity: 1, offset: 0.3 },
+    { transform: "translateX(140px) scaleY(.2)", opacity: 0 },
+  ],
+};
+
 /**
- * The card leaves for "видях": it slides out to the right and shrinks, holding the board's gate meanwhile, so a snapshot
- * that arrives on the way renders after it. Null under reduced motion, when nothing moves. The card stays hidden until `left`
- * settles (the PR marked seen); if it is still on the board a hold later, the PR stayed, so the card comes back.
+ * The card (or row) leaves for "видях", holding the board's gate meanwhile, so a snapshot that arrives on the way renders
+ * after it. Null under reduced motion, when nothing moves. It stays hidden until `left` settles (the PR marked seen); if it
+ * is still there a hold later, the PR stayed, so it comes back.
  */
-export function slideOut(el: HTMLElement, left: () => Promise<void>): void {
+export function slideOut(el: HTMLElement, left: () => Promise<void>, shape: "card" | "row" = "card"): void {
   if (reducedMotion()) {
     left().catch(() => {});
     return;
   }
-  const exit = el.animate(
-    [
-      { transform: "none", opacity: 1 },
-      { transform: "translateX(30px) scale(.96) rotate(2deg)", opacity: 1, offset: 0.35 },
-      { transform: "translateX(260px) scale(.5) rotate(10deg)", opacity: 0 },
-    ],
-    { duration: GLIDE.duration, easing: GLIDE.easing, fill: "forwards", composite: "add" },
-  );
+  const exit = el.animate(LEAVE[shape], { duration: GLIDE.duration, easing: GLIDE.easing, fill: "forwards", composite: "add" });
   holdWhile(exit.finished);
   exit.finished
     .then(left)

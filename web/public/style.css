@@ -31,6 +31,7 @@
   --tag-bg-l: 92%;
   --tint-l: 62%;
   --tint-mix: 17%;
+  --row-mix: 11%;
   --stripe-l: 52%;
 }
 
@@ -63,6 +64,7 @@
     --tag-bg-l: 22%;
     --tint-l: 46%;
     --tint-mix: 24%;
+    --row-mix: 15%;
     --stripe-l: 58%;
   }
 }
@@ -225,6 +227,62 @@ h1 .live.ok::after {
 
 .chip:hover {
   border-color: var(--faint);
+}
+
+/* View toggle: the thumb glides under the view shown. */
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.views {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  box-shadow: var(--shadow);
+}
+
+.views button {
+  position: relative;
+  z-index: 1;
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.views button:hover {
+  color: var(--text);
+}
+
+.views button.on {
+  color: var(--chip-on-text);
+}
+
+.views .thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--chip-on);
+  transition: transform var(--glide-ms, 0.4s) var(--glide, ease-out);
+}
+
+.views.table .thumb {
+  transform: translateX(100%);
 }
 
 /* Toolbar: the text filter, the repo chips (their dots are the colour legend) and "само моите"; wraps when the repos are many. */
@@ -829,6 +887,396 @@ kbd {
   color: var(--bad);
 }
 
+/* Table: a glassy panel; one grid whose rows and group heads take its columns (subgrid), so the columns fit what the
+   rows hold and every row stays a box of its own for FLIP. Only the panel's scroll box scrolls; the header sticks in it. */
+.tablev {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 16px 18px;
+}
+
+.tpanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 14px;
+  background: var(--col);
+  box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+}
+
+.tbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--chip);
+}
+
+.seg button {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.seg button:hover {
+  color: var(--text);
+}
+
+.seg button.on {
+  color: var(--chip-on-text);
+  background: var(--chip-on);
+}
+
+.tbar .hint {
+  margin-left: auto;
+  color: var(--faint);
+}
+
+.tscroll {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 10px 12px;
+}
+
+/* section, repo, #, title, author, why, CI, SQ, merge, review, 💬, Jira, age, active, action */
+.tgrid {
+  display: grid;
+  grid-template-columns: 76px max-content 46px minmax(260px, 1fr) max-content 124px 30px 30px 78px 76px 40px 92px 46px 50px 58px;
+  column-gap: 8px;
+  row-gap: 5px;
+}
+
+/* Narrower screens: the title wraps more, so the table still fits. */
+@media (max-width: 1400px) {
+  .tgrid {
+    grid-template-columns: 76px max-content 46px minmax(170px, 1fr) max-content 124px 30px 30px 78px 76px 40px 92px 46px 50px 58px;
+  }
+}
+
+.thead,
+.trow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding: 4px 6px 4px 0;
+  border-left: 4px solid transparent;
+}
+
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 -10px;
+  padding: 8px 16px 7px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.th {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.th.sortable {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.th.sortable:hover,
+.th.on {
+  color: var(--text);
+}
+
+.th .arrow {
+  opacity: 0.35;
+  font-size: 8.5px;
+}
+
+.th.on .arrow {
+  opacity: 1;
+  color: var(--blue);
+}
+
+.th:first-child,
+.tc:first-child {
+  padding-left: 8px;
+}
+
+.th.r,
+.tc.r {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.th.c,
+.tc.c {
+  justify-content: center;
+  text-align: center;
+}
+
+.trow {
+  --tint: color-mix(in srgb, hsl(var(--rh) 85% var(--tint-l)) var(--row-mix), var(--card));
+  position: relative;
+  min-height: 40px;
+  border-left-color: hsl(var(--rh) 70% var(--stripe-l));
+  border-radius: 9px;
+  background: var(--tint);
+  box-shadow: var(--shadow);
+  outline: none;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  translate: 0 var(--lift, 0px);
+  transition:
+    translate 0.22s ease-out,
+    box-shadow 0.22s ease-out;
+}
+
+.trow:hover,
+.trow:focus-visible {
+  --lift: -2px;
+  z-index: 1;
+  box-shadow: var(--lifted);
+}
+
+.trow:focus-visible {
+  box-shadow: var(--lifted), 0 0 0 2px var(--blue);
+}
+
+.trow.draft {
+  background: repeating-linear-gradient(135deg, var(--tint), var(--tint) 8px, var(--col-solid) 8px, var(--col-solid) 10px);
+}
+
+.tc {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.tc .tag {
+  max-width: none;
+}
+
+.tc .num {
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+/* The title wraps rather than being cut. */
+.tc.tt {
+  white-space: normal;
+}
+
+.tc.tt a {
+  font-size: 13.5px;
+  font-weight: 520;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tc .dr {
+  margin-right: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.tc.who span {
+  color: var(--muted);
+}
+
+.tc .reason {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tc.reviews {
+  margin: 0;
+  padding-left: 6px;
+}
+
+.tc.jira {
+  flex-wrap: nowrap;
+}
+
+.tc .age {
+  margin: 0;
+  font-size: 11.5px;
+}
+
+.dim {
+  color: var(--faint);
+}
+
+/* The section pill; in "Чака теб" its dot pulses, harder for the urgent reasons. */
+.sec {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px 8px 1px 6px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sec i {
+  position: relative;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.sec i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.trow.u1 .sec i::after {
+  --peak: 0.45;
+  animation: pulse 3.2s ease-in-out infinite;
+}
+
+.trow.u2 .sec i::after {
+  --peak: 1;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+.trow.closedrow {
+  border: 1px dashed var(--line);
+  border-left: 4px solid hsl(var(--rh) 70% var(--stripe-l));
+  background: color-mix(in srgb, var(--tint) 55%, transparent);
+  box-shadow: none;
+}
+
+.trow.closedrow .tt a {
+  color: var(--muted);
+  font-weight: 450;
+}
+
+.tc.span7 {
+  grid-column: span 7;
+}
+
+.tc.span2 {
+  grid-column: span 2;
+}
+
+.tgroup {
+  --gc: var(--muted);
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  color: var(--gc);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gc) 16%, transparent), transparent 70%);
+  box-shadow: inset 3px 0 0 var(--gc);
+  font-size: 12.5px;
+  font-weight: 750;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tgroup:hover {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gc) 26%, transparent), transparent 80%);
+}
+
+.tgroup .caret {
+  display: inline-block;
+  font-size: 11px;
+  transition: transform var(--glide-ms, 0.3s) var(--glide, ease-out);
+}
+
+.tgroup.shut .caret {
+  transform: rotate(-90deg);
+}
+
+.tgroup .count {
+  font-size: 11px;
+}
+
+.tgroup .av {
+  width: 20px;
+  height: 20px;
+}
+
+.tgroup .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: hsl(var(--rh) 70% var(--stripe-l));
+}
+
+.tgroup .sub {
+  color: var(--faint);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.tempty {
+  grid-column: 1 / -1;
+  padding: 30px 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* Motion: the springs come from web/src/motion.ts as --glide / --bounce (and their -ms durations); see "Motion" in docs/design.md.
    Only transform and opacity animate. */
 
@@ -846,6 +1294,30 @@ kbd {
 .board.booted .col,
 .board.booted .slot {
   animation-delay: 0s;
+}
+
+/* The table: the panel, then its group heads and rows one after another. */
+.tpanel {
+  animation: col-enter var(--bounce-ms, 700ms) var(--bounce, ease-out) both;
+}
+
+.trow,
+.tgroup {
+  animation: row-enter var(--bounce-ms, 550ms) var(--bounce, ease-out) both;
+  animation-delay: calc(140ms + min(var(--ti, 0), 30) * 26ms);
+}
+
+.tablev.booted .tpanel,
+.tablev.booted .trow,
+.tablev.booted .tgroup {
+  animation-delay: 0s;
+}
+
+@keyframes row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
 }
 
 @keyframes col-enter {
@@ -995,5 +1467,9 @@ kbd {
   .card:focus-visible,
   .toolbar .chip {
     transform: none !important;
+  }
+
+  .trow {
+    translate: none !important;
   }
 }

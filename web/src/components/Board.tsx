@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { type ColumnHead, isStrip } from "../column.js";
 import { useFlip } from "../motion.js";
 import { Column } from "./Column.js";
@@ -10,24 +10,18 @@ type BoardProps<C extends ColumnHead> = {
   children(column: C): ComponentChildren;
   /** Shown in the middle of the board, e.g. when there is nothing to show. */
   message?: string | null;
+  /** Whether the page's entrance cascade is over, so the board (shown again, say) enters without its delay. */
+  booted: boolean;
 };
-
-/** How long the entrance cascade runs (the delays of .col and .slot in style.css); cards that come later enter without its delay. */
-const CASCADE_MS = 2200;
 
 /**
  * One column per entry, side by side; a column folded or unfolded by hand stays so while the page is open.
  * Columns and cards glide to their new places after every change (FLIP) and cascade in when the board first shows.
  */
-export function Board<C extends ColumnHead>({ columns, children, message }: BoardProps<C>) {
+export function Board<C extends ColumnHead>({ columns, children, message, booted }: BoardProps<C>) {
   const [folded, setFolded] = useState<Record<string, boolean>>({});
-  const [booted, setBooted] = useState(false);
   const ref = useRef<HTMLElement>(null);
   useFlip(ref);
-  useEffect(() => {
-    const timer = setTimeout(() => setBooted(true), CASCADE_MS);
-    return () => clearTimeout(timer);
-  }, []);
   const toggle = (column: C) => setFolded((all) => ({ ...all, [column.id]: !isStrip(column.count, all[column.id]) }));
   return (
     <main ref={ref} class={`board${booted ? " booted" : ""}`} data-flip-root>

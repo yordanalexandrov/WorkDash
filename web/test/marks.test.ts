@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
-import { askedReviewers, checkRings, initials, mergeMark, reviewMarks, unreadCount, urgency } from "../src/marks.js";
+import {
+  askedReviewers,
+  checkRank,
+  checkRings,
+  initials,
+  mergeMark,
+  mergeRank,
+  reasonRank,
+  reviewMarks,
+  reviewRank,
+  sectionShort,
+  unreadCount,
+  urgency,
+} from "../src/marks.js";
 
 const pr = pullRequest;
 
@@ -97,5 +110,73 @@ describe("urgency", () => {
 
   it("does not pulse a PR that does not wait on me", () => {
     expect(urgency(undefined)).toBeUndefined();
+  });
+});
+
+describe("reasonRank", () => {
+  it("ranks the reasons by how urgent they are, with no reason last", () => {
+    const order = ["ci_failed", "sonar_failed", "changes_requested", "conflict", "unread_comments", "needs_rebase", "review_requested", "mention", "re_review"] as const;
+    const ranks = order.map((reason) => reasonRank(reason));
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    expect(new Set(ranks).size).toBe(order.length);
+    expect(reasonRank(undefined)).toBeGreaterThan(reasonRank("re_review"));
+  });
+});
+
+describe("checkRank", () => {
+  it("puts failed first, then running, then passed, then no check", () => {
+    expect(checkRank("FAILURE")).toBe(checkRank("ERROR"));
+    expect(checkRank("PENDING")).toBe(checkRank("EXPECTED"));
+    expect(checkRank("FAILURE")).toBeLessThan(checkRank("PENDING"));
+    expect(checkRank("PENDING")).toBeLessThan(checkRank("SUCCESS"));
+    expect(checkRank("SUCCESS")).toBeLessThan(checkRank(null));
+  });
+});
+
+describe("mergeRank", () => {
+  const rank = (overrides: Parameters<typeof pr>[0]) => mergeRank(pr(overrides));
+
+  it("goes conflict, behind, blocked, draft, unknown, unstable or hooks, clean", () => {
+    const ranks = [
+      rank({ mergeStateStatus: "DIRTY" }),
+      rank({ mergeStateStatus: "BEHIND" }),
+      rank({ mergeStateStatus: "BLOCKED" }),
+      rank({ mergeStateStatus: "DRAFT" }),
+      rank({ mergeStateStatus: "UNKNOWN" }),
+      rank({ mergeStateStatus: "UNSTABLE" }),
+      rank({ mergeStateStatus: "CLEAN" }),
+    ];
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    expect(new Set(ranks).size).toBe(ranks.length);
+    expect(rank({ mergeStateStatus: "HAS_HOOKS" })).toBe(rank({ mergeStateStatus: "UNSTABLE" }));
+  });
+
+  it("takes a conflict from `mergeable` before the state, and a draft before the state", () => {
+    expect(rank({ mergeable: "CONFLICTING", mergeStateStatus: "CLEAN" })).toBe(rank({ mergeStateStatus: "DIRTY" }));
+    expect(rank({ mergeable: "CONFLICTING", isDraft: true })).toBe(rank({ mergeStateStatus: "DIRTY" }));
+    expect(rank({ isDraft: true, mergeStateStatus: "CLEAN" })).toBe(rank({ mergeStateStatus: "DRAFT" }));
+  });
+});
+
+describe("reviewRank", () => {
+  const review = (state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED") => ({ author: "colleague1", state, submittedAt: "2026-10-30T10:00:00Z" });
+
+  it("counts an approval 10, changes requested -10 and a comment 1", () => {
+    expect(reviewRank(pr())).toBe(0);
+    expect(reviewRank(pr({ reviews: [review("APPROVED"), review("COMMENTED")] }))).toBe(11);
+    expect(reviewRank(pr({ reviews: [review("CHANGES_REQUESTED"), review("APPROVED")] }))).toBe(0);
+    expect(reviewRank(pr({ reviews: [review("CHANGES_REQUESTED")] }))).toBe(-10);
+  });
+});
+
+describe("sectionShort", () => {
+  it("names each section in a word", () => {
+    expect(["waiting_on_me", "free_for_review", "ready_to_merge", "waiting_on_others", "team"].map((s) => sectionShort(s as never))).toEqual([
+      "теб",
+      "review",
+      "merge",
+      "други",
+      "екип",
+    ]);
   });
 });
