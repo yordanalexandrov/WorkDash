@@ -31,7 +31,8 @@ const AckRequest = z.object({ ids: z.array(z.string()) });
 
 const IssuesQuery = z.object({ repo: repoName });
 
-const IssuePollRequest = z.object({ repo: repoName, reason: z.enum(ISSUE_DEMANDS) });
+// The body names the demand `reason`, as the spec's API does.
+const IssuePollRequest = z.object({ repo: repoName, reason: z.enum(ISSUE_DEMANDS) }).transform(({ repo, reason }) => ({ repo, demand: reason }));
 
 const PollRequest = z.object({ demand: z.enum(DEMANDS) });
 
@@ -271,7 +272,7 @@ function registerIssues(server: FastifyInstance, store: SnapshotStore, source: I
     const parsed = IssuePollRequest.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
     if (!follows(source, parsed.data.repo)) return reply.code(404).send({ error: "not a followed repo" });
-    return source.poller.demand(parsed.data.repo, parsed.data.reason);
+    return source.poller.demand(parsed.data.repo, parsed.data.demand);
   });
 }
 

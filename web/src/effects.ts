@@ -3,6 +3,7 @@
 
 import type { ClosedPullRequest, IssueBoardState } from "./api.js";
 import { prKey } from "./detail.js";
+import { issueKey } from "./issueDetail.js";
 import { type Pos, reducedMotion } from "./motion.js";
 import { sameRepo } from "../../src/domain/repos.js";
 
@@ -35,8 +36,8 @@ export function watchCompleted(watch: CompletedWatch, next: ClosedIssues | null)
   const { shown, answer } = watch;
   if (!next || !shown || !sameRepo(shown.repo, next.repo)) return { watch: { shown: next, answer: null }, completed: [] };
   if (next.fetchedAt === null || next.fetchedAt === shown.fetchedAt) return { watch: { shown: next, answer }, completed: [] };
-  const known = new Set(answer?.closed.map(prKey));
-  const completed = answer ? next.closed.filter((issue) => issue.closedAs === "completed" && !known.has(prKey(issue))).map(prKey) : [];
+  const known = new Set(answer?.closed.map(issueKey));
+  const completed = answer ? next.closed.filter((issue) => issue.closedAs === "completed" && !known.has(issueKey(issue))).map(issueKey) : [];
   return { watch: { shown: next, answer: next }, completed };
 }
 

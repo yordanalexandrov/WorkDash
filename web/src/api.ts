@@ -78,11 +78,11 @@ export async function loadIssues(repo: string): Promise<IssueBoardState> {
 }
 
 /** Asks the server for a poll of a repo's issues; its start and end come back over the event stream as `issues` events. */
-export async function requestIssuePoll(repo: string, reason: IssueDemand): Promise<IssuePollAnswer> {
+export async function requestIssuePoll(repo: string, demand: IssueDemand): Promise<IssuePollAnswer> {
   const response = await fetch("/api/issues/poll", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repo, reason }),
+    body: JSON.stringify({ repo, reason: demand }),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return (await response.json()) as IssuePollAnswer;

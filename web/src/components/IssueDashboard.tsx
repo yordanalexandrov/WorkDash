@@ -3,13 +3,12 @@ import { createPortal } from "preact/compat";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { IssueBoardState, StagedIssue } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
-import { prKey } from "../detail.js";
 import { confetti, middleOf, NO_WATCH, watchCompleted } from "../effects.js";
 import type { Filter } from "../filter.js";
 import { shortRepo } from "../format.js";
 import { issueColumns } from "../issueBoard.js";
 import { filterIssueColumns, filterIssues } from "../issueFilter.js";
-import { findIssue } from "../issueDetail.js";
+import { findIssue, issueKey } from "../issueDetail.js";
 import { assignedToMe } from "../issueMarks.js";
 import { BOUNCE, issueFlipKey, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
@@ -125,7 +124,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
   // The sheet's last size: the next one opens in it, while the dashboard shows.
   const [expanded, setExpanded] = useState(false);
-  const openKey = sheet ? prKey(sheet.issue) : null;
+  const openKey = sheet ? issueKey(sheet.issue) : null;
   const live = openKey ? findIssue(shown, openKey) : undefined;
   const shownSheet = useRef<StagedIssue>();
   if (live) shownSheet.current = live;

@@ -1,7 +1,6 @@
 // What the issue's detail sheet shows besides its card: when it was opened, updated and closed, and the issue itself by key.
 
 import type { IssueBoardState, StagedIssue } from "./api.js";
-import { prKey } from "./detail.js";
 import { age } from "./format.js";
 
 /** "отворен преди 2д · обновен преди 3ч", and "· затворен преди …" once it is closed. */
@@ -11,7 +10,12 @@ export function issueDates(issue: Pick<StagedIssue, "createdAt" | "updatedAt" | 
   return dates.join(" · ");
 }
 
-/** The issue under `key` (`<repo>#<number>`, as `prKey` makes it) as the state has it now; undefined when it is not there. */
+/** An issue's key, `<repo>#<number>`: by it the sheet finds the issue again and the confetti its card. */
+export function issueKey(issue: { repo: string; number: number }): string {
+  return `${issue.repo}#${issue.number}`;
+}
+
+/** The issue under `key` (`issueKey`) as the state has it now; undefined when it is not there. */
 export function findIssue(state: IssueBoardState | null, key: string): StagedIssue | undefined {
-  return state?.issues.find((issue) => prKey(issue) === key);
+  return state?.issues.find((issue) => issueKey(issue) === key);
 }

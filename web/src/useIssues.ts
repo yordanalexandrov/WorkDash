@@ -20,8 +20,8 @@ const DUE_MARGIN_MS = 250;
 /** How long the interval waits to ask again after an ask that failed (the server unreachable, say). */
 const RETRY_MS = 60_000;
 
-function ask(repo: string, reason: IssueDemand): void {
-  requestIssuePoll(repo, reason).catch((error: Error) => console.error(`issue poll request failed: ${error.message}`));
+function ask(repo: string, demand: IssueDemand): void {
+  requestIssuePoll(repo, demand).catch((error: Error) => console.error(`issue poll request failed: ${error.message}`));
 }
 
 /** Whether the browser tab shows, kept up to date. */
