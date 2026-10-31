@@ -11,29 +11,36 @@ import { issueColumns } from "../issueBoard.js";
 import { filterIssueColumns, filterIssues } from "../issueFilter.js";
 import { findIssue } from "../issueDetail.js";
 import { assignedToMe } from "../issueMarks.js";
-import { BOUNCE, visibleIn } from "../motion.js";
+import { BOUNCE, issueFlipKey, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
+import { type GroupBy, toggleCollapsed } from "../table.js";
 import { ESCAPE, F, I, R, SLASH, T, useShortcuts } from "../useShortcuts.js";
+import type { View } from "../view.js";
 import { Board } from "./Board.js";
 import { ClosedIssueCard } from "./ClosedIssueCard.js";
-import { IssueCard, issueFlipKey } from "./IssueCard.js";
+import { IssueCard } from "./IssueCard.js";
 import { IssueDetail } from "./IssueDetail.js";
+import { CLOSED_ISSUES, ISSUE_DEFAULT_SORT, IssueTable } from "./IssueTable.js";
 import { IssueTabs } from "./IssueTabs.js";
 import { Sheet } from "./Sheet.js";
 import { Toolbar } from "./Toolbar.js";
 
-/** The issue whose detail sheet is open, the rect it grew out of, and whether it is shrinking back. */
-type OpenSheet = { issue: { repo: string; number: number }; from: DOMRectReadOnly; closing: boolean };
+/**
+ * The issue whose detail sheet is open, the FLIP key of the card or row it opened from (a row of an issue in several groups
+ * has its own), the rect it grew out of, and whether it is shrinking back.
+ */
+type OpenSheet = { issue: { repo: string; number: number }; flip: string; from: DOMRectReadOnly; closing: boolean };
 
-/** The card (or, in the table, the row) of an issue, if it shows: they share the FLIP key. */
-function source(issue: OpenSheet["issue"]): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-flip="${CSS.escape(issueFlipKey(issue))}"]`);
+/** The card or row the sheet opened from, if it still shows; else the issue's card or first row, if one does. */
+function source(sheet: OpenSheet): HTMLElement | null {
+  const find = (key: string) => document.querySelector<HTMLElement>(`[data-flip="${CSS.escape(key)}"]`);
+  return find(sheet.flip) ?? find(issueFlipKey(sheet.issue));
 }
 
-/** Gives the focus back to the card or row of an issue, once the render that shows it again has run. */
-function refocus(issue: OpenSheet["issue"]): void {
+/** Gives the focus back to the card or row the sheet opened from, once the render that shows it again has run. */
+function refocus(sheet: OpenSheet): void {
   requestAnimationFrame(() => {
-    const el = source(issue);
+    const el = source(sheet);
     const target = el && el.tabIndex >= 0 ? el : el?.querySelector<HTMLElement>("[tabindex='0']");
     target?.focus({ preventScroll: true });
   });
@@ -56,6 +63,8 @@ type IssueDashboardProps = {
   onFilter(filter: Filter): void;
   /** Who I am, for "само моите" and the "теб" on the issues assigned to me; null until the first poll says. */
   viewer: string | null;
+  /** Board or table, as the app's toggle says. */
+  view: View;
   /** Where in the top bar the tabs go, below the toggles. */
   topSlot: HTMLElement | null;
   /** The effects layer, for the confetti of an issue completed while the board shows. */
@@ -91,18 +100,23 @@ function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardS
 }
 
 /**
- * The Issue dashboard: a tab per repo and the toolbar in the top bar, the open repo's issues on a board by stage, and the
- * detail sheet of one issue. Its own keys (`/` and Esc for the filter; Esc and `f` while the sheet is open, which also takes
- * `/`, `t`, `i` and `r`) come before the app's.
+ * The Issue dashboard: a tab per repo and the toolbar in the top bar, the open repo's issues on a board by stage or in a
+ * table, and the detail sheet of one issue. Its own keys (`/` and Esc for the filter; Esc and `f` while the sheet is open,
+ * which also takes `/`, `t`, `i` and `r`) come before the app's.
  */
-export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, topSlot, fx, booted }: IssueDashboardProps) {
+export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, view, topSlot, fx, booted }: IssueDashboardProps) {
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
   const shown = issues && open && issues.repo.toLowerCase() === open.toLowerCase() ? issues : null;
   // Every column the board has goes through the filter; the toolbar's "N от M" counts the open issues.
   const columns = useMemo(() => (shown ? filterIssueColumns(issueColumns(shown), filter, viewer) : []), [shown, filter, viewer]);
-  const kept = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer).length : 0), [shown, filter, viewer]);
+  const keptIssues = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer) : []), [shown, filter, viewer]);
+  const keptClosed = useMemo(() => (shown ? filterIssues(shown.closed, filter, viewer) : []), [shown, filter, viewer]);
+  // The table's sort, grouping and folded groups outlast a trip to the board and a change of tab, not one to the PRs.
+  const [sort, setSort] = useState(ISSUE_DEFAULT_SORT);
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set([CLOSED_ISSUES]));
   const filterInput = useRef<HTMLInputElement>(null);
 
   // The detail sheet. A card opens it with `openSheet`, and so does a row of the table: both carry the issue's FLIP key, which
@@ -114,7 +128,8 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const live = openKey ? findIssue(shown, openKey) : undefined;
   const shownSheet = useRef<StagedIssue>();
   if (live) shownSheet.current = live;
-  const openSheet = (issue: StagedIssue, from: HTMLElement) => setSheet({ issue: { repo: issue.repo, number: issue.number }, from: from.getBoundingClientRect(), closing: false });
+  const openSheet = (issue: StagedIssue, from: HTMLElement) =>
+    setSheet({ issue: { repo: issue.repo, number: issue.number }, flip: from.dataset["flip"] ?? issueFlipKey(issue), from: from.getBoundingClientRect(), closing: false });
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
   // Another repo's tab takes the sheet with it.
   useEffect(() => setSheet(null), [open]);
@@ -161,7 +176,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
                 filter={filter}
                 onChange={onFilter}
                 canFilterMine={viewer !== null}
-                shown={kept}
+                shown={keptIssues.length}
                 total={shown?.issues.length ?? 0}
                 inputRef={filterInput}
               />
@@ -169,23 +184,46 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
             topSlot,
           )
         : null}
-      <Board columns={columns} booted={booted} message={boardMessage(open, fetched, shown)}>
-        {(column) =>
-          column.closed
-            ? column.items.map((issue, index) => <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
-            : column.items.map((issue, index) => (
-                <IssueCard
-                  key={`${issue.repo}#${issue.number}`}
-                  issue={issue}
-                  hue={hue}
-                  index={index}
-                  mine={assignedToMe(issue, viewer)}
-                  onOpen={openSheet}
-                  ghost={openKey === prKey(issue)}
-                />
-              ))
-        }
-      </Board>
+      {view === "table" && (
+        <IssueTable
+          issues={keptIssues}
+          closed={keptClosed}
+          stages={shown?.stages ?? []}
+          hue={hue}
+          viewer={viewer}
+          // Until the open repo's issues come there is nothing to say "none" about: the table says nothing, as the board.
+          message={boardMessage(open, fetched, shown) ?? (shown ? null : "")}
+          query={filter.query}
+          sort={sort}
+          onSort={setSort}
+          groupBy={groupBy}
+          onGroupBy={setGroupBy}
+          collapsed={collapsed}
+          onToggle={(id) => setCollapsed((current) => toggleCollapsed(current, id))}
+          onOpen={openSheet}
+          openFlip={sheet?.flip ?? null}
+          booted={booted}
+        />
+      )}
+      {view === "board" && (
+        <Board columns={columns} booted={booted} message={boardMessage(open, fetched, shown)}>
+          {(column) =>
+            column.closed
+              ? column.items.map((issue, index) => <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
+              : column.items.map((issue, index) => (
+                  <IssueCard
+                    key={`${issue.repo}#${issue.number}`}
+                    issue={issue}
+                    hue={hue}
+                    index={index}
+                    mine={assignedToMe(issue, viewer)}
+                    onOpen={openSheet}
+                    ghost={sheet?.flip === issueFlipKey(issue)}
+                  />
+                ))
+          }
+        </Board>
+      )}
       {sheet && shownSheet.current ? (
         <Sheet
           key={openKey}
@@ -194,11 +232,11 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
           closing={sheet.closing}
           expanded={expanded}
           onToggleSize={() => setExpanded((current) => !current)}
-          target={() => (live ? (source(sheet.issue)?.getBoundingClientRect() ?? null) : null)}
+          target={() => (live ? (source(sheet)?.getBoundingClientRect() ?? null) : null)}
           onClose={closeSheet}
           onClosed={() => {
             setSheet(null);
-            refocus(sheet.issue);
+            refocus(sheet);
           }}
         >
           <IssueDetail issue={shownSheet.current} hue={hue} mine={assignedToMe(shownSheet.current, viewer)} gone={!live} />

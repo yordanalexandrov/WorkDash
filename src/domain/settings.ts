@@ -40,8 +40,18 @@ const notifications = z
 
 const repoName = z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/name"');
 
-/** Stage labels, in the order of the board's columns. */
-const stageLabels = z.array(z.string().trim().min(1, "expected a label name"));
+/**
+ * Stage labels, in the order of the board's columns. Each once only, without regard to case as GitHub matches labels:
+ * a label twice would make two columns for the same issues.
+ */
+const stageLabels = z.array(z.string().trim().min(1, "expected a label name")).superRefine((labels, context) => {
+  const seen = new Set<string>();
+  labels.forEach((label, index) => {
+    const key = label.toLowerCase();
+    if (seen.has(key)) context.addIssue({ code: "custom", path: [index], message: `the stage "${label}" is in the list already` });
+    seen.add(key);
+  });
+});
 
 /** The Issue dashboard's stages: the common list of stage labels, and a list of its own for some repos. */
 const issues = z

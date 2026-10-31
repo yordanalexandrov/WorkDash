@@ -5,6 +5,7 @@ import { sheetOpeners } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { labelChip } from "../labels.js";
+import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
 import { LinkedPrs, MilestoneChip } from "./IssueMarks.js";
 
@@ -21,11 +22,6 @@ type IssueCardProps = {
   /** Hidden while its sheet is open, so the sheet looks like the card grown. */
   ghost: boolean;
 };
-
-/** The FLIP key of an issue's card, so it glides to its new column when its stage changes; the sheet finds its card by it. */
-export function issueFlipKey(issue: { repo: string; number: number }): string {
-  return `issue:${issue.repo}#${issue.number}`;
-}
 
 /**
  * An open issue on the Issue dashboard's board: number, age, title, its labels but the stage label, the author, the

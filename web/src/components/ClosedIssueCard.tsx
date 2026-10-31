@@ -1,8 +1,8 @@
 import type { ClosedIssue } from "../api.js";
 import { age } from "../format.js";
 import { labelChip } from "../labels.js";
+import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
-import { issueFlipKey } from "./IssueCard.js";
 
 type ClosedIssueCardProps = {
   issue: ClosedIssue;

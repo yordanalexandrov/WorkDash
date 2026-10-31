@@ -161,6 +161,7 @@ export function App() {
             filter={issueFilter}
             onFilter={setIssueFilter}
             viewer={state.viewer}
+            view={view}
             topSlot={topSlot}
             fx={fx}
             booted={booted}
