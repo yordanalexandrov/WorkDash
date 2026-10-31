@@ -216,6 +216,32 @@ h1 .live.ok::after {
   font-size: 12px;
 }
 
+/* On-demand: the last poll is over an hour old. */
+.status.stale {
+  color: var(--pending);
+  font-weight: 600;
+}
+
+/* The poll mode toggle (the view toggle's segmented control) and "Обнови". */
+.poll-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.views.at-on_demand .thumb {
+  transform: translateX(100%);
+}
+
+.chip.poll-now .icon {
+  display: inline-block;
+}
+
+/* Spins while a poll is under way, in any open page. */
+.chip.poll-now.busy .icon {
+  animation: spin 0.9s linear infinite;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

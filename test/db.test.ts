@@ -187,3 +187,30 @@ describe("SnapshotStore: events", () => {
     expect(second.undeliveredEvents()).toEqual([event("b")]);
   });
 });
+
+describe("SnapshotStore: poll mode", () => {
+  it("polls periodically until told otherwise", () => {
+    expect(openStore(":memory:").loadPollMode()).toBe("periodic");
+  });
+
+  it("keeps the poll mode across a restart, even when the snapshot format changes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+
+    openStore(path).savePollMode("on_demand");
+    const db = new Database(path);
+    db.pragma("user_version = 0");
+    db.close();
+
+    expect(openStore(path).loadPollMode()).toBe("on_demand");
+  });
+
+  it("takes the last mode saved", () => {
+    const store = openStore(":memory:");
+    store.savePollMode("on_demand");
+    store.savePollMode("periodic");
+
+    expect(store.loadPollMode()).toBe("periodic");
+  });
+});

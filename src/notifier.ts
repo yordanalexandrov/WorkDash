@@ -2,6 +2,7 @@ import type { SnapshotStore, StoredSnapshot } from "./db.js";
 import type { ClassifyRules } from "./domain/classify.js";
 import { diffSnapshots } from "./domain/events.js";
 import { isQuietAt, type NotificationRules, summarizeMissed } from "./domain/notify.js";
+import type { PollMode } from "./domain/poll-mode.js";
 import type { Snapshot } from "./domain/types.js";
 import type { EventHub, ServerEvent } from "./sse.js";
 
@@ -9,6 +10,8 @@ import type { EventHub, ServerEvent } from "./sse.js";
 const MISSED_LIMIT = 50;
 /** How long a pushed event waits for a browser to acknowledge it before it counts as missed. */
 const ACK_WAIT_MS = 30_000;
+/** In On-demand, how many events one poll notifies one by one; more come as one summary. */
+const BURST_LIMIT = 3;
 
 export type Notifier = {
   /** After a poll saved `current`: records the events since `previous` and pushes the ones that notify. */
@@ -27,10 +30,12 @@ export function createNotifier(options: {
   events: EventHub;
   rules: () => ClassifyRules;
   notifications: () => NotificationRules;
+  /** Periodic when left out. */
+  pollMode?: () => PollMode;
   timeZone?: string;
   now?: () => Date;
 }): Notifier {
-  const { store, events, rules, notifications, timeZone, now = () => new Date() } = options;
+  const { store, events, rules, notifications, pollMode = () => "periodic", timeZone, now = () => new Date() } = options;
   /** Events pushed but not acknowledged yet, with when they were pushed. */
   const awaitingAck = new Map<string, number>();
 
@@ -64,7 +69,15 @@ export function createNotifier(options: {
       const fresh = store.recordEvents(found, at);
       store.markDelivered(fresh.filter((event) => !enabled[event.type]).map((event) => event.id));
       if (events.clientCount() === 0 || isQuietAt(quietHours, at, timeZone)) return;
-      for (const event of fresh.filter((event) => enabled[event.type])) {
+      const notify = fresh.filter((event) => enabled[event.type]);
+      // A poll in On-demand can bring in all that happened since I last looked: a burst that reads better summed up.
+      if (pollMode() === "on_demand" && notify.length > BURST_LIMIT) {
+        const summary = summarizeMissed(notify, notifications(), MISSED_LIMIT)!;
+        store.markDelivered(notify.map((event) => event.id));
+        events.broadcast("missed", { ...summary, quiet: false });
+        return;
+      }
+      for (const event of notify) {
         awaitingAck.set(event.id, at.getTime());
         events.broadcast("notification", event);
       }

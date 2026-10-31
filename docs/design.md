@@ -74,7 +74,8 @@ Motion explains change: where something came from, where it went, what needs att
 
 ## Interaction
 
-- Shortcuts: `/` focuses the filter, Esc clears it or closes the sheet, `t` toggles the view, `f` expands or shrinks the open sheet, Enter on a focused card or row opens the sheet. Shortcuts are ignored while typing in an input. Match `t` and `f` by `event.code` (`KeyT`, `KeyF`) as well, so it works on a Bulgarian layout.
+- Shortcuts: `/` focuses the filter, Esc clears it or closes the sheet, `t` toggles the view, `f` expands or shrinks the open sheet, `r` polls now ("Обнови"), Enter on a focused card or row opens the sheet. Shortcuts are ignored while typing in an input. Match `t`, `f` and `r` by `event.code` (`KeyT`, `KeyF`, `KeyR`) as well, so they work on a Bulgarian layout.
+- **Poll mode** (`PollControls`, `usePolling.ts`): in the top bar, after the status, "⟳ На всеки 60s / ✋ При поискване" is a segmented control styled like the view toggle (the interval comes from `poll_interval`), and "Обнови" next to it spins while a poll is under way in any open page. The mode is the server's, so switching it switches every open page. In On-demand the page asks for a poll on load, when the stream reconnects, on window focus and when the tab is shown again; the server ignores a focus within 30s of a successful poll, and "Обнови" waits out a rate limit, saying until when. Since nothing polls on its own there, the status says how long ago the last poll was and turns `--pending` after an hour.
 - Every PR title and number links to GitHub in a new tab.
 - "видях" is reachable both as a button and by dragging a "Чака теб" card onto the "видях" drop zone (pointer events, so touch works).
 - Anything clickable shows it: hover lift, focus ring (`--blue`), pointer cursor.

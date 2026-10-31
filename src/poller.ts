@@ -1,6 +1,7 @@
 import type { SnapshotStore, StoredSnapshot } from "./db.js";
 import { updateRecentlyClosed, vanishedPullRequests } from "./domain/closed.js";
 import { classifyPollError, nextPollDelay, type PollHealth } from "./domain/poll-error.js";
+import { answerDemand, delayAfterSwitch, type Demand, type DemandAnswer, type PollMode } from "./domain/poll-mode.js";
 import type { Snapshot } from "./domain/types.js";
 import { fetchClosedPullRequests, fetchSnapshot } from "./github/client.js";
 
@@ -14,35 +15,55 @@ export type PollerSettings = {
 
 export type Poller = {
   health(): PollHealth;
+  /** Whether a poll is under way. */
+  polling(): boolean;
+  /** The poll mode in effect. */
+  mode(): PollMode;
+  /** Switches the poll mode and saves it: Periodic picks the interval up from the last poll, On-demand stops polling on its own. */
+  setMode(mode: PollMode): void;
+  /** Asks for a poll, in either mode; says whether one starts, the one under way answers it, or none is due. */
+  demand(demand: Demand): DemandAnswer;
   /** Switches to new settings and polls with them as soon as any poll under way has finished. */
   reconfigure(settings: PollerSettings): void;
   stop(): void;
 };
 
 /**
- * Polls GitHub right away and then every `intervalMs` (longer while a rate limit lasts), saving each snapshot.
+ * Polls GitHub, saving each snapshot. In the poll mode the store holds: Periodic polls right away and then every
+ * `intervalMs` (longer while a rate limit lasts); On-demand polls only on a demand or a reconfigure.
  * A failed poll, a failed closed-PR lookup included, saves nothing, so the next poll looks again.
  */
 export function startPoller(
   options: PollerSettings & {
     store: SnapshotStore;
     log: { info(msg: string): void; error(msg: string): void };
+    /** Runs when a poll starts. */
+    onPollStart?: () => void;
+    /** Runs when a poll has ended, whether it succeeded or not. */
     onPoll?: () => void;
     /** Runs after a successful poll saved its snapshot, with the snapshot saved before it (null on the first poll ever). */
     onSnapshot?: (previous: StoredSnapshot | null, current: Snapshot) => void;
     fetch?: typeof globalThis.fetch;
   },
 ): Poller {
-  const { store, log, onPoll = () => {}, onSnapshot = () => {}, fetch } = options;
+  const { store, log, onPollStart = () => {}, onPoll = () => {}, onSnapshot = () => {}, fetch } = options;
   let { repos, token, intervalMs, recentlyClosedWindowMs } = options;
   let health: PollHealth = { error: null, problems: [] };
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
   let polling = false;
   let pollAgain = false;
+  let mode = store.loadPollMode();
+  /** When the last successful poll fetched its snapshot. */
+  let lastSuccessAt = store.loadSnapshot()?.fetchedAt ?? null;
 
   async function poll() {
     polling = true;
+    try {
+      onPollStart();
+    } catch (error) {
+      log.error(`poll start: ${(error as Error).message}`);
+    }
     try {
       const before = store.loadSnapshot();
       // A repo dropped from the config takes its PRs along; they did not close.
@@ -73,6 +94,7 @@ export function startPoller(
       }
       const problems = [...snapshot.problems, ...lookup.problems];
       health = { error: null, problems };
+      lastSuccessAt = now.toISOString();
       log.info(`poll: ${snapshot.pullRequests.length} open PRs across ${repos.length} repos`);
       if (problems.length) log.error(`poll problems: ${problems.join("; ")}`);
     } catch (error) {
@@ -86,14 +108,33 @@ export function startPoller(
     } catch (error) {
       log.error(`after poll: ${(error as Error).message}`);
     }
-    timer = setTimeout(poll, pollAgain ? 0 : nextPollDelay(health.error, intervalMs, new Date()));
+    if (pollAgain) timer = setTimeout(poll, 0);
+    else if (mode === "periodic") timer = setTimeout(poll, nextPollDelay(health.error, intervalMs, new Date()));
     pollAgain = false;
   }
 
-  void poll();
+  if (mode === "periodic") void poll();
 
   return {
     health: () => health,
+    polling: () => polling,
+    mode: () => mode,
+    setMode(next) {
+      mode = next;
+      store.savePollMode(next);
+      // A poll under way schedules the next one by the new mode when it ends.
+      if (stopped || polling) return;
+      clearTimeout(timer);
+      if (mode === "periodic") timer = setTimeout(poll, delayAfterSwitch({ lastSuccessAt, intervalMs, error: health.error, now: new Date() }));
+    },
+    demand(demand) {
+      const answer = stopped ? "skip" : answerDemand({ demand, polling, lastSuccessAt, error: health.error, now: new Date() });
+      if (answer === "poll") {
+        clearTimeout(timer);
+        void poll();
+      }
+      return answer;
+    },
     reconfigure(settings) {
       ({ repos, token, intervalMs, recentlyClosedWindowMs } = settings);
       if (stopped) return;

@@ -326,3 +326,90 @@ describe("startPoller onSnapshot", () => {
     ]);
   });
 });
+
+describe("startPoller poll mode", () => {
+  let poller: Poller | undefined;
+  afterEach(() => poller?.stop());
+
+  /** A poller over `store` (On-demand unless the store says otherwise), polling every `intervalMs` while Periodic. */
+  function start(store = onDemandStore(), intervalMs = 3_600_000) {
+    const github = fakeGitHub();
+    poller = startPoller({ repos: ["my-org/repo-a"], token: "t", intervalMs, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch: github.fetch });
+    return { github, poller };
+  }
+
+  function onDemandStore() {
+    const store = openStore(":memory:");
+    store.savePollMode("on_demand");
+    return store;
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
+
+  it("does not poll at start in On-demand, only when asked", async () => {
+    const { github, poller } = start();
+    await settle();
+    expect(github.calls).toHaveLength(0);
+
+    expect(poller.demand("focus")).toBe("poll");
+
+    await waitFor(() => github.calls.length === 1);
+    await settle();
+    expect(github.calls).toHaveLength(1);
+  });
+
+  it("answers a demand made while a poll is under way with that poll", async () => {
+    const { github, poller } = start();
+
+    expect(poller.demand("button")).toBe("poll");
+    expect(poller.polling()).toBe(true);
+    expect(poller.demand("focus")).toBe("join");
+
+    await waitFor(() => !poller.polling());
+    expect(github.calls).toHaveLength(1);
+  });
+
+  it("does not poll again on focus right after a poll, but does on the button", async () => {
+    const { github, poller } = start();
+    poller.demand("button");
+    await waitFor(() => github.calls.length === 1 && !poller.polling());
+
+    expect(poller.demand("focus")).toBe("skip");
+    expect(poller.demand("button")).toBe("poll");
+    await waitFor(() => github.calls.length === 2);
+  });
+
+  it("stops polling on its own once switched to On-demand, and keeps the mode", async () => {
+    const store = openStore(":memory:");
+    const { github, poller } = start(store, 15);
+    await waitFor(() => github.calls.length >= 1);
+
+    poller.setMode("on_demand");
+    await waitFor(() => !poller.polling());
+    const calls = github.calls.length;
+    await settle();
+
+    expect(github.calls).toHaveLength(calls);
+    expect(poller.mode()).toBe("on_demand");
+    expect(store.loadPollMode()).toBe("on_demand");
+  });
+
+  it("polls right away when switched to Periodic with no poll behind it", async () => {
+    const { github, poller } = start();
+
+    poller.setMode("periodic");
+
+    await waitFor(() => github.calls.length === 1);
+    expect(poller.mode()).toBe("periodic");
+  });
+
+  it("starts the interval over after a demand in Periodic", async () => {
+    const store = openStore(":memory:");
+    const { github, poller } = start(store, 3_600_000);
+    await waitFor(() => github.calls.length === 1 && !poller.polling());
+
+    expect(poller.demand("button")).toBe("poll");
+
+    await waitFor(() => github.calls.length === 2);
+  });
+});
