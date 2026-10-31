@@ -1,6 +1,6 @@
 import type { ClassifiedPullRequest, Section } from "../../src/domain/classify.js";
-import type { IssueDemand } from "../../src/domain/issue-poll.js";
-import type { IssueBoardState, IssueLabel, StagedIssue } from "../../src/domain/issues.js";
+import type { IssueDemand, IssuePollAnswer } from "../../src/domain/issue-poll.js";
+import type { ClosedIssue, IssueBoardState, IssueLabel, StagedIssue } from "../../src/domain/issues.js";
 import type { JiraLink } from "../../src/domain/jira.js";
 import type { PollError } from "../../src/domain/poll-error.js";
 import type { Demand, DemandAnswer, PollMode } from "../../src/domain/poll-mode.js";
@@ -8,7 +8,7 @@ import type { FieldIssue, Missing, SaveResult, SettingsForm, TokenStatus } from 
 import type { ClosedPullRequest } from "../../src/domain/types.js";
 import type { NamesCheck, TokenCheck } from "../../src/github/rest.js";
 
-export type { ClassifiedPullRequest, ClosedPullRequest, Demand, FieldIssue, IssueBoardState, IssueLabel, JiraLink, StagedIssue, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
+export type { ClassifiedPullRequest, ClosedIssue, ClosedPullRequest, Demand, FieldIssue, IssueBoardState, IssueLabel, JiraLink, StagedIssue, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
 
 /** A PR as /api/prs serves it: classified, with links to the Jira tickets it names. */
 export type DashboardPullRequest = ClassifiedPullRequest & { jira: JiraLink[] };
@@ -78,14 +78,14 @@ export async function loadIssues(repo: string): Promise<IssueBoardState> {
 }
 
 /** Asks the server for a poll of a repo's issues; its start and end come back over the event stream as `issues` events. */
-export async function requestIssuePoll(repo: string, reason: IssueDemand): Promise<DemandAnswer> {
+export async function requestIssuePoll(repo: string, reason: IssueDemand): Promise<IssuePollAnswer> {
   const response = await fetch("/api/issues/poll", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repo, reason }),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return ((await response.json()) as { answer: DemandAnswer }).answer;
+  return (await response.json()) as IssuePollAnswer;
 }
 
 /** Switches the poll mode of the server, and so of every open dashboard. */

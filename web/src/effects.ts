@@ -1,7 +1,7 @@
 // Delight: confetti on merged and sparks on "видях", particles in the effects layer (`.fx`). They know a point, a count, colours
-// and a label, nothing of PRs but `newlyMerged`; see "Motion" in docs/design.md, where particles are the exception to the springs.
+// and a label, nothing of PRs and issues but `newlyMerged` and `newlyCompleted`; see "Motion" in docs/design.md, where particles are the exception to the springs.
 
-import type { ClosedPullRequest } from "./api.js";
+import type { ClosedPullRequest, IssueBoardState } from "./api.js";
 import { prKey } from "./detail.js";
 import { type Pos, reducedMotion } from "./motion.js";
 
@@ -10,6 +10,20 @@ export function newlyMerged(before: ClosedPullRequest[] | null, after: ClosedPul
   if (!before) return [];
   const known = new Set(before.map(prKey));
   return after.filter((pr) => pr.state === "MERGED" && !known.has(prKey(pr))).map(prKey);
+}
+
+/** What `newlyCompleted` compares: an answer for the open repo of the Issue dashboard. */
+type ClosedIssues = Pick<IssueBoardState, "repo" | "fetchedAt" | "closed">;
+
+/**
+ * The keys of the issues completed between two answers for the same repo: in `after` as completed and not in `before`. None
+ * on first load (no answer before, or one with nothing saved yet) and none when `before` was for another repo, so opening a
+ * tab or the dashboard never bursts for what closed while nobody looked.
+ */
+export function newlyCompleted(before: ClosedIssues | null, after: ClosedIssues): string[] {
+  if (!before || before.fetchedAt === null || before.repo.toLowerCase() !== after.repo.toLowerCase()) return [];
+  const known = new Set(before.closed.map(prKey));
+  return after.closed.filter((issue) => issue.closedAs === "completed" && !known.has(prKey(issue))).map(prKey);
 }
 
 /** A number in [min, max) from a generator of [0, 1). */
