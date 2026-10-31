@@ -17,6 +17,9 @@
       ]
     },
     "desktop": {
+      "entry": [
+        "src/preload.ts"
+      ],
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
