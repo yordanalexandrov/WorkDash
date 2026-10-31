@@ -5,4 +5,4 @@ import { registerServiceWorker } from "./serviceWorker.js";
 
 startMotion(document.documentElement);
 render(<App />, document.body);
-registerServiceWorker();
+void registerServiceWorker();
