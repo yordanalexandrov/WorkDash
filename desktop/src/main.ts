@@ -1,5 +1,6 @@
 import { app, dialog, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
 import type { WorkDash } from "../../src/workdash.js";
+import { autostartDir, HIDDEN, loginSwitch } from "./autostart.js";
 import { startServer } from "./server.js";
 import { openTray, type WorkDashTray } from "./tray.js";
 import { openWindow, showWindow } from "./window.js";
@@ -41,13 +42,16 @@ if (!app.requestSingleInstanceLock()) {
       app.exit(1);
       return;
     }
-    window = openWindow(workdash.url, () => quitting);
+    window = openWindow(workdash.url, () => quitting, process.argv.includes(HIDDEN));
     tray = openTray({
       open: () => {
         if (window && !window.isDestroyed()) showWindow(window);
       },
       quit: () => app.quit(),
-      switches: () => [pauseSwitch()],
+      switches: () => [
+        pauseSwitch(),
+        loginSwitch(autostartDir(), () => tray?.refresh()),
+      ],
     });
     workdash.onWaitingOnMe((count) => tray?.showCount(count));
   });
