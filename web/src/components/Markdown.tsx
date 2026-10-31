@@ -15,7 +15,10 @@ type MermaidTheme = "dark" | "default";
 const drawn = new Map<string, Promise<string | null>>();
 let renders = 0;
 
-/** The SVG of `code` in `theme`, or null when it has an error. Mermaid is loaded the first time a diagram is drawn. */
+/**
+ * The SVG of `code` in `theme`, or null when it has an error. Mermaid is loaded the first time a diagram is drawn; if that
+ * fails, the diagram shows as code this time and is tried again the next.
+ */
 function draw(code: string, theme: MermaidTheme): Promise<string | null> {
   const key = `${theme}\n${code}`;
   let svg = drawn.get(key);
@@ -31,6 +34,9 @@ function draw(code: string, theme: MermaidTheme): Promise<string | null> {
         document.getElementById(`d${id}`)?.remove();
         return null;
       }
+    }, () => {
+      drawn.delete(key);
+      return null;
     });
     drawn.set(key, svg);
   }

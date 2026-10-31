@@ -1940,7 +1940,7 @@ kbd {
 }
 
 .md .diagram-error {
-  color: var(--bad);
+  color: var(--faint);
   font-size: 12px;
 }
 

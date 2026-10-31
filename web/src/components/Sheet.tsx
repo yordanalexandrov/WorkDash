@@ -37,9 +37,10 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
   const inner = useRef<HTMLDivElement>(null);
   const shade = useRef<HTMLDivElement>(null);
   const close = useRef<HTMLButtonElement>(null);
-  // The size the box has: it follows `expanded` once the content has faded out. `before` is the rect it glides from.
-  const [size, setSize] = useState(expanded);
+  // Whether the box is expanded: it follows `expanded` once the content has faded out. `before` is the rect it glides from.
+  const [boxExpanded, setBoxExpanded] = useState(expanded);
   const before = useRef<DOMRectReadOnly | null>(null);
+  const fading = useRef<Animation | null>(null);
 
   useLayoutEffect(() => {
     close.current?.focus({ preventScroll: true });
@@ -56,6 +57,9 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
 
   useLayoutEffect(() => {
     if (!closing) return;
+    // A size switch still fading out does not happen: the sheet shrinks from where it is.
+    fading.current?.cancel();
+    fading.current = null;
     if (!reducedMotion()) {
       inner.current!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 120, easing: "linear", fill: "forwards" });
       shade.current!.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: "linear", fill: "forwards" });
@@ -67,17 +71,15 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
     };
   }, [closing]);
 
-  const fading = useRef<Animation | null>(null);
-
   // A switch back before the content has faded out only brings it back.
   useLayoutEffect(() => {
     fading.current?.cancel();
     fading.current = null;
-    if (expanded === size || closing) return;
+    if (expanded === boxExpanded || closing) return;
     const resize = () => {
       fading.current = null;
       before.current = sheet.current!.getBoundingClientRect();
-      setSize(expanded);
+      setBoxExpanded(expanded);
     };
     if (reducedMotion()) return resize();
     const fade = inner.current!.animate([{ opacity: 1 }, { opacity: 0 }], FADE_OUT);
@@ -98,7 +100,9 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
       easing: GLIDE.easing,
     });
     content.animate([{ opacity: 0 }, { opacity: 1 }], { ...FADE_IN, delay: Math.round(GLIDE.duration * 0.6) });
-  }, [size]);
+  }, [boxExpanded]);
+
+  const sizeButton = expanded ? { label: "Свий", glyph: "⤡" } : { label: "Разпъни", glyph: "⤢" };
 
   // Tab and Shift+Tab go round the sheet's own controls.
   const trap = (event: KeyboardEvent) => {
@@ -120,7 +124,7 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
   return (
     <>
       <div ref={shade} class="backdrop" aria-hidden="true" onClick={onClose} />
-      <div ref={sheet} class={size ? "sheet expanded" : "sheet"} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} onKeyDown={trap}>
+      <div ref={sheet} class={boxExpanded ? "sheet expanded" : "sheet"} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} onKeyDown={trap}>
         <div ref={inner} class="inner">
           <button ref={close} type="button" class="x" title="Затвори (Esc)" aria-label="Затвори" onClick={onClose}>
             ✕
@@ -128,12 +132,12 @@ export function Sheet({ label, from, closing, target, expanded, onToggleSize, on
           <button
             type="button"
             class="size"
-            title={expanded ? "Свий (F)" : "Разпъни (F)"}
-            aria-label={expanded ? "Свий" : "Разпъни"}
+            title={`${sizeButton.label} (F)`}
+            aria-label={sizeButton.label}
             aria-pressed={expanded}
             onClick={onToggleSize}
           >
-            {expanded ? "⤡" : "⤢"}
+            {sizeButton.glyph}
           </button>
           {children}
         </div>

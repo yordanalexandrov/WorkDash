@@ -38,21 +38,18 @@ function mermaidBlocks(tokens: Token[]): Tokens.Code[] {
 }
 
 /**
- * The HTML of `text` without its HTML comments, not yet sanitized, and its mermaid blocks: each one is a placeholder that says the diagram is loading,
- * found by its `data-diagram` id, until the diagram replaces it.
+ * The HTML of `text` without its HTML comments, not yet sanitized, and its mermaid blocks: each one is a placeholder that says
+ * the diagram is loading, found by its `data-diagram` id, until the diagram replaces it. The ids are new on every call, so a
+ * `data-diagram` the author wrote in HTML cannot take a diagram's place.
  */
 export function parseMarkdown(text: string): { html: string; diagrams: Diagram[] } {
   const tokens = marked.lexer(withoutComments(text));
+  const nonce = Math.random().toString(36).slice(2, 10);
   const diagrams = mermaidBlocks(tokens).map((block, index) => {
-    const diagram = { id: `d${index}`, code: block.text };
+    const diagram = { id: `${nonce}-${index}`, code: block.text };
     const placeholder = `<div class="diagram" data-diagram="${diagram.id}">Диаграмата се зарежда…</div>\n`;
     Object.assign(block, { type: "html", block: true, pre: false, text: placeholder });
     return diagram;
   });
   return { html: marked.parser(tokens), diagrams };
-}
-
-/** Whether `text` has a ```mermaid block, so the diagrams are worth loading. */
-export function hasMermaid(text: string): boolean {
-  return mermaidBlocks(marked.lexer(text)).length > 0;
 }

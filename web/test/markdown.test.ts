@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasMermaid, parseMarkdown } from "../src/markdown.js";
+import { parseMarkdown } from "../src/markdown.js";
 
 describe("parseMarkdown", () => {
   it("turns a GFM table into a table", () => {
@@ -51,20 +51,18 @@ describe("parseMarkdown", () => {
     expect(html).toContain("<pre><code");
     expect(html).toContain("const a = 1 &lt; 2;");
   });
-});
 
-describe("hasMermaid", () => {
-  it("finds a mermaid block, also one in a list", () => {
-    expect(hasMermaid("Flow:\n\n```mermaid\ngraph TD\n```")).toBe(true);
-    expect(hasMermaid("- step\n\n  ```mermaid\n  pie\n  ```")).toBe(true);
+  it("finds a mermaid block in a list too, but not a mermaid fence written inside another code block", () => {
+    expect(parseMarkdown("- step\n\n  ```mermaid\n  pie\n  ```").diagrams.map((d) => d.code)).toEqual(["pie"]);
+    expect(parseMarkdown("````md\n```mermaid\ngraph TD\n```\n````").diagrams).toEqual([]);
+    expect(parseMarkdown("Mentions mermaid but has no diagram.").diagrams).toEqual([]);
   });
 
-  it("finds none in plain text or other code", () => {
-    expect(hasMermaid("Mentions mermaid but has no diagram.")).toBe(false);
-    expect(hasMermaid("```ts\nconst a = 1;\n```")).toBe(false);
-  });
-
-  it("does not count a mermaid fence written inside another code block", () => {
-    expect(hasMermaid("````md\n```mermaid\ngraph TD\n```\n````")).toBe(false);
+  it("gives the placeholders new ids every time, so one written by the author cannot stand in for them", () => {
+    const text = '<div data-diagram="d0"></div>\n\n```mermaid\npie\n```';
+    const [first] = parseMarkdown(text).diagrams;
+    const [second] = parseMarkdown(text).diagrams;
+    expect(first?.id).not.toBe("d0");
+    expect(first?.id).not.toBe(second?.id);
   });
 });
