@@ -1,22 +1,11 @@
-// What the detail sheet shows of a PR: its description as plain text, the latest comments and commits, and the PR itself by key.
+// What the detail sheet shows of a PR: its description without the template's comments, the latest comments and commits, and the PR itself by key.
 
 import type { DashboardPullRequest, DashboardState, Section } from "./api.js";
+import { withoutComments } from "./markdown.js";
 
-/** The longest description the sheet shows; the rest is cut off with "…". */
-const MAX_BODY = 4000;
-
-/**
- * The description without the HTML comments PR templates leave in it, trimmed and cut off past 4000 characters. Removing a
- * comment can join the pieces of another, so it repeats until none is left; an unclosed one hides the rest, as on GitHub.
- */
+/** The description without the HTML comments PR templates leave in it, trimmed; a long one stays whole and scrolls. */
 export function cleanBody(body: string): string {
-  let text = body;
-  for (let last = ""; last !== text; ) {
-    last = text;
-    text = text.replace(/<!--[\s\S]*?-->/g, "");
-  }
-  text = text.replace(/<!--[\s\S]*$/, "").trim();
-  return text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}…` : text;
+  return withoutComments(body).trim();
 }
 
 /** The `n` newest of `list` by the time `at` gives, newest first. */

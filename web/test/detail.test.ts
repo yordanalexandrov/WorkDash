@@ -18,9 +18,8 @@ describe("cleanBody", () => {
     expect(cleanBody("Adds the sheet.\n<!-- unfinished template")).toBe("Adds the sheet.");
   });
 
-  it("keeps 4000 characters whole and cuts a longer description with …", () => {
-    expect(cleanBody("a".repeat(4000))).toBe("a".repeat(4000));
-    expect(cleanBody("a".repeat(4001))).toBe(`${"a".repeat(4000)}…`);
+  it("keeps a long description whole", () => {
+    expect(cleanBody("a".repeat(20_000))).toBe("a".repeat(20_000));
   });
 
   it("leaves an empty description empty", () => {

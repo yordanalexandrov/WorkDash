@@ -6,6 +6,7 @@ import { cleanBody, latest } from "../detail.js";
 import { age, sectionTitle } from "../format.js";
 import { askedReviewers, checkRings, mergeMark, reviewMarks, unreadCount } from "../marks.js";
 import { Avatar } from "./Avatar.js";
+import { Markdown } from "./Markdown.js";
 import { Ring } from "./Ring.js";
 import { SectionPill } from "./SectionPill.js";
 
@@ -25,7 +26,7 @@ type PrDetailProps = {
 
 /**
  * Everything about one open PR ("Anatomy" → Detail sheet in docs/design.md): every fact of its card and row, plus the
- * description, the latest comments and commits, the reviews with their times and the branch. Texts are plain text.
+ * description, the latest comments and commits, the reviews with their times and the branch. Texts are markdown.
  */
 export function PrDetail({ pr, section, hue, gone, onSeen }: PrDetailProps) {
   const reason = reasonBadge(pr);
@@ -101,7 +102,7 @@ export function PrDetail({ pr, section, hue, gone, onSeen }: PrDetailProps) {
       <div class="body">
         <section class="pane">
           <h3>Описание</h3>
-          {body ? <p class="desc">{body}</p> : <p class="none">Няма описание</p>}
+          {body ? <Markdown text={body} class="desc" /> : <p class="none">Няма описание</p>}
         </section>
         <section class="pane">
           <h3>Последни коментари</h3>
@@ -112,7 +113,7 @@ export function PrDetail({ pr, section, hue, gone, onSeen }: PrDetailProps) {
                 <div>
                   <span class="who">{comment.author}</span>
                   <span class="when">{`преди ${age(comment.createdAt)}${comment.thread ? " · в review нишка" : ""}`}</span>
-                  <p class="txt">{comment.body}</p>
+                  <Markdown text={comment.body} class="txt" />
                 </div>
               </div>
             ))
