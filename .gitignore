@@ -10,3 +10,7 @@ web/dist/
 
 # Private terms for scripts/public-guard.ts (real names, logins, Jira keys)
 .public-guard-denylist
+
+# Prototype runs: a frozen /api/prs snapshot holds real PR data
+web/prototype/snapshot.json
+web/prototype/out/

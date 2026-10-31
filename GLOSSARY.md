@@ -1,11 +1,15 @@
 # WorkDash
 
-A local dashboard of the GitHub pull requests that concern me, ordered by what needs my attention.
+A local dashboard of the GitHub pull requests that concern me, ordered by what needs my attention, and of the issues of the repos I follow, by stage.
 
 ## Language
 
+**Dashboard** (Табло):
+One of the two halves of the app, switched at the top: the **PR dashboard** (PR-и) and the **Issue dashboard** (Issues). Each has a board and a table.
+_Avoid_: Page, tab, mode
+
 **Poll**:
-One fetch of the pull requests from GitHub that replaces what the dashboard shows.
+One fetch from GitHub that replaces what a dashboard shows: the pull requests of every followed repo, or the issues of the one repo open on the Issue dashboard, and only while it is open.
 _Avoid_: Refresh, sync, reload
 
 **Poll mode**:
@@ -16,23 +20,38 @@ _Avoid_: Refresh mode, auto-refresh
 The group a pull request falls into by what it needs from me: Чака теб, Свободни за review, Готови за merge, Чакат други, Екипът, plus Затворени for recently closed ones.
 _Avoid_: Status, lane, bucket
 
+**Issue**:
+A GitHub issue of a followed repo. Never a pull request, and never a Jira issue (that is a Jira ticket).
+_Avoid_: Ticket, task
+
+**Stage** (Етап):
+The column an issue falls into by its labels: Без етап, then one per stage label configured for its repo, then Затворени for recently closed ones. An issue with several stage labels is in the last of them. Stages belong to issues; sections belong to pull requests.
+_Avoid_: Status, section, lane
+
+**Stage label**:
+A GitHub label configured as a stage. The issue's other labels are just labels.
+
+**Linked PR**:
+A pull request that will close an issue when it merges.
+_Avoid_: Related PR, attached PR
+
 **Board** (Дъска):
-The view of the dashboard with one column per section.
+The view of a dashboard with one column per section (PR dashboard) or per stage (Issue dashboard).
 _Avoid_: Kanban
 
 **Table** (Таблица):
-The view of the dashboard with one row per pull request; the same pull requests as the board.
+The view of a dashboard with one row per pull request or issue; the same ones as the board.
 _Avoid_: List, grid
 
 **Card**:
-One pull request on the board.
+One pull request or issue on the board.
 _Avoid_: Ticket (that word means a Jira ticket), tile
 
 **Row**:
-One pull request in the table.
+One pull request or issue in the table.
 
 **Detail sheet**:
-The panel with everything about one pull request, opened from its card or row.
+The panel with everything about one pull request or issue, opened from its card or row.
 _Avoid_: Modal, drawer, details page
 
 **Seen** (видях):
