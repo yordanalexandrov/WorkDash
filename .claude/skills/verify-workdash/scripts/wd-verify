@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Launches, checks, drives and tears down a throwaway WorkDash instance for verification.
+#
+#   wd-verify start            build, then start the server and a headless Chrome on free ports
+#   wd-verify doctor           read-only: is the current instance ours, up, fresh and answering?
+#   wd-verify browser <cmd>…   drive the page (see scripts/cdp.mjs for the commands)
+#   wd-verify api <path>       GET a read-only API path, e.g. /api/prs or /api/config
+#   wd-verify data             list the run's data directory and print its config.yaml
+#   wd-verify evidence         print the run's evidence directory
+#   wd-verify stop             kill what start started, delete data and profile, keep evidence and logs
+#
+# Everything lives under <worktree>/.verify (git-ignored): runs/<id> is scratch, evidence/<id> survives stop.
+# One run per worktree at a time; another session's worktree has its own .verify.
+set -euo pipefail
+
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -n "$ROOT" && -f "$ROOT/package.json" ]] && grep -q '"name": "workdash"' "$ROOT/package.json" || {
+  echo "wd-verify: run from inside a WorkDash checkout or worktree" >&2
+  exit 1
+}
+BASE="$ROOT/.verify"
+CURRENT="$BASE/current"
+
+say() { echo "wd-verify: $*"; }
+die() {
+  echo "wd-verify: $*" >&2
+  exit 1
+}
+
+free_port() { node -e 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'; }
+
+load_state() {
+  [[ -f "$CURRENT/state.env" ]] || die "no current run in $BASE (run: wd-verify start)"
+  # shellcheck disable=SC1091
+  source "$CURRENT/state.env"
+}
+
+alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+cmd_start() {
+  if [[ -f "$CURRENT/state.env" ]]; then
+    # shellcheck disable=SC1091
+    source "$CURRENT/state.env"
+    if alive "$SERVER_PID" || alive "$CHROME_PID"; then die "a run is already up ($RUN_ID); use it, or wd-verify stop first"; fi
+    say "stale run $RUN_ID found; cleaning it"
+    cmd_stop
+  fi
+  [[ -d "$ROOT/node_modules" ]] || die "no node_modules: run npm ci in $ROOT first"
+  local chrome
+  chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+  [[ -n "$chrome" ]] || die "no Chrome/Chromium on PATH"
+
+  say "building (npm run build)"
+  (cd "$ROOT" && npm run build >/dev/null 2>&1) || die "npm run build failed; run it yourself to see why"
+
+  local id run ev port cdp
+  id="$(date +%Y%m%d-%H%M%S)-$$"
+  run="$BASE/runs/$id"
+  ev="$BASE/evidence/$id"
+  mkdir -p "$run/data" "$run/chrome" "$run/logs" "$ev"
+  port="$(free_port)"
+  cdp="$(free_port)"
+
+  # A clean server: its own data dir, no legacy config.yaml to copy in (the checkout's real one stays untouched),
+  # no token from the environment. Setup happens through the Settings screen, as a user would.
+  (cd "$run" && exec env -u GITHUB_TOKEN DATA_DIR="$run/data" CONFIG_PATH="$run/no-legacy-config.yaml" \
+    HOST=127.0.0.1 PORT="$port" TZ="${WD_TZ:-UTC}" setsid node "$ROOT/dist/main.js" >"$run/logs/server.log" 2>&1) &
+  local server_pid=$!
+  setsid "$chrome" --headless=new --user-data-dir="$run/chrome" --remote-debugging-port="$cdp" \
+    --no-first-run --no-default-browser-check --disable-extensions --window-size=1440,900 \
+    about:blank >"$run/logs/chrome.log" 2>&1 &
+  local chrome_pid=$!
+
+  cat >"$run/state.env" <<EOF
+RUN_ID=$id
+RUN_DIR=$run
+EVIDENCE_DIR=$ev
+DATA_DIR=$run/data
+PORT=$port
+BASE_URL=http://127.0.0.1:$port
+CDP_PORT=$cdp
+SERVER_PID=$server_pid
+CHROME_PID=$chrome_pid
+BUILT_FROM=$(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD -- src web || echo "+dirty")
+EOF
+  ln -sfn "runs/$id" "$CURRENT"
+
+  for _ in $(seq 1 60); do
+    curl -fsS "http://127.0.0.1:$port/api/prs" >/dev/null 2>&1 && curl -fsS "http://127.0.0.1:$cdp/json/version" >/dev/null 2>&1 && break
+    sleep 0.25
+  done
+  curl -fsS "http://127.0.0.1:$port/api/prs" >/dev/null 2>&1 || { tail -20 "$run/logs/server.log" >&2; cmd_stop; die "server did not answer"; }
+  curl -fsS "http://127.0.0.1:$cdp/json/version" >/dev/null 2>&1 || { tail -20 "$run/logs/chrome.log" >&2; cmd_stop; die "Chrome did not answer"; }
+  say "ready: run $id  app http://127.0.0.1:$port  evidence $ev"
+}
+
+cmd_doctor() {
+  load_state
+  local ok=1
+  check() { if eval "$2"; then echo "  ok   $1"; else echo "  FAIL $1"; ok=0; fi; }
+  echo "run $RUN_ID (built from $BUILT_FROM)"
+  check "server pid $SERVER_PID alive and is our dist/main.js" \
+    "alive $SERVER_PID && tr '\0' ' ' </proc/$SERVER_PID/cmdline | grep -q '$ROOT/dist/main.js' && tr '\0' '\n' </proc/$SERVER_PID/environ | grep -qx 'DATA_DIR=$DATA_DIR'"
+  check "port $PORT owned by the server" "ss -ltnpH 'sport = :$PORT' | grep -q 'pid=$SERVER_PID,'"
+  check "GET /api/prs answers JSON" "curl -fsS '$BASE_URL/api/prs' | node -e 'JSON.parse(require(\"fs\").readFileSync(0))' "
+  check "Chrome pid $CHROME_PID alive with our profile" "alive $CHROME_PID && tr '\0' ' ' </proc/$CHROME_PID/cmdline | grep -q -- '--user-data-dir=$RUN_DIR/chrome'"
+  check "CDP on $CDP_PORT answers" "curl -fsS 'http://127.0.0.1:$CDP_PORT/json/version' >/dev/null"
+  check "build is newer than src/ and web/src/" \
+    "[[ -z \$(find '$ROOT/src' -newer '$ROOT/dist/main.js' -name '*.ts' | head -1) && -z \$(find '$ROOT/web/src' -newer '$ROOT/web/dist/app.js' | head -1) ]]"
+  if ((ok)); then
+    echo "  state: $(curl -fsS "$BASE_URL/api/prs" | node -e '
+      const s = JSON.parse(require("fs").readFileSync(0));
+      const n = (s.sections ?? []).reduce((a, x) => a + x.pullRequests.length, 0);
+      console.log(`missing=[${s.missing}] fetchedAt=${s.fetchedAt} pollMode=${s.pollMode} error=${s.error ?? null} openPRs=${n}`);')"
+    echo "doctor: healthy"
+  else
+    echo "doctor: NOT healthy; see $RUN_DIR/logs, then wd-verify stop && wd-verify start"
+    return 1
+  fi
+}
+
+cmd_browser() {
+  load_state
+  CDP_PORT="$CDP_PORT" BASE_URL="$BASE_URL" node "$SCRIPTS/cdp.mjs" "$@"
+}
+
+cmd_api() {
+  load_state
+  local path="${1:?api needs a path such as /api/prs}"
+  curl -fsS "$BASE_URL$path"
+  echo
+}
+
+cmd_data() {
+  load_state
+  ls -l "$DATA_DIR"
+  echo "--- $DATA_DIR/config.yaml"
+  cat "$DATA_DIR/config.yaml"
+}
+
+cmd_stop() {
+  [[ -e "$CURRENT/state.env" ]] || { say "no current run"; return 0; }
+  # shellcheck disable=SC1091
+  source "$CURRENT/state.env"
+  # Kill only the process groups this run started (setsid made each pid its group leader).
+  for pid in "$SERVER_PID" "$CHROME_PID"; do
+    if alive "$pid"; then kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true; fi
+  done
+  for _ in $(seq 1 20); do
+    alive "$SERVER_PID" || alive "$CHROME_PID" || break
+    sleep 0.25
+  done
+  for pid in "$SERVER_PID" "$CHROME_PID"; do alive "$pid" && kill -KILL -- "-$pid" 2>/dev/null || true; done
+  # Logs join the evidence; the data dir (holds the token) and the Chrome profile go.
+  mkdir -p "$EVIDENCE_DIR"
+  cp "$RUN_DIR/logs/"*.log "$EVIDENCE_DIR/" 2>/dev/null || true
+  rm -rf "$RUN_DIR"
+  rm -f "$CURRENT"
+  say "stopped $RUN_ID; evidence kept in $EVIDENCE_DIR"
+}
+
+cmd_evidence() {
+  load_state
+  echo "$EVIDENCE_DIR"
+}
+
+case "${1:-}" in
+  start) cmd_start ;;
+  doctor) cmd_doctor ;;
+  browser) shift && cmd_browser "$@" ;;
+  api) shift && cmd_api "$@" ;;
+  data) cmd_data ;;
+  evidence) cmd_evidence ;;
+  stop) cmd_stop ;;
+  *) sed -n '2,13p' "$0" && exit 1 ;;
+esac

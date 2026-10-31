@@ -14,3 +14,6 @@ web/dist/
 # Prototype runs: a frozen /api/prs snapshot holds real PR data
 web/prototype/snapshot.json
 web/prototype/out/
+
+# Verification runs (.claude/skills/verify-workdash): scratch instances and their evidence
+.verify/
