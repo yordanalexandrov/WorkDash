@@ -156,6 +156,7 @@ export function App() {
             repo={place.repo}
             onRepo={(repo) => goTo({ dashboard: "issues", repo })}
             topSlot={topSlot}
+            fx={fx}
             booted={booted}
           />
         )}

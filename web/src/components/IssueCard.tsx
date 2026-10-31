@@ -14,7 +14,7 @@ type IssueCardProps = {
 };
 
 /** The FLIP key of an issue's card, so it glides to its new column when its stage changes. */
-function issueFlipKey(issue: { repo: string; number: number }): string {
+export function issueFlipKey(issue: { repo: string; number: number }): string {
   return `issue:${issue.repo}#${issue.number}`;
 }
 

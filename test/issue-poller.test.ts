@@ -5,10 +5,13 @@ import { createIssuePoller } from "../src/issue-poller.js";
 /** A stand-in for GitHub that answers the issues query of any repo with one issue, and records which repos it was asked for. */
 function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean } = {}) {
   const calls: string[] = [];
+  /** Since when each request asked for the closed issues. */
+  const sinces: string[] = [];
   const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-    const { variables } = JSON.parse(String(init?.body)) as { variables: { owner: string; name: string } };
+    const { variables } = JSON.parse(String(init?.body)) as { variables: { owner: string; name: string; since: string } };
     const repo = `${variables.owner}/${variables.name}`;
     calls.push(repo);
+    sinces.push(variables.since);
     await new Promise((resolve) => setTimeout(resolve, 10));
     if (options.rateLimited) {
       const reset = String(Math.floor(Date.now() / 1000) + 600);
@@ -26,9 +29,9 @@ function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean } = {}) {
       assignees: { nodes: [] },
       comments: { totalCount: 0 },
     };
-    return Response.json({ data: { repository: { nameWithOwner: repo, issues: { totalCount: 1, nodes: [node] } } } });
+    return Response.json({ data: { repository: { nameWithOwner: repo, issues: { totalCount: 1, nodes: [node] }, closed: { nodes: [] } } } });
   };
-  return { fetch, calls };
+  return { fetch, calls, sinces };
 }
 
 const quietLog = { info() {}, error() {} };
@@ -49,6 +52,7 @@ function setUp(options: { fail?: boolean; rateLimited?: boolean; token?: string 
     store,
     token: () => (options.token === undefined ? "t" : options.token),
     log: quietLog,
+    recentlyClosedWindowMs: () => 2 * 3_600_000,
     fetch: github.fetch,
     onChange: (repo) => changes.push({ repo, polling: poller.polling(repo) }),
   });
@@ -68,6 +72,18 @@ describe("createIssuePoller", () => {
       { repo: "my-org/repo-a", polling: false },
     ]);
     expect(store.loadIssues("my-org/repo-a")?.issues.map((issue) => issue.number)).toEqual([1]);
+  });
+
+  it("asks for the issues closed within recently_closed_window", async () => {
+    const { github, poller, changes } = setUp();
+    const before = Date.now();
+
+    poller.demand("my-org/repo-a", "open");
+
+    await waitFor(() => changes.length === 2);
+    const since = Date.parse(github.sinces[0]!);
+    expect(since).toBeGreaterThanOrEqual(before - 2 * 3_600_000);
+    expect(since).toBeLessThanOrEqual(Date.now() - 2 * 3_600_000);
   });
 
   it("makes one request for a repo that two pages open at once", async () => {
@@ -104,15 +120,15 @@ describe("createIssuePoller", () => {
 
   it("does not poll a repo saved less than a minute ago, after a restart", async () => {
     const { github, store } = setUp();
-    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 0 }, new Date());
-    const poller = createIssuePoller({ store, token: () => "t", log: quietLog, fetch: github.fetch, onChange: () => {} });
+    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 0, closed: [] }, new Date());
+    const poller = createIssuePoller({ store, token: () => "t", log: quietLog, recentlyClosedWindowMs: () => 3_600_000, fetch: github.fetch, onChange: () => {} });
 
     expect(poller.demand("my-org/repo-a", "open")).toBe("skip");
   });
 
   it("keeps the saved issues and says why when a poll fails, for that repo only", async () => {
     const { store, poller, changes } = setUp({ fail: true });
-    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 7 }, new Date("2026-10-30T10:00:00Z"));
+    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 7, closed: [] }, new Date("2026-10-30T10:00:00Z"));
 
     poller.demand("my-org/repo-a", "button");
 

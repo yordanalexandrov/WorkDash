@@ -10,7 +10,7 @@ import { settingsForm } from "../src/config.js";
 import { createEventHub, type EventHub } from "../src/sse.js";
 import type { IssueDemand } from "../src/domain/issue-poll.js";
 import type { IssuesConfig } from "../src/domain/issues.js";
-import { issue, pullRequest } from "./fixtures.js";
+import { closedIssue, issue, pullRequest } from "./fixtures.js";
 
 const rules: ClassifyRules = { team: ["colleague1"], requiredApprovals: 1 };
 
@@ -617,6 +617,7 @@ describe("the issues API", () => {
       issues: {
         repos: () => ["my-org/repo-a", "my-org/repo-b"],
         config: () => config,
+        recentlyClosedWindowMs: () => DAY,
         poller: options.poller ?? fakeIssuePoller().poller,
       },
     });
@@ -627,7 +628,7 @@ describe("the issues API", () => {
 
   it("serves a repo's saved issues with when they were fetched, each in its stage, and the stages in order", async () => {
     const { server, store } = serverWith();
-    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(1, "bug"), labelled(2, "in-progress", "ready-for-agent")], totalCount: 120 }, new Date("2026-10-30T10:00:00Z"));
+    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(1, "bug"), labelled(2, "in-progress", "ready-for-agent")], totalCount: 120, closed: [] }, new Date("2026-10-30T10:00:00Z"));
 
     const response = await server.inject("/api/issues?repo=my-org/repo-a");
 
@@ -641,6 +642,7 @@ describe("the issues API", () => {
         { ...labelled(2, "in-progress", "ready-for-agent"), stage: "in-progress" },
       ],
       totalCount: 120,
+      closed: [],
       polling: false,
       error: null,
     });
@@ -651,18 +653,32 @@ describe("the issues API", () => {
 
     const body = (await server.inject("/api/issues?repo=my-org/repo-b")).json();
 
-    expect(body).toEqual({ repo: "my-org/repo-b", fetchedAt: null, stages: ["todo"], issues: [], totalCount: 0, polling: true, error: null });
+    expect(body).toEqual({ repo: "my-org/repo-b", fetchedAt: null, stages: ["todo"], issues: [], totalCount: 0, closed: [], polling: true, error: null });
   });
 
   it("serves the stages in effect now, so a reloaded config.yaml reorders the board", async () => {
     const { server, store, reconfigure } = serverWith();
-    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(2, "in-progress", "ready-for-agent")], totalCount: 1 }, new Date());
+    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(2, "in-progress", "ready-for-agent")], totalCount: 1, closed: [] }, new Date());
 
     reconfigure({ columns: ["in-progress", "ready-for-agent"], repos: {} });
     const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
 
     expect(body.stages).toEqual(["in-progress", "ready-for-agent"]);
     expect(body.issues[0].stage).toBe("ready-for-agent");
+  });
+
+  it("serves the issues closed within recently_closed_window, whatever their labels, and not those closed before", async () => {
+    const { server, store } = serverWith();
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+    const done = closedIssue({ number: 3, labels: [{ name: "in-progress", color: "ededed" }], closedAt: hoursAgo(2) });
+    const dropped = closedIssue({ number: 4, closedAt: hoursAgo(5), closedAs: "not_planned" });
+    // Within the window when it was polled, but the window has moved on since.
+    const old = closedIssue({ number: 5, closedAt: hoursAgo(25) });
+    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 0, closed: [done, dropped, old] }, new Date());
+
+    const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
+
+    expect(body.closed).toEqual([done, dropped]);
   });
 
   it("serves no repo that is not followed", async () => {
