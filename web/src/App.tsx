@@ -4,6 +4,7 @@ import { Banners } from "./components/Banners.js";
 import { Board } from "./components/Board.js";
 import { PrDetail } from "./components/PrDetail.js";
 import { Replay } from "./components/Replay.js";
+import { Settings } from "./components/Settings.js";
 import { Sheet } from "./components/Sheet.js";
 import { ClosedCard } from "./components/ClosedCard.js";
 import { DropZone } from "./components/DropZone.js";
@@ -17,7 +18,7 @@ import { NO_FILTER, repoChips } from "./filter.js";
 import type { ClosedPullRequest, DashboardPullRequest, Section } from "./api.js";
 import { findOpen, prKey } from "./detail.js";
 import { confetti, middleOf, newlyMerged, sparks } from "./effects.js";
-import { configErrorText, errorText, intervalText, pollButton, shortRepo, statusText } from "./format.js";
+import { configErrorText, errorText, intervalText, missingText, needsNewToken, pollButton, shortRepo, statusText } from "./format.js";
 import { BOUNCE, dropFlyers, type Pos, type Flyer, finishLanding, flash, land, liftFlyers, prFlipKey, useBooted, visibleIn } from "./motion.js";
 import { PALETTE, repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
@@ -28,6 +29,7 @@ import { useDashboard } from "./useDashboard.js";
 import { useDrag } from "./useDrag.js";
 import { useNotifications } from "./useNotifications.js";
 import { usePolling } from "./usePolling.js";
+import { useSettingsRoute } from "./useSettingsRoute.js";
 import type { ReplayRun } from "./useReplay.js";
 import { ESCAPE, F, R, SLASH, T, useShortcuts } from "./useShortcuts.js";
 import { readView, type View, writeView } from "./view.js";
@@ -102,6 +104,7 @@ export function App() {
   const pollNowButton = pollButton(state, polling.now);
   const pollNow = () => !pollNowButton.disabled && polling.pollNow();
   const booted = useBooted();
+  const settings = useSettingsRoute();
   // The filter is not kept between visits, so the board never opens hiding something that waits on me.
   const [filter, setFilter] = useState(NO_FILTER);
   const [view, setView] = useState<View>(() => readView(location.search));
@@ -150,8 +153,11 @@ export function App() {
     if (flyers && viewRoot.current) void land(viewRoot.current, flyers);
   }, [view]);
   // While the sheet is open, Esc closes it, `f` expands or shrinks it and `/`, `t` and `r` do nothing. While a card is dragged, Esc puts it back (`useDrag`).
+  // While Settings is open, it takes Esc itself and the dashboard's keys do nothing.
   useShortcuts(
-    sheet
+    settings.open
+      ? [{ matches: (event) => SLASH(event) || T(event) || R(event) || F(event), run: () => {} }]
+      : sheet
       ? [
           { matches: ESCAPE, run: closeSheet },
           { matches: F, run: () => !sheet.closing && toggleSize() },
@@ -222,6 +228,14 @@ export function App() {
     setReplay({ events: happenings(filtered.sections.flatMap((s) => s.pullRequests), filtered.recentlyClosed, start, end), start, end });
   };
 
+  const toggleSettings = () => (settings.open ? settings.hide() : settings.show());
+  // Settings takes the place of the board or table, however it was opened (the gear, a banner's link, the URL).
+  useEffect(() => {
+    if (!settings.open) return;
+    setSheet(null);
+    setReplay(null);
+  }, [settings.open]);
+
   return (
     <>
       <div class="bg" aria-hidden="true">
@@ -234,7 +248,8 @@ export function App() {
         status={statusText(state, polling.now)}
         stream={stream}
         notifications={notifications}
-        toggle={<ViewToggle view={view} onChange={switchView} />}
+        toggle={settings.open ? null : <ViewToggle view={view} onChange={switchView} />}
+        settings={{ open: settings.open, onToggle: toggleSettings }}
         pollControls={
           state && (
             <PollControls
@@ -248,7 +263,7 @@ export function App() {
           )
         }
       >
-        {state && (
+        {state && !settings.open && (
           <Toolbar
             repos={chips.map(({ repo, count }) => ({ repo, name: shortRepo(repo), hue: repoHue(hues, repo), count }))}
             filter={filter}
@@ -260,7 +275,7 @@ export function App() {
             replay={{ on: replay !== null, disabled: !state.fetchedAt, onToggle: toggleReplay }}
           />
         )}
-        {replay ? (
+        {replay && !settings.open ? (
           <Replay
             run={replay}
             onFire={(happening) => fire(happening, fx.current)}
@@ -274,12 +289,15 @@ export function App() {
       </TopBar>
       <Banners
         error={errorText(state, stream)}
-        configError={configErrorText(state)}
+        errorInSettings={needsNewToken(state) && !settings.open}
+        configError={settings.open ? null : configErrorText(state)}
+        setup={settings.open ? null : missingText(state)}
         missed={notifications.missed}
         onDismissMissed={notifications.dismissMissed}
       />
+      {settings.open && <Settings onClose={settings.hide} />}
       <div class="view" ref={viewRoot}>
-        {state && filtered && view === "table" && (
+        {state && filtered && !settings.open && view === "table" && (
           <PrTable
             items={items}
             closed={filtered.recentlyClosed}
@@ -298,7 +316,7 @@ export function App() {
             booted={booted}
           />
         )}
-        {state && view === "board" && (
+        {state && !settings.open && view === "board" && (
           <Board columns={columns} booted={booted} reveal={reveal} message={nothingOpen && state.fetchedAt ? "Няма PR-и, които да те засягат." : null}>
             {(column) =>
               column.id === "closed"

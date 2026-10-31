@@ -1,12 +1,12 @@
 import { readFileSync, statSync } from "node:fs";
-import { parse as parseYaml } from "yaml";
-import { z } from "zod";
+import { isMap, isNode, isSeq, parse as parseYaml, parseDocument } from "yaml";
 import { EVENT_TYPES, type EventType } from "./domain/events.js";
 import type { JiraConfig } from "./domain/jira.js";
 import { type NotificationRules, parseQuietHours, type QuietHours } from "./domain/notify.js";
+import { durationMs, formatClock, formatDuration, type SettingsForm, settingsSchema, validateSettings } from "./domain/settings.js";
 
 export type Config = {
-  github: { tokenEnv: string; pollIntervalMs: number };
+  github: { pollIntervalMs: number };
   repos: string[];
   team: string[];
   review: { requiredApprovals: number; recentlyClosedWindowMs: number };
@@ -18,97 +18,93 @@ export class ConfigError extends Error {
   override name = "ConfigError";
 }
 
-const DURATION_UNITS_MS = { s: 1_000, m: 60_000, h: 3_600_000 } as const;
-
-const duration = z
-  .string()
-  .regex(/^\d+[smh]$/, 'expected a duration such as "60s", "5m" or "1h"')
-  .transform((value) => {
-    const unit = value.at(-1) as keyof typeof DURATION_UNITS_MS;
-    return Number(value.slice(0, -1)) * DURATION_UNITS_MS[unit];
-  })
-  .refine((ms) => ms > 0, "must be greater than zero");
-
-const quietHours = z
-  .string()
-  .transform((value, context): QuietHours => {
-    const parsed = parseQuietHours(value);
-    if (!parsed) context.addIssue({ code: "custom", message: 'expected a time range such as "19:00-09:00"' });
-    return parsed ?? { start: 0, end: 0 };
-  });
-
-const notifications = z
-  .strictObject({
-    ...(Object.fromEntries(EVENT_TYPES.map((type) => [type, z.boolean().default(true)])) as Record<EventType, z.ZodDefault<z.ZodBoolean>>),
-    quiet_hours: quietHours.nullable().default(null),
-  })
-  .prefault({});
-
-const schema = z
-  .object({
-    github: z
-      .strictObject({
-        token_env: z.string().min(1).default("GITHUB_TOKEN"),
-        poll_interval: duration.default(60_000),
-      })
-      .prefault({}),
-    repos: z
-      .array(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/name"'))
-      .min(1, "list at least one repo"),
-    team: z.array(z.string().min(1)).default([]),
-    review: z
-      .object({
-        required_approvals: z.number().int().min(1).default(1),
-        recently_closed_window: duration.default(24 * 3_600_000),
-      })
-      .prefault({}),
-    jira: z
-      .object({
-        base_url: z.url().nullable().default(null),
-        project_keys: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/, 'expected a project key such as "ABC"')).default([]),
-      })
-      .prefault({}),
-    notifications,
-  })
-  .transform(
-    (raw): Config => ({
-      github: { tokenEnv: raw.github.token_env, pollIntervalMs: raw.github.poll_interval },
-      repos: raw.repos,
-      team: raw.team,
-      review: {
-        requiredApprovals: raw.review.required_approvals,
-        recentlyClosedWindowMs: raw.review.recently_closed_window,
-      },
-      jira: { baseUrl: raw.jira.base_url, projectKeys: raw.jira.project_keys },
-      notifications: {
-        enabled: Object.fromEntries(EVENT_TYPES.map((type) => [type, raw.notifications[type]])) as Record<EventType, boolean>,
-        quietHours: raw.notifications.quiet_hours,
-      },
-    }),
-  );
-
-function formatPath(path: PropertyKey[]): string {
-  return path.reduce<string>((acc, key) => {
-    if (typeof key === "number") return `${acc}[${key}]`;
-    return acc ? `${acc}.${String(key)}` : String(key);
-  }, "");
+function toConfig(raw: SettingsForm): Config {
+  return {
+    github: { pollIntervalMs: durationMs(raw.github.poll_interval) },
+    repos: raw.repos,
+    team: raw.team,
+    review: {
+      requiredApprovals: raw.review.required_approvals,
+      recentlyClosedWindowMs: durationMs(raw.review.recently_closed_window),
+    },
+    jira: { baseUrl: raw.jira.base_url, projectKeys: raw.jira.project_keys },
+    notifications: {
+      enabled: Object.fromEntries(EVENT_TYPES.map((type) => [type, raw.notifications[type]])) as Record<EventType, boolean>,
+      quietHours: raw.notifications.quiet_hours === null ? null : (parseQuietHours(raw.notifications.quiet_hours) as QuietHours),
+    },
+  };
 }
 
-/** Parses and validates config.yaml content. Errors name the offending field. */
-export function parseConfig(text: string): Config {
+/** Reads config.yaml content as the Settings screen shows it; a ConfigError when it is not valid. */
+export function settingsForm(text: string): SettingsForm {
   let raw: unknown;
   try {
     raw = parseYaml(text);
   } catch (error) {
     throw new ConfigError(`invalid YAML: ${(error as Error).message}`);
   }
+  const result = validateSettings(raw ?? {});
+  if (!result.ok) throw new ConfigError(`invalid configuration:\n${result.issues.map(({ path, message }) => `  ${path}: ${message}`).join("\n")}`);
+  return result.form;
+}
 
-  const result = schema.safeParse(raw ?? {});
-  if (!result.success) {
-    const problems = result.error.issues.map((issue) => `  ${formatPath(issue.path) || "(root)"}: ${issue.message}`);
-    throw new ConfigError(`invalid configuration:\n${problems.join("\n")}`);
-  }
-  return result.data;
+/** The config in effect written back as settings, for when the file on disk is not valid. */
+export function formFromConfig(config: Config): SettingsForm {
+  const { quietHours } = config.notifications;
+  return {
+    github: { poll_interval: formatDuration(config.github.pollIntervalMs) },
+    repos: config.repos,
+    team: config.team,
+    review: {
+      required_approvals: config.review.requiredApprovals,
+      recently_closed_window: formatDuration(config.review.recentlyClosedWindowMs),
+    },
+    jira: { base_url: config.jira.baseUrl, project_keys: config.jira.projectKeys },
+    notifications: {
+      ...config.notifications.enabled,
+      quiet_hours: quietHours ? `${formatClock(quietHours.start)}-${formatClock(quietHours.end)}` : null,
+    },
+  };
+}
+
+/**
+ * Writes `form` into config.yaml content: only the values that differ are set, so comments, order and the way
+ * the file writes what did not change stay as they are.
+ */
+export function applySettings(text: string, form: SettingsForm): string {
+  const doc = parseDocument(text);
+  if (doc.errors.length) throw new ConfigError(`invalid YAML: ${doc.errors[0]!.message}`);
+  // An empty file (or one with only comments) has no map to set keys in yet.
+  if (!isMap(doc.contents)) doc.contents = doc.createNode({}) as unknown as typeof doc.contents;
+  const defaults = settingsSchema.parse({});
+  const defaultAt = (path: string[]) => path.reduce<unknown>((acc, key) => (acc as Record<string, unknown> | undefined)?.[key], defaults);
+  let changed = false;
+  const visit = (path: string[], value: unknown) => {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      for (const [key, inner] of Object.entries(value)) visit([...path, key], inner);
+      return;
+    }
+    const node = doc.getIn(path, true);
+    const current = isNode(node) ? node.toJSON() : node;
+    if (JSON.stringify(current) === JSON.stringify(value)) return;
+    // A key the file leaves out stays out while the form keeps its default.
+    if (current === undefined && JSON.stringify(defaultAt(path)) === JSON.stringify(value)) return;
+    if (isSeq(node) && Array.isArray(value)) {
+      // Edited in place, so the list keeps its own comments and an item that stays keeps its own.
+      const kept = new Map(node.items.map((item) => [JSON.stringify(isNode(item) ? item.toJSON() : item), item]));
+      node.items = value.map((item) => kept.get(JSON.stringify(item)) ?? doc.createNode(item));
+    } else {
+      doc.setIn(path, value);
+    }
+    changed = true;
+  };
+  visit([], form);
+  return changed ? doc.toString() : text;
+}
+
+/** Parses and validates config.yaml content. Errors name the offending field. */
+export function parseConfig(text: string): Config {
+  return toConfig(settingsForm(text));
 }
 
 export function loadConfig(path: string): Config {
@@ -124,6 +120,8 @@ export function loadConfig(path: string): Config {
 export type ConfigWatcher = {
   /** Why the file on disk is not in effect, or null when it is. */
   error(): string | null;
+  /** Looks at the file now instead of at the next interval, as after the Settings screen wrote it. */
+  check(): void;
   close(): void;
 };
 
@@ -166,18 +164,20 @@ export function watchConfig(
   // Stat by path rather than fs.watch: a watch follows the inode, which is gone once an editor replaces the file.
   let stamp = fileStamp(path);
   reload();
-  const timer = setInterval(() => {
+  const check = () => {
     const next = fileStamp(path);
     if (next === stamp) return;
     stamp = next;
     const before = [current, error];
     reload();
     if (current !== before[0] || error !== before[1]) onChange();
-  }, intervalMs);
+  };
+  const timer = setInterval(check, intervalMs);
   timer.unref();
 
   return {
     error: () => error,
+    check,
     close: () => clearInterval(timer),
   };
 }

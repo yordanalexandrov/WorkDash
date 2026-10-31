@@ -62,6 +62,7 @@ describe("findOpen", () => {
     error: null,
     problems: [],
     configError: null,
+    missing: [],
     sections: [
       { section: "waiting_on_others", pullRequests: [mine] },
       { section: "free_for_review", pullRequests: [theirs] },

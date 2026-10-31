@@ -5,6 +5,8 @@ import type { JiraConfig } from "../src/domain/jira.js";
 import type { PollHealth } from "../src/domain/poll-error.js";
 import type { Demand, DemandAnswer, PollMode } from "../src/domain/poll-mode.js";
 import { buildServer, dashboardState } from "../src/server.js";
+import type { Settings } from "../src/settings.js";
+import { settingsForm } from "../src/config.js";
 import { createEventHub, type EventHub } from "../src/sse.js";
 import { pullRequest } from "./fixtures.js";
 
@@ -34,6 +36,7 @@ describe("GET /api/prs", () => {
       error: null,
       problems: [],
       configError: null,
+      missing: [],
       pollMode: "periodic",
       polling: false,
       sections: [
@@ -107,6 +110,7 @@ describe("GET /api/prs", () => {
       error,
       problems: [],
       configError: null,
+      missing: [],
       pollMode: "periodic",
       polling: false,
       sections: emptySections,
@@ -418,5 +422,162 @@ describe("GET /", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toMatch(/text\/html/);
+  });
+});
+
+describe("the dashboard before it is set up", () => {
+  it("says what is missing", async () => {
+    const server = buildServer({ ...source(), missing: () => ["token", "repos"] });
+
+    expect((await server.inject("/api/prs")).json().missing).toEqual(["token", "repos"]);
+  });
+});
+
+function source() {
+  return { store: openStore(":memory:"), rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null };
+}
+
+const FORM = settingsForm("repos: [my-org/repo-a]\n");
+
+/** Settings that record what the server hands them and answer as told. */
+function fakeSettings(overrides: Partial<Settings> = {}) {
+  const saves: { form: unknown; hash: string }[] = [];
+  const tokens: string[] = [];
+  const settings: Settings = {
+    read: () => ({ settings: FORM, hash: "h1", invalid: null }),
+    save: (form, hash) => {
+      saves.push({ form, hash });
+      return { ok: true, hash: "h2" };
+    },
+    token: () => ({ set: true, masked: "ghp_…1234" }),
+    saveToken: async (token) => {
+      tokens.push(token);
+      return { ok: true, login: "me", scopes: ["repo"], rateLimit: { remaining: 1, limit: 5000, resetAt: null } };
+    },
+    checkToken: async () => ({ ok: false, message: "Няма записан токен" }),
+    checkNames: async ({ repos }) => ({ repos: Object.fromEntries(repos.map((repo) => [repo, { ok: true }])), team: {} }),
+    suggestions: async () => ["my-org/repo-b"],
+    ...overrides,
+  };
+  return { settings, saves, tokens };
+}
+
+describe("the settings API", () => {
+  it("serves the settings, their hash, the token only masked and the time zone", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings, timeZone: "Europe/Sofia" });
+
+    const response = await server.inject("/api/config");
+
+    expect(response.json()).toEqual({ settings: FORM, hash: "h1", invalid: null, token: { set: true, masked: "ghp_…1234" }, timeZone: "Europe/Sofia" });
+  });
+
+  it("saves the settings with the hash they were read with", async () => {
+    const { settings, saves } = fakeSettings();
+    const server = buildServer({ ...source(), settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/config", payload: { settings: FORM, hash: "h1" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ hash: "h2" });
+    expect(saves).toEqual([{ form: FORM, hash: "h1" }]);
+  });
+
+  it("answers 409 when the file changed since it was read", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings({ save: () => ({ ok: false, reason: "conflict" }) }).settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/config", payload: { settings: FORM, hash: "old" } });
+
+    expect(response.statusCode).toBe(409);
+  });
+
+  it("answers 422 with the fields that are wrong", async () => {
+    const issues = [{ path: "repos[0]", message: 'expected "owner/name"' }];
+    const server = buildServer({ ...source(), settings: fakeSettings({ save: () => ({ ok: false, reason: "invalid", issues }) }).settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/config", payload: { settings: FORM, hash: "h1" } });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ issues });
+  });
+
+  it("saves a token and answers with what GitHub said about it, never the token", async () => {
+    const { settings, tokens } = fakeSettings();
+    const server = buildServer({ ...source(), settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/token", payload: { token: "ghp_good1234" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ check: { ok: true, login: "me", scopes: ["repo"], rateLimit: { remaining: 1, limit: 5000, resetAt: null } }, token: { set: true, masked: "ghp_…1234" } });
+    expect(response.body).not.toContain("ghp_good1234");
+    expect(tokens).toEqual(["ghp_good1234"]);
+  });
+
+  it("answers 422 for a token GitHub refuses", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings({ saveToken: async () => ({ ok: false, message: "GitHub отказва токена: Bad credentials" }) }).settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/token", payload: { token: "ghp_bad" } });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ message: "GitHub отказва токена: Bad credentials" });
+  });
+
+  it("checks the saved token, repos and logins, and hints at repos", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    expect((await server.inject({ method: "POST", url: "/api/token/check", payload: {} })).json()).toEqual({ ok: false, message: "Няма записан токен" });
+    expect((await server.inject({ method: "POST", url: "/api/config/check", payload: { repos: ["my-org/repo-a"], team: [] } })).json()).toEqual({
+      repos: { "my-org/repo-a": { ok: true } },
+      team: {},
+    });
+    expect((await server.inject("/api/config/suggestions")).json()).toEqual({ repos: ["my-org/repo-b"] });
+  });
+});
+
+describe("requests from other sites", () => {
+  it("refuses a write from another origin", async () => {
+    const { settings, tokens } = fakeSettings();
+    const server = buildServer({ ...source(), settings });
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "/api/token",
+      headers: { host: "127.0.0.1:3000", origin: "http://evil.example" },
+      payload: { token: "ghp_theirs" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(tokens).toEqual([]);
+  });
+
+  it("takes a write from the dashboard's own page, on whatever port it is reached", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/token", headers: { host: "localhost:8080", origin: "http://localhost:8080" }, payload: { token: "t" } });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it("refuses any API request under a host name that is not this machine, as after DNS rebinding", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    expect((await server.inject({ url: "/api/config", headers: { host: "evil.example:3000" } })).statusCode).toBe(403);
+  });
+
+  it("refuses a write that is not JSON, which a page elsewhere could send without asking", async () => {
+    const { settings, tokens } = fakeSettings();
+    const server = buildServer({ ...source(), settings });
+
+    const response = await server.inject({ method: "PUT", url: "/api/token", headers: { "content-type": "text/plain" }, payload: '{"token":"ghp_theirs"}' });
+
+    expect(response.statusCode).toBe(403);
+    expect(tokens).toEqual([]);
+  });
+
+  it("refuses a write with no content type at all", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    const response = await server.inject({ method: "POST", url: "/api/token/check" });
+
+    expect(response.statusCode).toBe(403);
   });
 });

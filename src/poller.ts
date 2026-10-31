@@ -6,8 +6,9 @@ import type { Snapshot } from "./domain/types.js";
 import { fetchClosedPullRequests, fetchSnapshot } from "./github/client.js";
 
 export type PollerSettings = {
+  /** None yet: the poller waits for repos and a token before it polls. */
   repos: string[];
-  token: string;
+  token: string | null;
   intervalMs: number;
   /** How long a merged or closed PR stays in the recently closed list. */
   recentlyClosedWindowMs: number;
@@ -30,7 +31,8 @@ export type Poller = {
 
 /**
  * Polls GitHub, saving each snapshot. In the poll mode the store holds: Periodic polls right away and then every
- * `intervalMs` (longer while a rate limit lasts); On-demand polls only on a demand or a reconfigure.
+ * `intervalMs` (longer while a rate limit lasts); On-demand polls only on a demand or a reconfigure. Without a token or
+ * repos it does not poll; once GitHub refuses the token, it stops until a reconfigure brings another one.
  * A failed poll, a failed closed-PR lookup included, saves nothing, so the next poll looks again.
  */
 export function startPoller(
@@ -56,6 +58,10 @@ export function startPoller(
   let mode = store.loadPollMode();
   /** When the last successful poll fetched its snapshot. */
   let lastSuccessAt = store.loadSnapshot()?.fetchedAt ?? null;
+  /** Whether there is anything to poll and a token to poll with. */
+  const ready = () => token !== null && repos.length > 0;
+  /** Whether to go on polling every interval: not while GitHub refuses the token, which only a new token mends. */
+  const keepsPolling = () => mode === "periodic" && health.error?.kind !== "auth";
 
   async function poll() {
     polling = true;
@@ -71,9 +77,9 @@ export function startPoller(
       const previous = (before?.pullRequests ?? []).filter((pr) => followed.has(pr.repo.toLowerCase()));
       // Taken before the request, so a comment posted while it is under way stays unread.
       const startedAt = new Date();
-      const snapshot = await fetchSnapshot({ repos, token, fetch, previous, observedAt: startedAt });
+      const snapshot = await fetchSnapshot({ repos, token: token!, fetch, previous, observedAt: startedAt });
       const vanished = vanishedPullRequests(previous, snapshot.pullRequests, snapshot.unreadRepos);
-      const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token, fetch });
+      const lookup = await fetchClosedPullRequests({ pullRequests: vanished, token: token!, fetch });
       const now = new Date();
       // Marked before saving, so no reader sees a new PR without its mark.
       store.markFirstSeen(snapshot.pullRequests, startedAt);
@@ -108,12 +114,12 @@ export function startPoller(
     } catch (error) {
       log.error(`after poll: ${(error as Error).message}`);
     }
-    if (pollAgain) timer = setTimeout(poll, 0);
-    else if (mode === "periodic") timer = setTimeout(poll, nextPollDelay(health.error, intervalMs, new Date()));
+    if (pollAgain && ready()) timer = setTimeout(poll, 0);
+    else if (keepsPolling()) timer = setTimeout(poll, nextPollDelay(health.error, intervalMs, new Date()));
     pollAgain = false;
   }
 
-  if (mode === "periodic") void poll();
+  if (mode === "periodic" && ready()) void poll();
 
   return {
     health: () => health,
@@ -123,12 +129,13 @@ export function startPoller(
       mode = next;
       store.savePollMode(next);
       // A poll under way schedules the next one by the new mode when it ends.
-      if (stopped || polling) return;
+      if (stopped || polling || !ready()) return;
       clearTimeout(timer);
-      if (mode === "periodic") timer = setTimeout(poll, delayAfterSwitch({ lastSuccessAt, intervalMs, error: health.error, now: new Date() }));
+      if (keepsPolling()) timer = setTimeout(poll, delayAfterSwitch({ lastSuccessAt, intervalMs, error: health.error, now: new Date() }));
     },
     demand(demand) {
-      const answer = stopped ? "skip" : answerDemand({ demand, polling, lastSuccessAt, error: health.error, now: new Date() });
+      // A refused token is not tried again until a new one comes.
+      const answer = stopped || !ready() || health.error?.kind === "auth" ? "skip" : answerDemand({ demand, polling, lastSuccessAt, error: health.error, now: new Date() });
       if (answer === "poll") {
         clearTimeout(timer);
         void poll();
@@ -136,10 +143,14 @@ export function startPoller(
       return answer;
     },
     reconfigure(settings) {
+      const sameToken = settings.token === token;
       ({ repos, token, intervalMs, recentlyClosedWindowMs } = settings);
-      if (stopped) return;
+      // New settings with the token GitHub refused would only be refused again.
+      if (stopped || (sameToken && health.error?.kind === "auth")) return;
       if (polling) {
         pollAgain = true;
+      } else if (!ready()) {
+        clearTimeout(timer);
       } else {
         clearTimeout(timer);
         void poll();

@@ -12,8 +12,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
-    CONFIG_PATH=/app/config.yaml \
-    DB_PATH=/app/data/workdash.db
+    DATA_DIR=/app/data
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist

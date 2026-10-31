@@ -286,11 +286,38 @@ describe("startPoller health", () => {
     expect(healths).toEqual([{ error: null, problems: [] }]);
   });
 
-  it("keeps the last good snapshot and goes on trying when GitHub refuses the token", async () => {
-    const { store, healths } = await run([ok, () => Response.json({ message: "Bad credentials" }, { status: 401 }), ok], 3);
+  it("keeps the last good snapshot and stops trying when GitHub refuses the token, until a new one comes", async () => {
+    const store = openStore(":memory:");
+    const kinds: (string | null)[] = [];
+    const responses = [ok, () => Response.json({ message: "Bad credentials" }, { status: 401 }), ok];
+    let calls = 0;
+    const poller = startPoller({
+      repos: ["my-org/repo-a"],
+      token: "t",
+      intervalMs: 1,
+      recentlyClosedWindowMs: 3_600_000,
+      store,
+      log: quietLog,
+      fetch: async () => responses[Math.min(calls++, responses.length - 1)]!(),
+      onPoll: () => kinds.push(poller.health().error?.kind ?? null),
+    });
+    await waitFor(() => kinds.length === 2);
+    await new Promise((resolve) => setTimeout(resolve, 40));
 
+    expect(kinds).toEqual([null, "auth"]);
     expect(store.loadSnapshot()?.viewer).toBe("me");
-    expect(healths.map((health) => health.error?.kind ?? null)).toEqual([null, "auth", null]);
+
+    // Neither a demand nor a reload of the settings tries the refused token again.
+    expect(poller.demand("button")).toBe("skip");
+    poller.reconfigure({ repos: ["my-org/repo-a", "my-org/repo-b"], token: "t", intervalMs: 1, recentlyClosedWindowMs: 3_600_000 });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(kinds).toEqual([null, "auth"]);
+
+    poller.reconfigure({ repos: ["my-org/repo-a"], token: "t2", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000 });
+    await waitFor(() => kinds.length === 3);
+    poller.stop();
+
+    expect(kinds[2]).toBeNull();
   });
 
   it("tells a GitHub it cannot reach apart from other failures", async () => {
@@ -324,6 +351,33 @@ describe("startPoller onSnapshot", () => {
       [null, [1]],
       [[1], [1]],
     ]);
+  });
+});
+
+describe("startPoller before it is set up", () => {
+  let poller: Poller | undefined;
+  afterEach(() => poller?.stop());
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
+
+  it("does not poll without a token, nor on a demand, and polls once one comes", async () => {
+    const github = fakeGitHub();
+    poller = startPoller({ repos: ["my-org/repo-a"], token: null, intervalMs: 1, recentlyClosedWindowMs: 3_600_000, store: openStore(":memory:"), log: quietLog, fetch: github.fetch });
+    await settle();
+
+    expect(poller.demand("button")).toBe("skip");
+    expect(github.calls).toEqual([]);
+
+    poller.reconfigure({ repos: ["my-org/repo-a"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000 });
+    await waitFor(() => github.calls.length === 1);
+  });
+
+  it("does not poll without repos", async () => {
+    const github = fakeGitHub();
+    poller = startPoller({ repos: [], token: "t", intervalMs: 1, recentlyClosedWindowMs: 3_600_000, store: openStore(":memory:"), log: quietLog, fetch: github.fetch });
+    await settle();
+
+    expect(github.calls).toEqual([]);
   });
 });
 

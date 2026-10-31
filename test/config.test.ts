@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ConfigError, parseConfig } from "../src/config.js";
+import { applySettings, ConfigError, formFromConfig, parseConfig, settingsForm } from "../src/config.js";
+import { validateSettings } from "../src/domain/settings.js";
 import { ALL_ENABLED } from "../src/domain/notify.js";
 
 const minimal = `
@@ -13,7 +14,6 @@ describe("parseConfig", () => {
     const config = parseConfig(readFileSync("config.example.yaml", "utf8"));
 
     expect(config.repos).toEqual(["my-org/repo-a", "my-org/repo-b"]);
-    expect(config.github.tokenEnv).toBe("GITHUB_TOKEN");
     expect(config.github.pollIntervalMs).toBe(60_000);
     expect(config.team).toEqual(["colleague1", "colleague2"]);
     expect(config.review.requiredApprovals).toBe(1);
@@ -36,7 +36,7 @@ describe("parseConfig", () => {
   it("fills in defaults for the GitHub section", () => {
     const config = parseConfig(minimal);
 
-    expect(config.github).toEqual({ tokenEnv: "GITHUB_TOKEN", pollIntervalMs: 60_000 });
+    expect(config.github).toEqual({ pollIntervalMs: 60_000 });
   });
 
   it("defaults to no team and one required approval", () => {
@@ -77,8 +77,19 @@ describe("parseConfig", () => {
     expect(() => parseConfig(`github: { pol_interval: 5m }\n${minimal}`)).toThrow(/github.*pol_interval/);
   });
 
-  it("requires at least one repo", () => {
-    expect(() => parseConfig("repos: []\n")).toThrow(/repos/);
+  it("accepts an empty file as a dashboard with nothing set up yet", () => {
+    const config = parseConfig("");
+
+    expect(config.repos).toEqual([]);
+    expect(config.github.pollIntervalMs).toBe(60_000);
+  });
+
+  it("lets a key it does not know pass outside github and notifications, as before", () => {
+    expect(parseConfig(`extra: 1\nreview: { extra: 1 }\njira: { extra: 1 }\n${minimal}`).repos).toEqual(["my-org/repo-a"]);
+  });
+
+  it("rejects github.token_env: the token is kept apart from the settings", () => {
+    expect(() => parseConfig(`github: { token_env: GITHUB_TOKEN }\n${minimal}`)).toThrow(/github.*token_env/);
   });
 
   it("reports invalid YAML as a ConfigError", () => {
@@ -110,5 +121,109 @@ describe("parseConfig notifications", () => {
 
   it("names a misspelled event type", () => {
     expect(() => parseConfig(`notifications: { mentions: false }\n${minimal}`)).toThrow(/notifications.*mentions/);
+  });
+});
+
+describe("settingsForm", () => {
+  it("shows what the file says, with the defaults for what it leaves out", () => {
+    const form = settingsForm("github:\n  poll_interval: 90s\nrepos: [my-org/repo-a]\n");
+
+    expect(form).toEqual({
+      github: { poll_interval: "90s" },
+      repos: ["my-org/repo-a"],
+      team: [],
+      review: { required_approvals: 1, recently_closed_window: "24h" },
+      jira: { base_url: null, project_keys: [] },
+      notifications: { ...ALL_ENABLED.enabled, quiet_hours: null },
+    });
+  });
+
+  it("keeps a duration as the file writes it", () => {
+    expect(settingsForm("github: { poll_interval: 60s }\n").github.poll_interval).toBe("60s");
+  });
+});
+
+describe("formFromConfig", () => {
+  it("writes the config in effect back as a form that reads as the same config", () => {
+    const config = parseConfig(readFileSync("config.example.yaml", "utf8"));
+
+    const form = formFromConfig(config);
+
+    expect(form.github.poll_interval).toBe("1m");
+    expect(form.notifications.quiet_hours).toBe("19:00-09:00");
+    expect(parseConfig(applySettings("", form))).toEqual(config);
+  });
+
+  it("writes an interval that is not whole minutes in seconds", () => {
+    expect(formFromConfig(parseConfig("github: { poll_interval: 90s }\n")).github.poll_interval).toBe("90s");
+  });
+});
+
+describe("validateSettings", () => {
+  const valid = settingsForm(minimal);
+
+  it("accepts a valid form", () => {
+    expect(validateSettings(valid)).toEqual({ ok: true, form: valid });
+  });
+
+  it("names every field that is wrong, by its path", () => {
+    const result = validateSettings({
+      ...valid,
+      repos: ["my-org/repo-a", "repo-b"],
+      github: { poll_interval: "soon" },
+      notifications: { ...valid.notifications, quiet_hours: "7pm-9am" },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.issues.map((issue) => issue.path).toSorted()).toEqual(["github.poll_interval", "notifications.quiet_hours", "repos[1]"]);
+    expect(!result.ok && result.issues.find((issue) => issue.path === "repos[1]")?.message).toBe('expected "owner/name"');
+  });
+});
+
+describe("applySettings", () => {
+  const commented = `# my dashboard
+github:
+  poll_interval: 60s   # once a minute
+
+repos:
+  - my-org/repo-a      # the main one
+
+team: [colleague1]
+`;
+
+  it("changes only what the form changed and keeps the comments and the order", () => {
+    const form = settingsForm(commented);
+
+    const text = applySettings(commented, { ...form, team: ["colleague1", "colleague2"] });
+
+    expect(text).toContain("# my dashboard");
+    expect(text).toMatch(/poll_interval: 60s +# once a minute/);
+    expect(text).toMatch(/- my-org\/repo-a +# the main one/);
+    expect(text.indexOf("github:")).toBeLessThan(text.indexOf("repos:"));
+    expect(parseConfig(text).team).toEqual(["colleague1", "colleague2"]);
+  });
+
+  it("keeps the comments on a list and on its items when an item is added or removed", () => {
+    const text = "team:                # whose PRs show in Екипът\n  - colleague1       # lead\n  - colleague2\n";
+
+    const next = applySettings(text, { ...settingsForm(text), team: ["colleague1", "colleague3"] });
+
+    // The yaml library puts a comment on the key's line on a line of its own; it is kept all the same.
+    expect(next).toMatch(/team:\s+# whose PRs show in Екипът/);
+    expect(next).toMatch(/- colleague1 +# lead/);
+    expect(parseConfig(next).team).toEqual(["colleague1", "colleague3"]);
+  });
+
+  it("leaves the file as it is when nothing changed", () => {
+    expect(applySettings(commented, settingsForm(commented))).toBe(commented);
+  });
+
+  it("writes into an empty file", () => {
+    const form = settingsForm("");
+
+    const text = applySettings("", { ...form, repos: ["my-org/repo-b"], jira: { base_url: "https://example.atlassian.net/browse/", project_keys: ["ABC"] } });
+
+    expect(parseConfig(text).repos).toEqual(["my-org/repo-b"]);
+    expect(parseConfig(text).jira.projectKeys).toEqual(["ABC"]);
   });
 });

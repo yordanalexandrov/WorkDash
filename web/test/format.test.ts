@@ -12,6 +12,7 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     error: null,
     problems: [],
     configError: null,
+    missing: [],
     pollMode: "periodic",
     polling: false,
     sections: [],
@@ -87,7 +88,7 @@ describe("errorText", () => {
     const error = { kind: "auth", message: "GitHub API responded 401: Bad credentials", resetAt: null } as const;
 
     expect(errorText(dashboard({ error }), "open")).toBe(
-      "GitHub отказва токена (невалиден или изтекъл): GitHub API responded 401: Bad credentials",
+      "GitHub отказва токена (невалиден или изтекъл), poll-ът е спрян до нов токен: GitHub API responded 401: Bad credentials",
     );
   });
 

@@ -16,6 +16,10 @@ _Avoid_: Refresh, sync, reload
 When polls happen, the same for every open dashboard: **Periodic** (на всеки интервал) or **On-demand** (при поискване: when I come back to the dashboard or press "Обнови").
 _Avoid_: Refresh mode, auto-refresh
 
+**Settings** (Настройки):
+What I set up once for the dashboard and change from its Settings screen: the GitHub token, the poll interval, the repos, the team, Jira, review and notifications. The poll mode is not a setting: it is switched from the toolbar.
+_Avoid_: Config, preferences, options
+
 **Section**:
 The group a pull request falls into by what it needs from me: Чака теб, Свободни за review, Готови за merge, Чакат други, Екипът, plus Затворени for recently closed ones.
 _Avoid_: Status, lane, bucket

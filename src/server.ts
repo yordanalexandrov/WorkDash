@@ -9,6 +9,8 @@ import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import type { PollHealth } from "./domain/poll-error.js";
 import { DEMANDS, POLL_MODES } from "./domain/poll-mode.js";
 import type { Poller } from "./poller.js";
+import type { Settings } from "./settings.js";
+import type { Missing } from "./domain/settings.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
@@ -24,6 +26,19 @@ const AckRequest = z.object({ ids: z.array(z.string()) });
 const PollRequest = z.object({ demand: z.enum(DEMANDS) });
 
 const PollModeRequest = z.object({ mode: z.enum(POLL_MODES) });
+
+const SaveSettingsRequest = z.object({ settings: z.unknown(), hash: z.string() });
+
+const TokenRequest = z.object({ token: z.string().trim().min(1) });
+
+const CheckNamesRequest = z.object({ repos: z.array(z.string()).max(100), team: z.array(z.string()).max(100) });
+
+/** The names this machine answers to; a request under any other host name reached it by DNS rebinding. */
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function hostName(host: string): string {
+  return host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
+}
 
 /** The part of the poller the dashboard drives: the poll mode and demands. */
 type PollControl = Pick<Poller, "mode" | "polling" | "setMode" | "demand">;
@@ -47,6 +62,8 @@ export type DashboardSource = {
   poller?: PollControl;
   /** Why the config.yaml on disk is not in effect; null when it is. */
   configError: () => string | null;
+  /** What has to be set up before the dashboard can poll; nothing by default. */
+  missing?: () => Missing[];
   now?: () => Date;
 };
 
@@ -60,6 +77,7 @@ export function dashboardState({
   pollHealth,
   poller = NO_POLLER,
   configError,
+  missing = () => [],
   now = () => new Date(),
 }: DashboardSource) {
   const snapshot = store.loadSnapshot();
@@ -71,6 +89,7 @@ export function dashboardState({
     error,
     problems,
     configError: configError(),
+    missing: missing(),
     pollMode: poller.mode(),
     /** Whether a poll is under way; every open page shows it. */
     polling: poller.polling(),
@@ -93,6 +112,10 @@ export function buildServer(
     pendingNotifications?: () => ServerEvent[];
     /** Takes the ids of the notifications a browser showed. */
     acknowledgeNotifications?: (ids: string[]) => void;
+    /** The Settings screen's side; without it the dashboard has no /api/config or /api/token. */
+    settings?: Settings;
+    /** The zone quiet hours are read in, shown next to them. */
+    timeZone?: string;
     logger?: boolean;
   },
 ): FastifyInstance {
@@ -101,6 +124,20 @@ export function buildServer(
   const server = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
   server.register(fastifyStatic, { root: WEB_ROOTS });
+
+  // The API answers only this machine's own pages. A page on another site can still make the browser send requests
+  // here: under its own host name after DNS rebinding (refused by the Host check), or as a form-like write with no
+  // CORS preflight (refused by the Origin check and by taking JSON only, which a page elsewhere cannot send unasked).
+  // A request with no Origin is not a browser's cross-site one (browsers send it on every POST and PUT), so it passes.
+  server.addHook("onRequest", async (request, reply) => {
+    if (!request.url.startsWith("/api/")) return;
+    const host = request.headers.host ?? "";
+    if (!LOOPBACK.has(hostName(host))) return reply.code(403).send({ error: "unknown host" });
+    if (request.method === "GET" || request.method === "HEAD") return;
+    const origin = request.headers.origin;
+    if (origin !== undefined && origin !== `http://${host}` && origin !== `https://${host}`) return reply.code(403).send({ error: "cross-origin request" });
+    if (!/^application\/json\s*(;|$)/i.test(request.headers["content-type"] ?? "")) return reply.code(403).send({ error: "expected application/json" });
+  });
 
   server.get("/api/prs", async () => dashboardState(options));
 
@@ -139,6 +176,8 @@ export function buildServer(
     return reply.code(204).send();
   });
 
+  if (options.settings) registerSettings(server, options.settings, options.timeZone);
+
   server.get("/api/events", (request, reply) => {
     reply.hijack();
     reply.raw.writeHead(200, {
@@ -153,4 +192,36 @@ export function buildServer(
   server.addHook("preClose", async () => events.close());
 
   return server;
+}
+
+/** The Settings screen's API. The token goes in, never out: only whether one is saved and its masked form. */
+function registerSettings(server: FastifyInstance, settings: Settings, timeZone: string | undefined): void {
+  server.get("/api/config", async () => ({ ...settings.read(), token: settings.token(), timeZone: timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone }));
+
+  server.put("/api/config", async (request, reply) => {
+    const parsed = SaveSettingsRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const result = settings.save(parsed.data.settings, parsed.data.hash);
+    if (result.ok) return { hash: result.hash };
+    if (result.reason === "conflict") return reply.code(409).send({ error: "config.yaml changed on disk since it was read" });
+    return reply.code(422).send({ issues: result.issues });
+  });
+
+  server.get("/api/config/suggestions", async () => ({ repos: await settings.suggestions() }));
+
+  server.post("/api/config/check", async (request, reply) => {
+    const parsed = CheckNamesRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    return settings.checkNames(parsed.data);
+  });
+
+  server.put("/api/token", async (request, reply) => {
+    const parsed = TokenRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const check = await settings.saveToken(parsed.data.token);
+    if (!check.ok) return reply.code(422).send({ message: check.message });
+    return { check, token: settings.token() };
+  });
+
+  server.post("/api/token/check", async () => settings.checkToken());
 }
