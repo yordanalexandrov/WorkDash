@@ -1,5 +1,6 @@
 import type { FamilyMember, GraphIssue, GraphIssueState, IssueFamily } from "../domain/issue-graph.js";
 import { postGraphQL } from "./client.js";
+import { closedAs, subIssueProgress, type SubIssuesSummaryNode } from "./issues.js";
 
 // The Dependency graph's own query, apart from the poll's: run when an issue's detail sheet opens, at most once a minute.
 /** GitHub's limit for one connection; a family is drawn whole up to it. */
@@ -41,7 +42,7 @@ type RefNode = {
   state: "OPEN" | "CLOSED";
   stateReason: string | null;
   repository: { nameWithOwner: string };
-  subIssuesSummary: { total: number; completed: number };
+  subIssuesSummary: SubIssuesSummaryNode;
 };
 
 type MemberNode = RefNode & { blockedBy: { nodes: RefNode[] }; blocking: { nodes: RefNode[] } };
@@ -74,10 +75,9 @@ export async function fetchIssueFamily(options: { repo: string; number: number; 
   return { issue: toMember(issue), head: family.head, members: family.members.map(toMember), totals };
 }
 
-/** A closed issue's reason as the poll reads it (`toClosedIssue`): not planned or a duplicate, else completed. */
+/** Open, or closed as the poll reads it (`closedAs`). */
 function stateOf(node: RefNode): GraphIssueState {
-  if (node.state === "OPEN") return "open";
-  return node.stateReason === "NOT_PLANNED" || node.stateReason === "DUPLICATE" ? "not_planned" : "completed";
+  return node.state === "OPEN" ? "open" : closedAs(node.stateReason);
 }
 
 function toIssue(node: RefNode): GraphIssue {
@@ -87,7 +87,7 @@ function toIssue(node: RefNode): GraphIssue {
     title: node.title,
     url: node.url,
     state: stateOf(node),
-    subIssues: { total: node.subIssuesSummary.total, completed: node.subIssuesSummary.completed },
+    subIssues: subIssueProgress(node.subIssuesSummary),
   };
 }
 
