@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import { type ClassifyRules, SECTIONS } from "../src/domain/classify.js";
@@ -427,8 +428,9 @@ describe("recently closed PRs", () => {
 });
 
 describe("GET /", () => {
-  it("serves the dashboard page", async () => {
-    const server = buildServer({ store: openStore(":memory:"), rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null });
+  it("serves the dashboard page from the web root", async () => {
+    const webRoot = fileURLToPath(new URL("../web/", import.meta.url));
+    const server = buildServer({ store: openStore(":memory:"), rules: () => rules, pollIntervalMs: () => 60_000, recentlyClosedWindowMs: () => DAY, pollHealth: () => healthy, configError: () => null, webRoot });
 
     const response = await server.inject("/");
 

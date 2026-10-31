@@ -1,0 +1,45 @@
+# The deb of the desktop app (npm run build:deb in the root). Linux x64 only for now (#20).
+appId: io.github.yordanalexandrov.workdash
+productName: WorkDash
+directories:
+  output: release
+
+# The bundle and the one native module; the bundle has src/ in it (ADR 0002).
+files:
+  - package.json
+  - dist/**
+  - "!dist/**/*.map"
+  # better-sqlite3 loads prebuilds/linux-x64.node; the sources and the other platforms' builds stay out.
+  - "!node_modules/better-sqlite3/{deps,src,build,binding.gyp}"
+  - "!node_modules/better-sqlite3/prebuilds/!(linux-x64.node)"
+  # Headers for building better-sqlite3 from source.
+  - "!node_modules/node-addon-api"
+# better-sqlite3's prebuilds use N-API, so the one built for Node runs in Electron as is; no rebuild from source.
+npmRebuild: false
+
+# The page and its icons, where resources.ts looks for them once installed.
+extraResources:
+  - from: ../web/public
+    to: web/public
+  - from: ../web/dist
+    to: web/dist
+    filter: ["**/*", "!**/*.map"]
+
+linux:
+  target:
+    - target: deb
+      arch: [x64]
+  executableName: workdash
+  # hicolor/<n>x<n>/apps/workdash.png: the app menu, the dock and Alt+Tab take the icon from the .desktop entry, not the
+  # window. Made from web/public/icons/icon-512.png (test/icons.test.ts), e.g. with Pillow's resize(LANCZOS).
+  icon: build/icons
+  category: Development
+  synopsis: GitHub pull requests that need you, on one screen
+  maintainer: Yordan Alexandrov <lamercian@gmail.com>
+  desktop:
+    entry:
+      Name: WorkDash
+      # What the window reports, from desktopName in package.json: WM_CLASS on X11, app_id on Wayland. The dock
+      # matches it to workdash.desktop.
+      StartupWMClass: workdash
+

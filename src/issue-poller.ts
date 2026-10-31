@@ -16,6 +16,8 @@ export type IssuePoller = {
    * poll of `repo` failed; null when it succeeded or none has run since the server started.
    */
   error(repo: string): PollError | null;
+  /** Stops it for good: every demand is skipped, and a poll under way tells no one when it ends. */
+  stop(): void;
 };
 
 type RepoPoll = {
@@ -51,6 +53,7 @@ export function createIssuePoller(options: {
   const repos = new Map<string, RepoPoll>();
   /** The last rate limit GitHub answered with; it holds every repo back until it lifts. */
   let rateLimit: PollError | null = null;
+  let stopped = false;
 
   // GitHub ignores the case of a repo's name, and so do the pages' demands.
   const stateOf = (repo: string): RepoPoll => {
@@ -64,6 +67,7 @@ export function createIssuePoller(options: {
   };
 
   const changed = (repo: string) => {
+    if (stopped) return;
     try {
       onChange(repo);
     } catch (error) {
@@ -106,7 +110,7 @@ export function createIssuePoller(options: {
       const state = stateOf(repo);
       const interval = intervalMs();
       const answer =
-        withToken === null
+        stopped || withToken === null
           ? "skip"
           : answerIssueDemand({ demand, polling: state.polling, lastPolledAt: state.lastPolledAt, error: rateLimit, intervalMs: interval, now: new Date() });
       if (answer === "poll" && withToken !== null) void poll(repo, state, withToken);
@@ -114,5 +118,8 @@ export function createIssuePoller(options: {
     },
     polling: (repo) => repos.get(repoKey(repo))?.polling ?? false,
     error: (repo) => holding() ?? repos.get(repoKey(repo))?.error ?? null,
+    stop() {
+      stopped = true;
+    },
   };
 }

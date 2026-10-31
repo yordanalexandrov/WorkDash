@@ -126,12 +126,64 @@ Service worker-ът, а с него и инсталирането, изискв�
 не е. За `http://dash` пусни браузъра с `--unsafely-treat-insecure-origin-as-secure=http://dash` или
 инсталирай от `http://localhost:<WORKDASH_PORT>`.
 
+### Desktop app
+
+```sh
+npm install --prefix desktop   # веднъж: Electron и better-sqlite3 на desktop пакета
+npm run desktop                # билдва web/dist и desktop/dist (main.cjs, preload.cjs) и пуска Electron
+```
+
+Сървърът върви в процеса на Electron на свободен порт на `127.0.0.1` (ADR 0002). Данните, размерът и позицията на
+прозореца са в `~/.config/WorkDash`, а логът на сървъра е в `~/.config/WorkDash/logs/workdash.log` и започва
+наново при всяко пускане. Токенът се въвежда от „Настройки“; env и стар `config.yaml` не се четат. С отключен OS
+keyring токенът е криптиран в `github-token.enc`, без него е във файла `github-token` с mode `0600`, както при
+`npm start`; стар `github-token` се мести в keyring-а, когато той се появи, а `github-token.enc`, който не се чете,
+значи „няма токен“ и „Настройки“ го искат отново. Кой вариант е избран, пише в лога.
+
+Затварянето на прозореца само го скрива: страницата продължава да проверява и да показва нативни нотификации, а
+приложението спира от „Изход“ в tray-а. Повторно пускане показва вече отворения прозорец. Tray менюто има още:
+
+- „Отвори“: показва прозореца (на Cinnamon и с клик върху иконата);
+- „Пауза на нотификациите“: събитията чакат до изключване и идват като едно обобщение на пропуснатите, както след
+  тихите часове; не се пази при рестарт;
+- „Стартирай при вход“: пише или маха `~/.config/autostart/workdash.desktop`, който пуска `/usr/bin/workdash
+  --hidden`, т.е. само инсталирания deb, скрит в tray-а.
+
+Броят PR-и в „Чака теб“ е в tooltip-а на иконата, като червена точка върху нея и като число на иконата в Ubuntu Dock.
+
+Ubuntu 24.04 и по-новите не позволяват на непривилегирован процес да прави user namespaces, затова sandbox-ът
+на Chromium иска `chrome-sandbox` на root с mode `4755`. След всяко `npm install --prefix desktop`:
+
+```sh
+sudo chown root desktop/node_modules/electron/dist/chrome-sandbox
+sudo chmod 4755 desktop/node_modules/electron/dist/chrome-sandbox
+```
+
+#### deb пакет
+
+```sh
+npm run build:deb                                    # desktop/release/workdash_<версия>_amd64.deb
+sudo apt install ./desktop/release/workdash_*_amd64.deb
+```
+
+Пакетът (Ubuntu 22.04+, Linux Mint 21+, x64) слага приложението в `/opt/WorkDash`, команда `workdash` в `/usr/bin`,
+запис в менюто с приложения и иконите от `desktop/build/icons` в `hicolor`. На Ubuntu 24.04 инсталира и AppArmor
+профил, който позволява user namespaces на `/opt/WorkDash/workdash`, така че sandbox-ът работи без горните
+`chown`/`chmod`. Dock-ът и Alt+Tab взимат иконата от `workdash.desktop` по WM_CLASS / app id `workdash`
+(`desktopName` в `desktop/package.json`); `npm run desktop` получава същата икона, ако пакетът е инсталиран.
+Без пакета `npm run desktop:dev-entry` пише `~/.local/share/applications/workdash-dev.desktop` със същия клас и
+иконата от repo-то (и запис „WorkDash (dev)“ в менюто, който пуска вече билднатия `desktop/`);
+`npm run desktop:dev-entry -- --remove` го маха, например след като инсталираш deb-а.
+
+Версията на `desktop/` следва тази на корена. Release: `npm version <patch|minor|major>` вдига и двете, прави
+commit и таг `v<версия>`; `git push --follow-tags` пуска `release.yml`, който прикача deb-а към draft Release.
+
 ## Разработка
 
 ```sh
 npm install
-npm test             # Vitest
-npm run typecheck
+npm test             # Vitest, и тестовете на desktop/
+npm run typecheck    # иска npm install --prefix desktop (типовете на Electron)
 npm run lint         # oxlint с типова информация (--type-aware); правилата са в .oxlintrc.json
 npm run knip         # неизползвани файлове, export-и и зависимости
 npm run guard        # няма ли служебни данни в repo-то (виж CLAUDE.md)

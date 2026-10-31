@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findLeaks, parseDenylist } from "../scripts/public-guard.js";
+import { findFileLeaks, findLeaks, parseDenylist } from "../scripts/public-guard.js";
 
 describe("findLeaks", () => {
   it("passes placeholders, the personal address and GitHub's noreply addresses", () => {
@@ -34,6 +34,28 @@ describe("findLeaks", () => {
 
   it("matches denylisted terms in Cyrillic too", () => {
     expect(findLeaks("работа за Фирма ООД", ["фирма"])).toEqual([{ line: 1, kind: "denylisted term" }]);
+  });
+});
+
+describe("findFileLeaks", () => {
+  // Split so this file does not trip the guard itself.
+  const authorEmail = '"author": "someone' + '@corp.example.io"';
+
+  it("lets package authors' addresses through in an npm lockfile, wherever it lives", () => {
+    expect(findFileLeaks("package-lock.json", authorEmail)).toEqual([]);
+    expect(findFileLeaks("desktop/package-lock.json", authorEmail)).toEqual([]);
+  });
+
+  it("still flags Jira instances and denylisted terms in a lockfile", () => {
+    const text = ['"resolved": "https://acme' + '.atlassian.net/x.tgz"', '"name": "@initech/tool"'].join("\n");
+    expect(findFileLeaks("desktop/package-lock.json", text, ["initech"])).toEqual([
+      { line: 1, kind: "Jira instance" },
+      { line: 2, kind: "denylisted term" },
+    ]);
+  });
+
+  it("checks emails in files that only end like a lockfile", () => {
+    expect(findFileLeaks("docs/my-package-lock.json", authorEmail)).toEqual([{ line: 1, kind: "email address" }]);
   });
 });
 

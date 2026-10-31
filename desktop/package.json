@@ -1,0 +1,23 @@
+{
+  "name": "workdash",
+  "productName": "WorkDash",
+  "desktopName": "workdash.desktop",
+  "version": "0.1.0",
+  "description": "WorkDash's desktop app: the dashboard of GitHub pull requests in a window of its own",
+  "homepage": "https://github.com/yordanalexandrov/WorkDash",
+  "author": "Yordan Alexandrov",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "deb": "electron-builder --linux deb --x64 --publish never"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.17.0"
+  }
+}

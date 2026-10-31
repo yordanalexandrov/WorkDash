@@ -120,6 +120,19 @@ describe("showMissedNotification", () => {
     });
   });
 
+  it("falls back to a plain notification that brings the dashboard forward on click", async () => {
+    const { Notification, shown } = fakeNotification("granted");
+    const focus = vi.fn();
+    const open = vi.fn();
+
+    expect(await showMissedNotification(missed(), { Notification, registration: Promise.resolve(null), focus, open })).toBe(true);
+    shown[0]!.onclick!();
+
+    expect(shown[0]).toMatchObject({ title: "3 пропуснати събития", options: { tag: "missed" } });
+    expect(focus).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("shows nothing without permission", async () => {
     const { Notification, shown } = fakeNotification("denied");
 

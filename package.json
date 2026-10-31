@@ -11,12 +11,17 @@
     "build:server": "tsc -p tsconfig.build.json",
     "build:web": "esbuild web/src/main.tsx --bundle --minify --sourcemap --format=esm --target=es2022 --tsconfig=web/tsconfig.json --splitting --outdir=web/dist --entry-names=app",
     "watch:web": "npm run build:web -- --watch",
+    "build:desktop": "esbuild desktop/src/main.ts desktop/src/preload.ts --bundle --sourcemap --platform=node --format=cjs --target=node22 --external:electron --external:better-sqlite3 --outdir=desktop/dist --out-extension:.js=.cjs",
+    "desktop": "npm run build:web && npm run build:desktop && npm --prefix desktop start",
+    "desktop:dev-entry": "node scripts/desktop-dev-entry.ts",
+    "build:deb": "npm run build:web && npm run build:desktop && npm --prefix desktop run deb",
     "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc -p desktop",
     "lint": "oxlint --type-aware --deny-warnings",
     "knip": "knip",
     "guard": "node scripts/public-guard.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "version": "npm --prefix desktop version \"$npm_package_version\" --no-git-tag-version --allow-same-version && git add desktop/package.json desktop/package-lock.json"
   },
   "dependencies": {
     "@fastify/static": "^10.1.8",

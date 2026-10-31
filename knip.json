@@ -1,17 +1,33 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "src/main.ts",
-    "web/public/sw.js",
-    "scripts/*.ts"
-  ],
-  "project": [
-    "src/**/*.ts",
-    "web/src/**/*.{ts,tsx}",
-    "web/public/*.js",
-    "scripts/*.ts",
-    "test/**/*.ts",
-    "web/test/**/*.ts"
-  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/main.ts",
+        "web/public/sw.js",
+        "scripts/*.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "web/src/**/*.{ts,tsx}",
+        "web/public/*.js",
+        "scripts/*.ts",
+        "test/**/*.ts",
+        "web/test/**/*.ts"
+      ]
+    },
+    "desktop": {
+      "entry": [
+        "src/preload.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "better-sqlite3"
+      ]
+    }
+  },
   "ignoreExportsUsedInFile": true
 }

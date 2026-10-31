@@ -9,3 +9,4 @@ docs
 .env
 config.yaml
 web/dist
+desktop

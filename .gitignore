@@ -15,5 +15,9 @@ web/dist/
 web/prototype/snapshot.json
 web/prototype/out/
 
+# The desktop bundle
+desktop/dist/
+# The deb
+desktop/release/
 # Verification runs (.claude/skills/verify-workdash): scratch instances and their evidence
 .verify/

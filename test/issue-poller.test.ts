@@ -195,6 +195,17 @@ describe("createIssuePoller", () => {
     expect(github.calls).toEqual([]);
   });
 
+  it("skips every demand once stopped, and tells no one when a poll under way ends", async () => {
+    const { github, poller, changes } = setUp();
+    poller.demand("my-org/repo-a", "open");
+    poller.stop();
+
+    expect(poller.demand("my-org/repo-b", "button").answer).toBe("skip");
+    await waitFor(() => !poller.polling("my-org/repo-a"));
+    expect(github.calls).toEqual(["my-org/repo-a"]);
+    expect(changes).toEqual([{ repo: "my-org/repo-a", polling: true }]);
+  });
+
   it("polls a repo on the interval only once the poll interval has passed, and says when the interval is next due", async () => {
     const { github, store, poller, changes } = setUp({ intervalMs: 300_000 });
     const polledAt = new Date(Date.now() - 240_000);

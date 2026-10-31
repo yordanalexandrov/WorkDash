@@ -23,12 +23,36 @@ jobs:
           # The production image runs Node 22.
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
       - run: npm ci
+      # Electron's types for typecheck and lint; the desktop tests run in the root's npm test.
+      - run: npm ci --prefix desktop --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run knip
       - run: npm test
       - run: npm run build
+      - run: npm run build:desktop
+
+  deb:
+    name: Desktop deb builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - run: npm ci
+      # electron-builder fetches Electron itself, and better-sqlite3 ships its build: no install scripts needed.
+      - run: npm ci --prefix desktop --ignore-scripts
+      # Built only, not uploaded: the deb goes out with a release (release.yml).
+      - run: npm run build:deb
 
   docker:
     name: Docker image builds
