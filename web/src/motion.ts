@@ -2,7 +2,7 @@
 // Only transform and opacity move; see "Motion" in docs/design.md and docs/research/motion.md for why there is no library.
 
 import { type RefObject } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 
 export type Spring = { easing: string; duration: number };
 
@@ -134,8 +134,13 @@ export function startMotion(root: HTMLElement): void {
   pause();
 }
 
-/** Position in the layout, ignoring transforms but not scrolling, relative to `root` (by default the nearest [data-flip-root] above `el`). */
-export function layoutPos(el: HTMLElement, root: Element | null = el.parentElement?.closest("[data-flip-root]") ?? null): Pos {
+/** The FLIP key of a PR: the same in every view, so its card and its row are one thing that moves. */
+export function prFlipKey(pr: { repo: string; number: number }): string {
+  return `pr:${pr.repo}#${pr.number}`;
+}
+
+/** Position in the layout, ignoring transforms but not scrolling, relative to `root` (the [data-flip-root] FLIP runs on). */
+export function layoutPos(el: HTMLElement, root: Element): Pos {
   let x = 0;
   let y = 0;
   let node: HTMLElement | null = el;
@@ -158,18 +163,32 @@ export function layoutPos(el: HTMLElement, root: Element | null = el.parentEleme
  * The offset is added to whatever runs (`composite: "add"`), so a reorder in the middle of another one carries on without a jump.
  * An element inside another [data-flip] one (a card in a column) moves by its own offset less its container's, which the container
  * already animates; so a card changing column glides across. An element that came back under a known key (a card that changed
- * column is a new node) glides and skips its entrance. A change of `reset` (a new view) and reduced motion only record positions.
+ * column is a new node) glides and skips its entrance. A change of `reset` (a new view) and reduced motion only record positions,
+ * and so does scrolling a column, so that the next commit does not glide what only scrolled.
  */
 export function useFlip(root: RefObject<HTMLElement>, reset?: unknown): void {
   const before = useRef(new Map<string, { pos: Pos; el: HTMLElement }>());
   const last = useRef(reset);
+  useEffect(() => {
+    const rootEl = root.current;
+    if (!rootEl) return;
+    let frame = 0;
+    const record = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => (before.current = measure(rootEl)));
+    };
+    rootEl.addEventListener("scroll", record, { capture: true, passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      rootEl.removeEventListener("scroll", record, { capture: true });
+    };
+  }, []);
   useLayoutEffect(() => {
     const rootEl = root.current;
     if (!rootEl) return;
     const fresh = last.current !== reset;
     last.current = reset;
-    const now = new Map<string, { pos: Pos; el: HTMLElement }>();
-    rootEl.querySelectorAll<HTMLElement>("[data-flip]").forEach((el) => now.set(el.dataset.flip!, { pos: layoutPos(el, rootEl), el }));
+    const now = measure(rootEl);
     const old = before.current;
     before.current = now;
     if (fresh || reducedMotion()) return;
@@ -193,6 +212,13 @@ export function useFlip(root: RefObject<HTMLElement>, reset?: unknown): void {
   });
 }
 
+/** Where every [data-flip] element under `root` is now, by key. */
+function measure(root: HTMLElement): Map<string, { pos: Pos; el: HTMLElement }> {
+  const now = new Map<string, { pos: Pos; el: HTMLElement }>();
+  root.querySelectorAll<HTMLElement>("[data-flip]").forEach((el) => now.set(el.dataset.flip!, { pos: layoutPos(el, root), el }));
+  return now;
+}
+
 /** Ends the CSS entrance of an element that is not new, only re-created. */
 function skipEntrance(el: HTMLElement): void {
   for (const animation of el.getAnimations()) if (animation instanceof CSSAnimation) animation.finish();
@@ -200,10 +226,14 @@ function skipEntrance(el: HTMLElement): void {
 
 /**
  * The card leaves for "видях": it slides out to the right and shrinks, holding the board's gate meanwhile, so a snapshot
- * that arrives on the way renders after it. Null under reduced motion, when nothing moves.
+ * that arrives on the way renders after it. Null under reduced motion, when nothing moves. The card stays hidden until `left`
+ * settles (the PR marked seen); if it is still on the board a hold later, the PR stayed, so the card comes back.
  */
-export function slideOut(el: HTMLElement): Animation | null {
-  if (reducedMotion()) return null;
+export function slideOut(el: HTMLElement, left: () => Promise<void>): void {
+  if (reducedMotion()) {
+    left().catch(() => {});
+    return;
+  }
   const exit = el.animate(
     [
       { transform: "none", opacity: 1 },
@@ -213,5 +243,8 @@ export function slideOut(el: HTMLElement): Animation | null {
     { duration: GLIDE.duration, easing: GLIDE.easing, fill: "forwards", composite: "add" },
   );
   holdWhile(exit.finished);
-  return exit;
+  exit.finished
+    .then(left)
+    .then(() => setTimeout(() => exit.cancel(), MAX_HOLD_MS))
+    .catch(() => exit.cancel());
 }

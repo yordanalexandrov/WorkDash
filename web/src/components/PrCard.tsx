@@ -3,7 +3,7 @@ import type { DashboardPullRequest } from "../api.js";
 import { count, reasonBadge } from "../badges.js";
 import { age, shortRepo } from "../format.js";
 import { askedReviewers, checkRings, mergeMark, reviewMarks, unreadCount, urgency } from "../marks.js";
-import { slideOut } from "../motion.js";
+import { prFlipKey, slideOut } from "../motion.js";
 import { Avatar } from "./Avatar.js";
 import { Ring } from "./Ring.js";
 
@@ -27,15 +27,8 @@ export function PrCard({ pr, hue, index, onSeen }: PrCardProps) {
   const merge = mergeMark(pr);
   const unread = unreadCount(pr);
   const pulse = urgency(pr.reason);
-  // The card leaves first, then the PR is marked seen; if that fails, the card comes back.
-  const leave = (seen: NonNullable<PrCardProps["onSeen"]>) => {
-    const exit = slot.current && slideOut(slot.current);
-    (exit ? exit.finished : Promise.resolve())
-      .then(() => seen(pr))
-      .catch(() => exit?.cancel());
-  };
   return (
-    <div ref={slot} class={`slot${pulse ? ` ${pulse}` : ""}`} data-flip={`pr:${pr.repo}#${pr.number}`} style={{ "--ti": index }}>
+    <div ref={slot} class={`slot${pulse ? ` ${pulse}` : ""}`} data-flip={prFlipKey(pr)} style={{ "--ti": index }}>
       <article class={`card${pr.isDraft ? " draft" : ""}`} style={{ "--rh": hue }} tabIndex={0}>
         <div class="card-top">
           <span class="tag" title={pr.repo}>
@@ -89,7 +82,12 @@ export function PrCard({ pr, hue, index, onSeen }: PrCardProps) {
             ))}
           </div>
           {onSeen ? (
-            <button type="button" class="seen" title="Маркирай всичко досега като видяно" onClick={() => leave(onSeen)}>
+            <button
+              type="button"
+              class="seen"
+              title="Маркирай всичко досега като видяно"
+              onClick={() => slot.current && slideOut(slot.current, () => onSeen(pr))}
+            >
               видях
             </button>
           ) : null}

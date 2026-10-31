@@ -12,7 +12,7 @@ type BoardProps<C extends ColumnHead> = {
   message?: string | null;
 };
 
-/** How long the entrance cascade runs; cards that come later enter without its delay. */
+/** How long the entrance cascade runs (the delays of .col and .slot in style.css); cards that come later enter without its delay. */
 const CASCADE_MS = 2200;
 
 /**

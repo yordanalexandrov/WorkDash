@@ -1,12 +1,13 @@
 import type { ClosedPullRequest } from "../api.js";
 import { age, shortRepo } from "../format.js";
+import { prFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
 
 /** A PR merged or closed within the configured window: lighter and dashed, with how it ended. `index` sets its entrance turn. */
 export function ClosedCard({ pr, hue, index }: { pr: ClosedPullRequest; hue: number; index: number }) {
   const merged = pr.state === "MERGED";
   return (
-    <div class="slot" data-flip={`pr:${pr.repo}#${pr.number}`} style={{ "--ti": index }}>
+    <div class="slot" data-flip={prFlipKey(pr)} style={{ "--ti": index }}>
       <article class="card closed" style={{ "--rh": hue }}>
         <div class="card-top">
           <span class="tag" title={pr.repo}>

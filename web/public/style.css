@@ -763,7 +763,7 @@ h1 .live.ok::after {
   width: 1800px;
   height: 1800px;
   margin: -900px 0 0 -900px;
-  background: conic-gradient(from 0deg, var(--bad), #ff9f43, #b14dff, #3b7cff, var(--bad));
+  background: conic-gradient(from 0deg, var(--bad), var(--pending), var(--merged), var(--blue), var(--bad));
   will-change: transform;
   animation: spin 7s linear infinite;
 }

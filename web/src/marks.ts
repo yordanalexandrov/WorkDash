@@ -1,4 +1,4 @@
-// The small marks in a card's footer; the reason texts stay in badges.ts.
+// The small marks on a card: its footer and how hard it pulses; the reason texts stay in badges.ts.
 
 import { sameLogin } from "../../src/domain/activity.js";
 import type { Reason } from "../../src/domain/classify.js";
