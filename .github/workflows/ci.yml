@@ -23,12 +23,18 @@ jobs:
           # The production image runs Node 22.
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
       - run: npm ci
+      # Electron's types for typecheck and lint; the desktop tests run in the root's npm test.
+      - run: npm ci --prefix desktop --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run knip
       - run: npm test
       - run: npm run build
+      - run: npm run build:desktop
 
   docker:
     name: Docker image builds

@@ -1,0 +1,17 @@
+{
+  "name": "workdash",
+  "productName": "WorkDash",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "electron": "44.9.3"
+  }
+}

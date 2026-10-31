@@ -10,6 +10,16 @@ updates:
         dependency-type: development
       runtime:
         dependency-type: production
+  # The desktop app's own package (ADR 0002): Electron, and better-sqlite3 at the root's version.
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+    groups:
+      dev:
+        dependency-type: development
+      runtime:
+        dependency-type: production
   - package-ecosystem: github-actions
     directory: /
     schedule:
