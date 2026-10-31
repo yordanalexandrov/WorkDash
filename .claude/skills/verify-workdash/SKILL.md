@@ -55,8 +55,8 @@ It is read-only and checks that the server pid is alive and is this worktree's `
 | `goto <path> [--wait-text T]` | Fresh load of `BASE_URL+path`, through `about:blank`, so `/#settings` after `/` really reloads and drops any draft. |
 | `click --name N [--role R] [--within CSS] [--exact] [--nth K]` | Clicks the element whose accessible name is N. Fails if it is disabled. |
 | `click --css S` | The same, by CSS, when there is no name (cards, rows). |
-| `fill --name N --value V` / `--value-env VAR` | Clicks the field, selects all and types. Time inputs are set the way their picker sets them. |
-| `press <key>` | `Escape`, `Enter`, `Tab`, `/`, or a letter (`t`, `r`, `f`). Shortcuts fire only while focus is not in a field. |
+| `fill --name N --value V` / `--value-env VAR` `[--nth K]` | Clicks the field, selects all and types. Time inputs are set the way their picker sets them. `--nth` picks among same-named fields (0-based). |
+| `press <key>` | `Escape`, `Enter`, `Tab`, `/`, or a letter (`t`, `i`, `r`, `f`). Shortcuts fire only while focus is not in a field, and not while Settings is open. |
 | `wait --text T` / `--css S` `[--gone] [--timeout MS]` | Polls until the text or element is there (or gone). Use it instead of sleeps. |
 | `text [--css S]` | Prints innerText. |
 | `url` | Prints the current URL. |
@@ -69,14 +69,14 @@ A page with a `confirm()` nobody answered stays wedged, even across commands: `R
 
 Names are matched against `aria-label`, then the `<label>` of an input, then the visible `.set-label` of a Settings field, then the placeholder, then the visible text (whitespace collapsed). The match is exact first, then by substring unless `--exact`. Stable handles in this app:
 
-- Top bar: `--role button --name "Настройки"` (⚙), the radiogroups `Изглед` (`--role radio --name "Дъска"` / `"Таблица"`) and `Обновяване` (`--role radio --name "На всеки"` / `"При поискване"`), and the button `--role button --name "Обнови"`.
+- Top bar: `--role button --name "Настройки"` (⚙), the radiogroups `Табло` (`--role radio --name "PR-и" --exact` / `"Issues"`; key `i`; `?dashboard=issues` in the query), `Изглед` (`--role radio --name "Дъска"` / `"Таблица"`) and `Обновяване` (`--role radio --name "На всеки"` / `"При поискване"`), and the button `--role button --name "Обнови"`.
 - Banners: the `⚙ Настройки` link (`--role link --name "Настройки"`). Texts: `Няма GitHub токен и repo-та: добави ги в Настройки.`, `Няма GitHub токен: …`, `Няма repo-та за следене: …`.
 - Settings: the region `Настройки` (CSS `.settings`), the save bar `.set-actions` (`--role button --name "Запази" --within ".set-actions"`), and ✕ (`--role button --name "Затвори" --within ".settings"`).
 - Toolbar: `--role textbox --name "Филтър"` (also `/`), the repo chips by short name, and `само моите`.
-- Cards: `[data-flip='pr:<owner>/<repo>#<n>']`. Click its `.age` to open the sheet (the title and `#n` are links to GitHub). The sheet is `[role=dialog]` with the PR title as its name.
+- Cards: `[data-flip='pr:<owner>/<repo>#<n>']`, and `issue:<owner>/<repo>#<n>` on the Issue dashboard. Click its `.age` to open the sheet (the title and `#n` are links to GitHub). The sheet is `[role=dialog]` with the PR title as its name.
 - Table: `[role=table]`, and `--role radio --name "секция"` etc. in the `Групирай по` group.
 
-Read API (for side effects only, never for driving): `$W api /api/prs`, `$W api /api/config`. `$W data` lists the data dir and prints the `config.yaml` the server wrote.
+Read API (for side effects only, never for driving; GET only, and it fails on HTTP errors): `$W api /api/prs`, `$W api /api/config`, `$W api "/api/issues?repo=owner/name"` (only for a followed repo). `$W data` lists the data dir and prints the `config.yaml` the server wrote.
 
 ## Evidence
 

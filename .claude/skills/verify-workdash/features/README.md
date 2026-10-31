@@ -11,7 +11,7 @@ This directory is the maintained source for verifying what a WorkDash user sees 
 
 ## Driving conventions
 
-- Start each recipe with `$W browser goto /` (a fresh load) unless it says otherwise.
+- Start each recipe with `$W browser goto /` (a fresh load) unless it says otherwise. `/` is the PR dashboard; the Issue dashboard is `/?dashboard=issues`.
 - Prefer `--role` + `--name` over `--css`. Use `--within` when a name repeats (Settings has two „Запази“ buttons).
 - Wait with `$W browser wait`, never `sleep`. The board animates, and `--settle` already covers one step.
 - Use placeholder data only: `colleague1`, `ABC`, `https://example.atlassian.net/browse/`.
@@ -29,10 +29,11 @@ Each feature file has an H1 and one paragraph describing the user-visible behavi
 
 ## Features
 
-- [Setup and Settings](./settings.md) covers the empty start, the setup banner, and the Settings draft and save to `config.yaml`. Offline. **Verified live.**
+- [Setup and Settings](./settings.md) covers the empty start, the setup banner, and the Settings draft (including the „Issues“ stages card) and its save to `config.yaml`. Offline. **Verified live.**
 - [Poll mode](./poll-mode.md) covers the „На всеки / При поискване“ switch and „Обнови“ (`r`). Offline for the switch. **Verified live** (the switch).
-- [GitHub token](./token.md) covers saving, masking and checking the token. **Needs token.**
+- [GitHub token](./token.md) covers saving, masking and checking the token. Refusing a bad token needs only network (**verified live**); the rest **needs token.**
 - [Board and table](./board-and-table.md) covers sections, cards, the view switch (`t`), and table grouping and sorting. **Needs token.**
-- [Filter and detail sheet](./filter-and-detail.md) covers the toolbar filter (`/`), repo chips, „само моите“, and the PR detail sheet (`f`, Esc). **Needs token.**
+- [Filter and detail sheet](./filter-and-detail.md) covers the PR toolbar filter (`/`), repo chips, „само моите“, and the PR detail sheet (`f`, Esc). **Needs token.**
+- [Issue dashboard](./issues.md) covers the „PR-и / Issues“ switch (`i`), repo tabs, stage columns, the issue table, filter and sheet. Offline for the switch, the table shell and stages in `/api/issues`; the rest **needs token.** **Verified live** (the offline part).
 
 Not mapped yet: desktop notifications and „Пропуснати“, „Пусни деня“ (replay), drag to „видях“, „Наскоро затворени“.
