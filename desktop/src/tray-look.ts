@@ -1,9 +1,9 @@
 // How the tray shows the Чака теб count: a tooltip with the number, and a dot on the icon while it is above 0.
 // The panel of Cinnamon shows no numbers next to an icon, and the icon itself carries none.
 
-/** The tray's tooltip for `count` PRs waiting on me. */
-export function trayTooltip(count: number): string {
-  return `Чака теб: ${count}`;
+/** The tray's tooltip for `count` PRs waiting on me, with a second line while the notification pause is on. */
+export function trayTooltip(count: number, paused = false): string {
+  return `Чака теб: ${count}${paused ? "\nНотификациите са на пауза" : ""}`;
 }
 
 /** The dashboard's --bad in the dark theme, as blue, green, red. */

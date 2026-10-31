@@ -15,6 +15,8 @@ export type TrayOptions = TrayActions & {
 export type WorkDashTray = {
   /** Shows how many PRs wait on me: in the tooltip, as a dot on the icon above 0, and as the number on the dock icon. */
   showCount(count: number): void;
+  /** Says in the tooltip whether the notification pause is on. */
+  showPaused(paused: boolean): void;
   /** Builds the menu again, after a switch changed. */
   refresh(): void;
 };
@@ -31,13 +33,18 @@ export function openTray(options: TrayOptions): WorkDashTray {
   tray.on("click", () => options.open());
 
   let shown: number | undefined;
+  let paused = false;
   return {
     showCount(count) {
       if (count === shown) return;
       if (shown === undefined || (count > 0) !== (shown > 0)) tray.setImage(count > 0 ? dotted : plain);
       shown = count;
-      tray.setToolTip(trayTooltip(count));
+      tray.setToolTip(trayTooltip(count, paused));
       app.setBadgeCount(count);
+    },
+    showPaused(next) {
+      paused = next;
+      tray.setToolTip(trayTooltip(shown ?? 0, paused));
     },
     refresh,
   };

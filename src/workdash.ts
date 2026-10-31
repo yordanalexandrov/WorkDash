@@ -42,6 +42,13 @@ export type WorkDash = {
    * poll, a PR marked seen or a change of settings. Returns what stops it.
    */
   onWaitingOnMe(listener: (count: number) => void): () => void;
+  /** Whether the notification pause is on. */
+  paused(): boolean;
+  /**
+   * Turns the notification pause on or off. While on, nothing is notified, as in quiet hours; switched off, what
+   * happened meanwhile comes as one missed summary. It is off on every start.
+   */
+  setPaused(paused: boolean): void;
   /** Stops the config watcher, the poller and the server, then closes the database. */
   close(): Promise<void>;
 };
@@ -197,5 +204,5 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
   }
   const { port } = server.server.address() as AddressInfo;
   const host = options.host.includes(":") ? `[${options.host}]` : options.host;
-  return { url: `http://${host}:${port}`, onWaitingOnMe, close };
+  return { url: `http://${host}:${port}`, onWaitingOnMe, paused: notifier.paused, setPaused: notifier.setPaused, close };
 }

@@ -17,9 +17,10 @@ export function appIcon(): string {
 
 /**
  * Opens the dashboard at `url` in a window that comes back at its last size and position, and keeps other sites out of
- * it. Closing it only hides it, so the page goes on polling and notifying, unless the app is quitting.
+ * it. Closing it only hides it, so the page goes on polling and notifying, unless the app is quitting. A `hidden` window
+ * (started at login) loads the page but stays out of sight until the tray or a second start shows it.
  */
-export function openWindow(url: string, quitting: () => boolean): BrowserWindow {
+export function openWindow(url: string, quitting: () => boolean, hidden = false): BrowserWindow {
   const state = loadWindowState(
     stateFile(),
     screen.getAllDisplays().map((display) => display.workArea),
@@ -44,8 +45,12 @@ export function openWindow(url: string, quitting: () => boolean): BrowserWindow 
       backgroundThrottling: false,
     },
   });
-  if (state.maximized) window.maximize();
-  window.once("ready-to-show", () => window.show());
+  // maximize() also shows the window, so a hidden one maximizes when it is first shown.
+  if (state.maximized) {
+    if (hidden) window.once("show", () => window.maximize());
+    else window.maximize();
+  }
+  if (!hidden) window.once("ready-to-show", () => window.show());
 
   window.on("close", (event) => {
     saveWindowState(stateFile(), { ...window.getNormalBounds(), maximized: window.isMaximized() });

@@ -141,6 +141,22 @@ describe("startWorkDash", () => {
     }
   });
 
+  it("switches the notification pause, which is off again after a restart", async () => {
+    const start = () => startWorkDash({ dataDir, tokens: memoryTokens(), host: "127.0.0.1", port: 0, webRoot, logger: false });
+    const first = await start();
+    expect(first.paused()).toBe(false);
+    first.setPaused(true);
+    expect(first.paused()).toBe(true);
+    await first.close();
+
+    const second = await start();
+    try {
+      expect(second.paused()).toBe(false);
+    } finally {
+      await second.close();
+    }
+  });
+
   it("refuses a time zone it does not know", async () => {
     await expect(startWorkDash({ dataDir, tokens: memoryTokens(), host: "127.0.0.1", port: 0, timeZone: "Mars/Olympus", webRoot, logger: false })).rejects.toThrow(
       /unknown time zone "Mars\/Olympus"/,

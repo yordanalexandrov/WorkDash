@@ -265,6 +265,46 @@ describe("createNotifier", () => {
     });
   });
 
+  describe("while notifications are paused", () => {
+    it("records an event without pushing it, and keeps it undelivered", () => {
+      const { store, hub, notifier } = setup();
+      const page = browser();
+      hub.connect(page.stream);
+
+      notifier.setPaused(true);
+      notifier.afterSnapshot(before, requested());
+
+      expect(page.text()).toBe("retry: 3000\n\n");
+      expect(store.undeliveredEvents()).toHaveLength(1);
+      hub.close();
+    });
+    it("lists the held-back events for a browser that connects, without a desktop notification", () => {
+      const { notifier } = setup();
+      notifier.setPaused(true);
+      notifier.afterSnapshot(before, requested());
+
+      expect(notifier.takePending()).toEqual([
+        { type: "missed", data: { total: 1, byType: { review_requested: 1 }, events: [expect.objectContaining({ number: 1 })], quiet: true } },
+      ]);
+    });
+
+    it("sends the open browsers one summary of what it held back once switched off", () => {
+      const { hub, notifier } = setup();
+      const page = browser();
+      hub.connect(page.stream);
+      notifier.setPaused(true);
+      notifier.afterSnapshot(beforeTwo, twoRequested);
+      notifier.flushMissed();
+      expect(received(page.text(), "missed")).toEqual([]);
+
+      notifier.setPaused(false);
+
+      expect(received(page.text(), "notification")).toEqual([]);
+      expect(received(page.text(), "missed")).toEqual([{ total: 2, byType: { review_requested: 2 }, events: [expect.objectContaining({ number: 2 }), expect.objectContaining({ number: 1 })], quiet: false }]);
+      hub.close();
+    });
+  });
+
   describe("in On-demand", () => {
     /** `count` PRs on which I was asked for a review since the previous poll. */
     function requestedOn(count: number) {
