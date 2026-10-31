@@ -42,6 +42,8 @@ const TokenRequest = z.object({ token: z.string().trim().min(1) });
 
 const CheckNamesRequest = z.object({ repos: z.array(z.string()).max(100), team: z.array(z.string()).max(100) });
 
+const LabelsRequest = z.object({ repos: z.array(repoName).max(100) });
+
 /** The names this machine answers to; a request under any other host name reached it by DNS rebinding. */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -280,6 +282,12 @@ function registerSettings(server: FastifyInstance, settings: Settings, timeZone:
   });
 
   server.get("/api/config/suggestions", async () => ({ repos: await settings.suggestions() }));
+
+  server.post("/api/config/labels", async (request, reply) => {
+    const parsed = LabelsRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    return settings.labels(parsed.data.repos);
+  });
 
   server.post("/api/config/check", async (request, reply) => {
     const parsed = CheckNamesRequest.safeParse(request.body);

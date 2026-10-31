@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { writeFileAtomically } from "./atomic-write.js";
 import { applySettings, type Config, ConfigError, formFromConfig, settingsForm } from "./config.js";
 import { type SaveResult, type SettingsForm, type TokenStatus, validateSettings } from "./domain/settings.js";
-import { accessibleRepos, checkRepo, checkToken, checkUser, type NamesCheck, type TokenCheck } from "./github/rest.js";
+import type { IssueLabel } from "./domain/issues.js";
+import { accessibleRepos, checkRepo, checkToken, checkUser, type NamesCheck, repoLabels, type TokenCheck } from "./github/rest.js";
 import type { TokenStore } from "./token-store.js";
 
 /** The settings as the Settings screen opens them, and the hash of the file they were read from. */
@@ -27,6 +28,8 @@ export type Settings = {
   checkNames(names: { repos: string[]; team: string[] }): Promise<NamesCheck>;
   /** The repos the saved token can see, as hints. */
   suggestions(): Promise<string[]>;
+  /** Each repo's labels on GitHub, as hints for its stage labels; null for a repo GitHub does not answer about. */
+  labels(repos: string[]): Promise<Record<string, IssueLabel[] | null>>;
 };
 
 const NO_TOKEN = { ok: false, message: "Няма записан токен" } as const;
@@ -118,6 +121,10 @@ export function createSettings(options: {
     async suggestions() {
       const token = tokens.get();
       return token === null ? [] : accessibleRepos(token, fetch);
+    },
+    async labels(repos) {
+      const token = tokens.get();
+      return Object.fromEntries(await Promise.all(repos.map(async (repo) => [repo, token === null ? null : await repoLabels(repo, token, fetch)] as const)));
     },
   };
 }

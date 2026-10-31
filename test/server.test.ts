@@ -469,6 +469,7 @@ function fakeSettings(overrides: Partial<Settings> = {}) {
     checkToken: async () => ({ ok: false, message: "Няма записан токен" }),
     checkNames: async ({ repos }) => ({ repos: Object.fromEntries(repos.map((repo) => [repo, { ok: true }])), team: {} }),
     suggestions: async () => ["my-org/repo-b"],
+    labels: async (repos) => Object.fromEntries(repos.map((repo) => [repo, [{ name: "todo", color: "ededed" }]])),
     ...overrides,
   };
   return { settings, saves, tokens };
@@ -542,6 +543,15 @@ describe("the settings API", () => {
       team: {},
     });
     expect((await server.inject("/api/config/suggestions")).json()).toEqual({ repos: ["my-org/repo-b"] });
+  });
+
+  it("lists the labels of the repos asked for, as hints for their stages", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    const response = await server.inject({ method: "POST", url: "/api/config/labels", payload: { repos: ["my-org/repo-a"] } });
+
+    expect(response.json()).toEqual({ "my-org/repo-a": [{ name: "todo", color: "ededed" }] });
+    expect((await server.inject({ method: "POST", url: "/api/config/labels", payload: { repos: ["not a repo"] } })).statusCode).toBe(400);
   });
 });
 

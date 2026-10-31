@@ -98,6 +98,11 @@ export async function setPollMode(mode: PollMode): Promise<void> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
+/** Each repo's labels on GitHub, as hints for its stage labels; null for a repo GitHub did not answer about. */
+export async function repoLabels(repos: string[]): Promise<Record<string, IssueLabel[] | null>> {
+  return json(await send("POST", "/api/config/labels", { repos }));
+}
+
 /** The body of GET /api/config. */
 export type SettingsRead = {
   settings: SettingsForm;
