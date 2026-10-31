@@ -3,6 +3,7 @@ import { count } from "../badges.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { labelChip } from "../labels.js";
+import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
 import { LinkedPrs, MilestoneChip } from "./IssueMarks.js";
 
@@ -15,11 +16,6 @@ type IssueCardProps = {
   /** Whether it is assigned to me, which a quiet "теб" says; it never pulses. */
   mine: boolean;
 };
-
-/** The FLIP key of an issue's card, so it glides to its new column when its stage changes. */
-function issueFlipKey(issue: { repo: string; number: number }): string {
-  return `issue:${issue.repo}#${issue.number}`;
-}
 
 /**
  * An open issue on the Issue dashboard's board: number, age, title, its labels but the stage label, the author, the
