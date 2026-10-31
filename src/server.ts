@@ -7,6 +7,8 @@ import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import type { PollHealth } from "./domain/poll-error.js";
+import { POLL_MODES } from "./domain/poll-mode.js";
+import type { Poller } from "./poller.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
@@ -18,6 +20,16 @@ const SeenRequest = z.object({
 });
 
 const AckRequest = z.object({ ids: z.array(z.string()) });
+
+const PollRequest = z.object({ demand: z.enum(["focus", "button"]) });
+
+const PollModeRequest = z.object({ mode: z.enum(POLL_MODES) });
+
+/** The part of the poller the dashboard drives: the poll mode and demands. */
+type PollControl = Pick<Poller, "mode" | "polling" | "setMode" | "demand">;
+
+/** For a dashboard without a poller: Periodic, never polling, deaf to demands. */
+const NO_POLLER: PollControl = { mode: () => "periodic", polling: () => false, setMode: () => {}, demand: () => "skip" };
 
 // Static files are kept in web/public; the bundle built from web/src lands in web/dist.
 const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
@@ -31,6 +43,7 @@ export type DashboardSource = {
   /** How long a merged or closed PR stays listed. */
   recentlyClosedWindowMs: () => number;
   pollHealth: () => PollHealth;
+  poller?: PollControl;
   /** Why the config.yaml on disk is not in effect; null when it is. */
   configError: () => string | null;
   now?: () => Date;
@@ -44,6 +57,7 @@ export function dashboardState({
   pollIntervalMs,
   recentlyClosedWindowMs,
   pollHealth,
+  poller = NO_POLLER,
   configError,
   now = () => new Date(),
 }: DashboardSource) {
@@ -56,6 +70,9 @@ export function dashboardState({
     error,
     problems,
     configError: configError(),
+    pollMode: poller.mode(),
+    /** Whether a poll is under way; every open page shows it. */
+    polling: poller.polling(),
     sections: groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", rules(), store.loadSeen()).map(({ section, pullRequests }) => ({
       section,
       pullRequests: pullRequests.map((pr) => ({ ...pr, jira: jiraLinks(pr, jira()) })),
@@ -102,6 +119,21 @@ export function buildServer(
     const parsed = AckRequest.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
     acknowledgeNotifications(parsed.data.ids);
+    return reply.code(204).send();
+  });
+
+  // A demand from a page: it coming back into view, or "Обнови". The poll's start and end reach every page over SSE.
+  server.post("/api/poll", async (request, reply) => {
+    const parsed = PollRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    return { answer: (options.poller ?? NO_POLLER).demand(parsed.data.demand) };
+  });
+
+  server.put("/api/poll-mode", async (request, reply) => {
+    const parsed = PollModeRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    (options.poller ?? NO_POLLER).setMode(parsed.data.mode);
+    events.broadcast("dashboard", dashboardState(options));
     return reply.code(204).send();
   });
 

@@ -4,6 +4,14 @@ A local dashboard of the GitHub pull requests that concern me, ordered by what n
 
 ## Language
 
+**Poll**:
+One fetch of the pull requests from GitHub that replaces what the dashboard shows.
+_Avoid_: Refresh, sync, reload
+
+**Poll mode**:
+When polls happen, the same for every open dashboard: **Periodic** (на всеки интервал) or **On-demand** (при поискване: when I come back to the dashboard or press "Обнови").
+_Avoid_: Refresh mode, auto-refresh
+
 **Section**:
 The group a pull request falls into by what it needs from me: Чака теб, Свободни за review, Готови за merge, Чакат други, Екипът, plus Затворени for recently closed ones.
 _Avoid_: Status, lane, bucket

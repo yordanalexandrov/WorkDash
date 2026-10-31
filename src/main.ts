@@ -59,13 +59,31 @@ const dashboard: DashboardSource = {
   pollIntervalMs: () => config.github.pollIntervalMs,
   recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
   pollHealth: () => poller.health(),
+  poller: {
+    mode: () => poller.mode(),
+    polling: () => poller.polling(),
+    setMode: (mode) => poller.setMode(mode),
+    demand: (demand) => poller.demand(demand),
+  },
   configError: () => configWatcher.error(),
 };
-/** Pushes the dashboard as it is now to every open browser. */
-const publishDashboard = () => events.broadcast("dashboard", dashboardState(dashboard));
+/**
+ * Pushes the dashboard as it is now to every open browser. With none open it does nothing, which also keeps the
+ * first poll, started before the poller is assigned and the server listens, from reading the poller too early.
+ */
+const publishDashboard = () => {
+  if (events.clientCount() > 0) events.broadcast("dashboard", dashboardState(dashboard));
+};
 
 // Desktop notifications: what changed between two polls, pushed to the open browsers by the rules in `notifications`.
-const notifier = createNotifier({ store, events, rules: dashboard.rules, notifications: () => config.notifications, timeZone: TIME_ZONE });
+const notifier = createNotifier({
+  store,
+  events,
+  rules: dashboard.rules,
+  notifications: () => config.notifications,
+  pollMode: () => poller.mode(),
+  timeZone: TIME_ZONE,
+});
 const missedTimer = setInterval(notifier.flushMissed, MISSED_CHECK_MS);
 missedTimer.unref();
 
@@ -74,6 +92,7 @@ const poller = startPoller({
   ...pollerSettings(config, token),
   store,
   log: server.log,
+  onPollStart: publishDashboard,
   onPoll: publishDashboard,
   onSnapshot: notifier.afterSnapshot,
 });

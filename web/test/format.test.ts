@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardState } from "../src/api.js";
-import { age, configErrorText, errorText, statusText } from "../src/format.js";
+import { age, configErrorText, errorText, intervalText, pollButton, statusText } from "../src/format.js";
 
 const now = new Date("2026-10-30T12:00:00Z");
 
@@ -12,6 +12,8 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     error: null,
     problems: [],
     configError: null,
+    pollMode: "periodic",
+    polling: false,
     sections: [],
     recentlyClosed: [],
     ...overrides,
@@ -20,16 +22,55 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
 
 describe("statusText", () => {
   it("says it is loading before the server has answered", () => {
-    expect(statusText(null)).toBe("Зареждане…");
+    expect(statusText(null, now)).toEqual({ text: "Зареждане…", stale: false });
   });
 
   it("says it waits for the first poll while nothing has been fetched", () => {
-    expect(statusText(dashboard({ viewer: null, fetchedAt: null }))).toBe("Чака първия poll…");
+    expect(statusText(dashboard({ viewer: null, fetchedAt: null }), now)).toEqual({ text: "Чака първия poll…", stale: false });
   });
 
   it("names the viewer and when the snapshot was fetched", () => {
     const fetchedAt = "2026-10-30T10:00:00Z";
-    expect(statusText(dashboard({ fetchedAt }))).toBe(`me · последен успешен poll в ${new Date(fetchedAt).toLocaleTimeString()}`);
+    expect(statusText(dashboard({ fetchedAt }), now)).toEqual({ text: `me · последен успешен poll в ${new Date(fetchedAt).toLocaleTimeString()}`, stale: false });
+  });
+
+  describe("in On-demand", () => {
+    const at = (fetchedAt: string) => statusText(dashboard({ pollMode: "on_demand", fetchedAt }), now);
+
+    it("says how long ago the last poll was, since nothing polls until I ask", () => {
+      expect(at("2026-10-30T11:59:30Z")).toEqual({ text: "me · последен poll току-що", stale: false });
+      expect(at("2026-10-30T11:35:00Z")).toEqual({ text: "me · последен poll преди 25 мин", stale: false });
+    });
+
+    it("marks the data stale once the last poll is an hour old", () => {
+      expect(at("2026-10-30T11:00:01Z")).toEqual({ text: "me · последен poll преди 59 мин", stale: false });
+      expect(at("2026-10-30T11:00:00Z")).toEqual({ text: "me · последен poll преди 1 ч", stale: true });
+      expect(at("2026-10-28T09:00:00Z")).toEqual({ text: "me · последен poll преди 2 д", stale: true });
+    });
+  });
+});
+
+describe("intervalText", () => {
+  it("names the poll interval the way config.yaml would", () => {
+    expect(intervalText(60_000)).toBe("60s");
+    expect(intervalText(90_000)).toBe("90s");
+    expect(intervalText(300_000)).toBe("5 мин");
+    expect(intervalText(3_600_000)).toBe("1 ч");
+  });
+});
+
+describe("pollButton", () => {
+  it("is ready while nothing holds it back", () => {
+    expect(pollButton(dashboard(), now)).toEqual({ label: "Обнови", disabled: false });
+  });
+
+  it("waits until a rate limit lifts, saying when", () => {
+    const resetAt = "2026-10-30T12:40:00.000Z";
+    const error = { kind: "rate_limit", message: "API rate limit exceeded", resetAt } as const;
+    const time = new Date(resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    expect(pollButton(dashboard({ error }), now)).toEqual({ label: `Обнови (след ${time})`, disabled: true });
+    expect(pollButton(dashboard({ error }), new Date(resetAt))).toEqual({ label: "Обнови", disabled: false });
   });
 });
 
@@ -47,6 +88,15 @@ describe("errorText", () => {
 
     expect(errorText(dashboard({ error }), "open")).toBe(
       "GitHub отказва токена (невалиден или изтекъл): GitHub API responded 401: Bad credentials",
+    );
+  });
+
+  it("does not promise a new try in On-demand, where none comes until I ask", () => {
+    const resetAt = "2026-10-30T12:40:00.000Z";
+    const error = { kind: "rate_limit", message: "API rate limit exceeded", resetAt } as const;
+
+    expect(errorText(dashboard({ error, pollMode: "on_demand" }), "open")).toBe(
+      `Изчерпан rate limit на GitHub, „Обнови“ работи пак от ${new Date(resetAt).toLocaleTimeString()}`,
     );
   });
 

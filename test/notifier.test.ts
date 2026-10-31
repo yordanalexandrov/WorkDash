@@ -4,6 +4,7 @@ import { openStore } from "../src/db.js";
 import type { ClassifyRules } from "../src/domain/classify.js";
 import type { EventType } from "../src/domain/events.js";
 import { ALL_ENABLED, type Missed, type NotificationRules, parseQuietHours } from "../src/domain/notify.js";
+import type { PollMode } from "../src/domain/poll-mode.js";
 import type { PullRequest } from "../src/domain/types.js";
 import { createNotifier } from "../src/notifier.js";
 import { createEventHub, formatEvent } from "../src/sse.js";
@@ -46,8 +47,16 @@ function setup(notifications: NotificationRules = ALL_ENABLED, start = new Date(
   const store = openStore(":memory:");
   const hub = createEventHub();
   const clock = { now: start };
-  const settings = { notifications };
-  const notifier = createNotifier({ store, events: hub, rules: () => rules, notifications: () => settings.notifications, timeZone: "UTC", now: () => clock.now });
+  const settings: { notifications: NotificationRules; pollMode: PollMode } = { notifications, pollMode: "periodic" };
+  const notifier = createNotifier({
+    store,
+    events: hub,
+    rules: () => rules,
+    notifications: () => settings.notifications,
+    pollMode: () => settings.pollMode,
+    timeZone: "UTC",
+    now: () => clock.now,
+  });
   return { store, hub, notifier, clock, settings };
 }
 
@@ -253,6 +262,53 @@ describe("createNotifier", () => {
       notifier.flushMissed();
 
       expect(store.undeliveredEvents()).toHaveLength(1);
+    });
+  });
+
+  describe("in On-demand", () => {
+    /** `count` PRs on which I was asked for a review since the previous poll. */
+    function requestedOn(count: number) {
+      const prs = (requestedReviewers: string[]) =>
+        Array.from({ length: count }, (_, index) => pullRequest({ number: index + 1, author: "colleague1", requestedReviewers }));
+      return [{ viewer: "me", pullRequests: prs([]), fetchedAt: at }, { viewer: "me", pullRequests: prs(["me"]) }] as const;
+    }
+
+    it("sums up more than three events from one poll instead of notifying each", () => {
+      const { store, hub, notifier, settings } = setup();
+      settings.pollMode = "on_demand";
+      const page = browser();
+      hub.connect(page.stream);
+
+      notifier.afterSnapshot(...requestedOn(4));
+
+      expect(received(page.text(), "notification")).toEqual([]);
+      expect(received(page.text(), "missed")).toEqual([expect.objectContaining({ total: 4, byType: { review_requested: 4 }, quiet: false })]);
+      expect(store.undeliveredEvents()).toEqual([]);
+      hub.close();
+    });
+
+    it("notifies up to three events from one poll each on its own", () => {
+      const { hub, notifier, settings } = setup();
+      settings.pollMode = "on_demand";
+      const page = browser();
+      hub.connect(page.stream);
+
+      notifier.afterSnapshot(...requestedOn(3));
+
+      expect(received(page.text(), "notification")).toHaveLength(3);
+      expect(received(page.text(), "missed")).toEqual([]);
+      hub.close();
+    });
+
+    it("leaves Periodic as it was: each event notifies on its own", () => {
+      const { hub, notifier } = setup();
+      const page = browser();
+      hub.connect(page.stream);
+
+      notifier.afterSnapshot(...requestedOn(4));
+
+      expect(received(page.text(), "notification")).toHaveLength(4);
+      hub.close();
     });
   });
 });

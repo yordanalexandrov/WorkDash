@@ -10,6 +10,9 @@ export const SLASH = (event: KeyboardEvent) => event.key === "/" || event.code =
 /** `t`, also on a Bulgarian layout, where the key types "т" or "ь". */
 export const T = (event: KeyboardEvent) => event.key === "t" || event.code === "KeyT";
 
+/** `r`, also on a Bulgarian layout, where the key types "р" or "и". */
+export const R = (event: KeyboardEvent) => event.key === "r" || event.code === "KeyR";
+
 export const ESCAPE = (event: KeyboardEvent) => event.key === "Escape";
 
 /** Whether the key press is typing into a field rather than a shortcut. */

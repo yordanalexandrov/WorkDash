@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import type { SeenAt } from "./domain/classify.js";
 import type { PrEvent } from "./domain/events.js";
+import { POLL_MODES, type PollMode } from "./domain/poll-mode.js";
 import type { ClosedPullRequest, PullRequest, Snapshot } from "./domain/types.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
@@ -22,6 +23,9 @@ export type SnapshotStore = {
   /** The events no browser has shown yet, oldest first. */
   undeliveredEvents(): PrEvent[];
   markDelivered(ids: string[]): void;
+  /** The poll mode last chosen; periodic until one is. */
+  loadPollMode(): PollMode;
+  savePollMode(mode: PollMode): void;
   close(): void;
 };
 
@@ -60,6 +64,11 @@ const SCHEMA = `
     created_at   TEXT    NOT NULL,
     payload_json TEXT    NOT NULL,
     delivered    INTEGER NOT NULL DEFAULT 0
+  );
+  -- Choices made on the dashboard, such as the poll mode; not a cache.
+  CREATE TABLE IF NOT EXISTS setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   );
 `;
 
@@ -116,6 +125,9 @@ export function openStore(path: string): SnapshotStore {
   );
   const deliver = db.transaction((ids: string[]) => ids.forEach((id) => updateDelivered.run(id)));
 
+  const selectSetting = db.prepare<[string], { value: string }>("SELECT value FROM setting WHERE key = ?");
+  const upsertSetting = db.prepare("INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
+
   const save = db.transaction((snapshot: Snapshot, fetchedAt: string) => {
     deletePullRequests.run();
     for (const pr of snapshot.pullRequests) {
@@ -158,6 +170,13 @@ export function openStore(path: string): SnapshotStore {
     },
     markDelivered(ids) {
       deliver(ids);
+    },
+    loadPollMode() {
+      const value = selectSetting.get("poll_mode")?.value;
+      return POLL_MODES.find((mode) => mode === value) ?? "periodic";
+    },
+    savePollMode(mode) {
+      upsertSetting.run("poll_mode", mode);
     },
     close() {
       db.close();

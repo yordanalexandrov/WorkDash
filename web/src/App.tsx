@@ -11,12 +11,13 @@ import { PrCard } from "./components/PrCard.js";
 import { CLOSED_GROUP, PrTable } from "./components/PrTable.js";
 import { Toolbar } from "./components/Toolbar.js";
 import { TopBar } from "./components/TopBar.js";
+import { PollControls } from "./components/PollControls.js";
 import { ViewToggle } from "./components/ViewToggle.js";
 import { NO_FILTER, repoChips } from "./filter.js";
 import type { ClosedPullRequest, DashboardPullRequest, Section } from "./api.js";
 import { findOpen, prKey } from "./detail.js";
 import { confetti, middleOf, newlyMerged, sparks } from "./effects.js";
-import { configErrorText, errorText, shortRepo, statusText } from "./format.js";
+import { configErrorText, errorText, intervalText, pollButton, shortRepo, statusText } from "./format.js";
 import { BOUNCE, dropFlyers, type Pos, type Flyer, finishLanding, flash, land, liftFlyers, prFlipKey, useBooted, visibleIn } from "./motion.js";
 import { PALETTE, repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
@@ -26,8 +27,9 @@ import { type GroupBy, toggleCollapsed } from "./table.js";
 import { useDashboard } from "./useDashboard.js";
 import { useDrag } from "./useDrag.js";
 import { useNotifications } from "./useNotifications.js";
+import { usePolling } from "./usePolling.js";
 import type { ReplayRun } from "./useReplay.js";
-import { ESCAPE, SLASH, T, useShortcuts } from "./useShortcuts.js";
+import { ESCAPE, R, SLASH, T, useShortcuts } from "./useShortcuts.js";
 import { readView, type View, writeView } from "./view.js";
 
 /** The PR whose detail sheet is open, the rect it grew out of, and whether it is shrinking back. */
@@ -96,6 +98,9 @@ function refocus(pr: OpenSheet["pr"]): void {
 export function App() {
   const { state, stream, seen } = useDashboard();
   const notifications = useNotifications();
+  const polling = usePolling(state, stream);
+  const refreshButton = pollButton(state, polling.now);
+  const refresh = () => !refreshButton.disabled && polling.refresh();
   const booted = useBooted();
   // The filter is not kept between visits, so the board never opens hiding something that waits on me.
   const [filter, setFilter] = useState(NO_FILTER);
@@ -141,17 +146,18 @@ export function App() {
     lifted.current = null;
     if (flyers && viewRoot.current) void land(viewRoot.current, flyers);
   }, [view]);
-  // While the sheet is open, Esc closes it and `/` and `t` do nothing. While a card is dragged, Esc puts it back (`useDrag`).
+  // While the sheet is open, Esc closes it and `/`, `t` and `r` do nothing. While a card is dragged, Esc puts it back (`useDrag`).
   useShortcuts(
     sheet
       ? [
           { matches: ESCAPE, run: closeSheet },
-          { matches: (event) => SLASH(event) || T(event), run: () => {} },
+          { matches: (event) => SLASH(event) || T(event) || R(event), run: () => {} },
         ]
       : [
           { matches: SLASH, run: () => filterInput.current?.focus() },
           { matches: ESCAPE, run: () => setFilter((current) => ({ ...current, query: "" })) },
           { matches: T, run: () => switchView(view === "board" ? "table" : "board") },
+          { matches: R, run: refresh },
         ],
   );
   const openKey = sheet ? prKey(sheet.pr) : null;
@@ -220,7 +226,24 @@ export function App() {
         <i />
         <i />
       </div>
-      <TopBar status={statusText(state)} stream={stream} notifications={notifications} toggle={<ViewToggle view={view} onChange={switchView} />}>
+      <TopBar
+        status={statusText(state, polling.now)}
+        stream={stream}
+        notifications={notifications}
+        toggle={<ViewToggle view={view} onChange={switchView} />}
+        polling={
+          state && (
+            <PollControls
+              mode={state.pollMode}
+              every={intervalText(state.pollIntervalMs)}
+              polling={state.polling}
+              button={refreshButton}
+              onMode={polling.setMode}
+              onRefresh={refresh}
+            />
+          )
+        }
+      >
         {state && (
           <Toolbar
             repos={chips.map(({ repo, count }) => ({ repo, name: shortRepo(repo), hue: repoHue(hues, repo), count }))}

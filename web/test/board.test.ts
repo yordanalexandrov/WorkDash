@@ -20,6 +20,8 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     viewer: "me",
     fetchedAt: "2026-10-31T10:00:00Z",
     pollIntervalMs: 60_000,
+    pollMode: "periodic",
+    polling: false,
     error: null,
     problems: [],
     configError: null,

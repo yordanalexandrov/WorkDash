@@ -3,6 +3,7 @@ import { openStore } from "../src/db.js";
 import { type ClassifyRules, SECTIONS } from "../src/domain/classify.js";
 import type { JiraConfig } from "../src/domain/jira.js";
 import type { PollHealth } from "../src/domain/poll-error.js";
+import type { Demand, DemandAnswer, PollMode } from "../src/domain/poll-mode.js";
 import { buildServer, dashboardState } from "../src/server.js";
 import { createEventHub, type EventHub } from "../src/sse.js";
 import { pullRequest } from "./fixtures.js";
@@ -33,6 +34,8 @@ describe("GET /api/prs", () => {
       error: null,
       problems: [],
       configError: null,
+      pollMode: "periodic",
+      polling: false,
       sections: [
         { section: "waiting_on_me", pullRequests: [{ ...pr, reason: "ci_failed", unreadComments: 0, jira: [] }] },
         ...emptySections.slice(1),
@@ -104,6 +107,8 @@ describe("GET /api/prs", () => {
       error,
       problems: [],
       configError: null,
+      pollMode: "periodic",
+      polling: false,
       sections: emptySections,
       recentlyClosed: [],
     });
@@ -218,6 +223,76 @@ describe("POST /api/seen", () => {
 
     expect(broadcasts).toEqual([{ type: "dashboard", data: (await server.inject("/api/prs")).json() }]);
     expect((broadcasts[0]!.data as { sections: { pullRequests: unknown[] }[] }).sections[0]?.pullRequests).toEqual([]);
+  });
+});
+
+describe("poll mode", () => {
+  /** A poller that answers every demand with `answer` and remembers what it was asked. */
+  function fakePoller(answer: DemandAnswer = "poll") {
+    const state = { mode: "periodic" as PollMode, polling: false, demands: [] as Demand[] };
+    return {
+      state,
+      poller: {
+        mode: () => state.mode,
+        polling: () => state.polling,
+        setMode: (mode: PollMode) => void (state.mode = mode),
+        demand: (demand: Demand) => (state.demands.push(demand), answer),
+      },
+    };
+  }
+
+  function serverWith(poller: ReturnType<typeof fakePoller>["poller"], events?: EventHub) {
+    return buildServer({
+      store: openStore(":memory:"),
+      rules: () => rules,
+      pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
+      pollHealth: () => healthy,
+      configError: () => null,
+      poller,
+      events,
+    });
+  }
+
+  it("serves the poll mode and whether a poll is under way", async () => {
+    const { state, poller } = fakePoller();
+    state.mode = "on_demand";
+    state.polling = true;
+
+    const body = (await serverWith(poller).inject("/api/prs")).json();
+
+    expect(body).toMatchObject({ pollMode: "on_demand", polling: true });
+  });
+
+  it("hands a demand to the poller and says what came of it", async () => {
+    const { state, poller } = fakePoller("skip");
+
+    const response = await serverWith(poller).inject({ method: "POST", url: "/api/poll", payload: { demand: "focus" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ answer: "skip" });
+    expect(state.demands).toEqual(["focus"]);
+  });
+
+  it("switches the poll mode and pushes the new dashboard to every open page", async () => {
+    const broadcasts: { type: string; data: unknown }[] = [];
+    const events: EventHub = { ...createEventHub(), broadcast: (type, data) => broadcasts.push({ type, data }) };
+    const { state, poller } = fakePoller();
+
+    const response = await serverWith(poller, events).inject({ method: "PUT", url: "/api/poll-mode", payload: { mode: "on_demand" } });
+
+    expect(response.statusCode).toBe(204);
+    expect(state.mode).toBe("on_demand");
+    expect(broadcasts).toEqual([{ type: "dashboard", data: expect.objectContaining({ pollMode: "on_demand" }) }]);
+  });
+
+  it.each([
+    ["/api/poll", "POST", { demand: "always" }],
+    ["/api/poll-mode", "PUT", { mode: "hourly" }],
+  ] as const)("rejects an unknown value on %s", async (url, method, payload) => {
+    const response = await serverWith(fakePoller().poller).inject({ method, url, payload });
+
+    expect(response.statusCode).toBe(400);
   });
 });
 
