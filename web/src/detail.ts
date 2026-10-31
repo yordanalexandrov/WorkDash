@@ -5,9 +5,17 @@ import type { DashboardPullRequest, DashboardState, Section } from "./api.js";
 /** The longest description the sheet shows; the rest is cut off with "…". */
 const MAX_BODY = 4000;
 
-/** The description without the HTML comments PR templates leave in it, trimmed and cut off past 4000 characters. */
+/**
+ * The description without the HTML comments PR templates leave in it, trimmed and cut off past 4000 characters. Removing a
+ * comment can join the pieces of another, so it repeats until none is left; an unclosed one hides the rest, as on GitHub.
+ */
 export function cleanBody(body: string): string {
-  const text = body.replace(/<!--[\s\S]*?-->/g, "").trim();
+  let text = body;
+  for (let last = ""; last !== text; ) {
+    last = text;
+    text = text.replace(/<!--[\s\S]*?-->/g, "");
+  }
+  text = text.replace(/<!--[\s\S]*$/, "").trim();
   return text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}…` : text;
 }
 

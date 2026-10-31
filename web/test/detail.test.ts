@@ -13,6 +13,11 @@ describe("cleanBody", () => {
     expect(cleanBody("<!--\n## Checklist\n- [ ] tests\n-->\n\nAdds the sheet.\n<!-- one more -->\n")).toBe("Adds the sheet.");
   });
 
+  it("leaves no comment behind when removing one leaves another, nor an unclosed one, which hides the rest on GitHub", () => {
+    expect(cleanBody("a <!<!-- x -->-- y --> b")).toBe("a  b");
+    expect(cleanBody("Adds the sheet.\n<!-- unfinished template")).toBe("Adds the sheet.");
+  });
+
   it("keeps 4000 characters whole and cuts a longer description with …", () => {
     expect(cleanBody("a".repeat(4000))).toBe("a".repeat(4000));
     expect(cleanBody("a".repeat(4001))).toBe(`${"a".repeat(4000)}…`);
