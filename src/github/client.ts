@@ -111,7 +111,7 @@ export type FetchedSnapshot = Snapshot & {
   issueRepos: string[];
 };
 
-async function postGraphQL<T>(
+export async function postGraphQL<T>(
   body: { query: string; variables: Record<string, string> },
   token: string,
   fetch: typeof globalThis.fetch,

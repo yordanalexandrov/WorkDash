@@ -54,8 +54,8 @@ function agoText(ms: number): string {
   return hours < 24 ? `преди ${hours} ч` : `преди ${Math.floor(hours / 24)} д`;
 }
 
-/** "Обнови", held back while a rate limit lasts: no poll can start before it lifts. */
-export function pollButton(state: DashboardState | null, now: Date): { label: string; disabled: boolean } {
+/** "Обнови" of either dashboard, held back while a rate limit lasts: no poll can start before it lifts. */
+export function pollButton(state: Pick<DashboardState, "error"> | null, now: Date): { label: string; disabled: boolean } {
   const resetAt = rateLimitLiftsAt(state?.error ?? null, now);
   if (!resetAt) return { label: "Обнови", disabled: false };
   return { label: `Обнови (след ${new Date(resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`, disabled: true };

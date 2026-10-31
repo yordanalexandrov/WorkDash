@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import type { PrEvent } from "../src/domain/events.js";
 import type { ClosedPullRequest, PullRequest } from "../src/domain/types.js";
-import { pullRequest } from "./fixtures.js";
+import { issue, pullRequest } from "./fixtures.js";
 
 function pr(repo: string, number: number): PullRequest {
   return pullRequest({ repo, number, author: "colleague1" });
@@ -105,6 +105,51 @@ describe("SnapshotStore", () => {
     db.close();
 
     expect(openStore(path).loadSnapshot()).toBeNull();
+  });
+});
+
+describe("SnapshotStore: issues", () => {
+  const repoA = { repo: "my-org/repo-a", issues: [issue({ number: 1 })], totalCount: 1 };
+  const repoB = { repo: "my-org/repo-b", issues: [issue({ repo: "my-org/repo-b", number: 2 })], totalCount: 5 };
+
+  it("has no issues of a repo before its first poll", () => {
+    expect(openStore(":memory:").loadIssues("my-org/repo-a")).toBeNull();
+  });
+
+  it("keeps the last issues of each repo with when they were fetched, apart from the other repos", () => {
+    const store = openStore(":memory:");
+
+    store.saveIssues(repoA, new Date("2026-10-30T10:00:00Z"));
+    store.saveIssues(repoB, new Date("2026-10-30T10:05:00Z"));
+    store.saveIssues({ ...repoA, issues: [], totalCount: 0 }, new Date("2026-10-30T10:10:00Z"));
+
+    expect(store.loadIssues("my-org/repo-a")).toEqual({ repo: "my-org/repo-a", issues: [], totalCount: 0, fetchedAt: "2026-10-30T10:10:00.000Z" });
+    expect(store.loadIssues("my-org/repo-b")).toEqual({ ...repoB, fetchedAt: "2026-10-30T10:05:00.000Z" });
+  });
+
+  it("finds a repo's issues whatever the case of its name", () => {
+    const store = openStore(":memory:");
+    store.saveIssues(repoA, new Date("2026-10-30T10:00:00Z"));
+
+    expect(store.loadIssues("My-Org/Repo-A")?.issues).toEqual(repoA.issues);
+  });
+
+  it("keeps the issues across a restart, and drops them with an older snapshot format", () => {
+    const dir = mkdtempSync(join(tmpdir(), "workdash-"));
+    dirs.push(dir);
+    const path = join(dir, "workdash.db");
+
+    const first = openStore(path);
+    first.saveIssues(repoA, new Date("2026-10-30T10:00:00Z"));
+    first.close();
+    const second = openStore(path);
+    expect(second.loadIssues("my-org/repo-a")?.totalCount).toBe(1);
+    second.close();
+
+    const db = new Database(path);
+    db.pragma("user_version = 0");
+    db.close();
+    expect(openStore(path).loadIssues("my-org/repo-a")).toBeNull();
   });
 });
 

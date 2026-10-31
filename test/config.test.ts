@@ -124,6 +124,35 @@ describe("parseConfig notifications", () => {
   });
 });
 
+describe("parseConfig issues", () => {
+  it("has no stage labels by default", () => {
+    expect(parseConfig(minimal).issues).toEqual({ columns: [], repos: {} });
+  });
+
+  it("reads the common stage labels and a repo's own list", () => {
+    const config = parseConfig(`${minimal}issues:
+  columns: [needs-triage, in-progress]
+  repos:
+    my-org/repo-b:
+      columns: [todo, doing]
+`);
+
+    expect(config.issues).toEqual({ columns: ["needs-triage", "in-progress"], repos: { "my-org/repo-b": { columns: ["todo", "doing"] } } });
+  });
+
+  it("names a misspelled key in the issues section", () => {
+    expect(() => parseConfig(`issues: { colums: [todo] }\n${minimal}`)).toThrow(/colums/);
+  });
+
+  it("names a misspelled key in a repo's list", () => {
+    expect(() => parseConfig(`issues: { repos: { my-org/repo-b: { column: [todo] } } }\n${minimal}`)).toThrow(/issues\.repos\.my-org\/repo-b/);
+  });
+
+  it("names the field when a repo of the issues section is not owner/name", () => {
+    expect(() => parseConfig(`issues: { repos: { repo-b: { columns: [todo] } } }\n${minimal}`)).toThrow(/issues\.repos/);
+  });
+});
+
 describe("settingsForm", () => {
   it("shows what the file says, with the defaults for what it leaves out", () => {
     const form = settingsForm("github:\n  poll_interval: 90s\nrepos: [my-org/repo-a]\n");
@@ -135,6 +164,7 @@ describe("settingsForm", () => {
       review: { required_approvals: 1, recently_closed_window: "24h" },
       jira: { base_url: null, project_keys: [] },
       notifications: { ...ALL_ENABLED.enabled, quiet_hours: null },
+      issues: { columns: [], repos: {} },
     });
   });
 

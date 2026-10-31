@@ -38,8 +38,21 @@ const notifications = z
   })
   .prefault({});
 
+const repoName = z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/name"');
+
+/** Stage labels, in the order of the board's columns. */
+const stageLabels = z.array(z.string().trim().min(1, "expected a label name"));
+
+/** The Issue dashboard's stages: the common list of stage labels, and a list of its own for some repos. */
+const issues = z
+  .strictObject({
+    columns: stageLabels.default([]),
+    repos: z.record(repoName, z.strictObject({ columns: stageLabels })).default({}),
+  })
+  .prefault({});
+
 /** config.yaml as written, with the defaults filled in: what the Settings screen edits. */
-// Strict only where a stray key is a likely mistake (github, notifications) or a key the dashboard no longer
+// Strict only where a stray key is a likely mistake (github, notifications, issues) or a key the dashboard no longer
 // takes (github.token_env); elsewhere an unknown key passes, as it always has.
 export const settingsSchema = z.object({
   github: z
@@ -47,7 +60,7 @@ export const settingsSchema = z.object({
       poll_interval: duration.default("60s"),
     })
     .prefault({}),
-  repos: z.array(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/name"')).default([]),
+  repos: z.array(repoName).default([]),
   team: z.array(z.string().min(1)).default([]),
   review: z
     .object({
@@ -62,6 +75,7 @@ export const settingsSchema = z.object({
     })
     .prefault({}),
   notifications,
+  issues,
 });
 
 /** The settings as the Settings screen shows and sends them: config.yaml's keys and values, defaults filled in. */

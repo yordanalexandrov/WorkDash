@@ -8,7 +8,9 @@ import { buildServer, dashboardState } from "../src/server.js";
 import type { Settings } from "../src/settings.js";
 import { settingsForm } from "../src/config.js";
 import { createEventHub, type EventHub } from "../src/sse.js";
-import { pullRequest } from "./fixtures.js";
+import type { IssueDemand } from "../src/domain/issue-poll.js";
+import type { IssuesConfig } from "../src/domain/issues.js";
+import { issue, pullRequest } from "./fixtures.js";
 
 const rules: ClassifyRules = { team: ["colleague1"], requiredApprovals: 1 };
 
@@ -589,5 +591,123 @@ describe("requests from other sites", () => {
     const response = await server.inject({ method: "POST", url: "/api/token/check" });
 
     expect(response.statusCode).toBe(403);
+  });
+});
+
+describe("the issues API", () => {
+  /** An issue poller that answers every demand with `answer` and remembers what it was asked. */
+  function fakeIssuePoller(answer: DemandAnswer = "poll") {
+    const demands: { repo: string; demand: IssueDemand }[] = [];
+    return {
+      demands,
+      poller: {
+        demand: (repo: string, demand: IssueDemand) => (demands.push({ repo, demand }), answer),
+        polling: (repo: string) => repo === "my-org/repo-b",
+        error: () => null,
+      },
+    };
+  }
+
+  function serverWith(options: { config?: IssuesConfig; poller?: ReturnType<typeof fakeIssuePoller>["poller"] } = {}) {
+    const store = openStore(":memory:");
+    let config = options.config ?? { columns: ["ready-for-agent", "in-progress"], repos: { "my-org/repo-b": { columns: ["todo"] } } };
+    const server = buildServer({
+      ...source(),
+      store,
+      issues: {
+        repos: () => ["my-org/repo-a", "my-org/repo-b"],
+        config: () => config,
+        poller: options.poller ?? fakeIssuePoller().poller,
+      },
+    });
+    return { server, store, reconfigure: (next: IssuesConfig) => (config = next) };
+  }
+
+  const labelled = (number: number, ...names: string[]) => issue({ number, labels: names.map((name) => ({ name, color: "ededed" })) });
+
+  it("serves a repo's saved issues with when they were fetched, each in its stage, and the stages in order", async () => {
+    const { server, store } = serverWith();
+    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(1, "bug"), labelled(2, "in-progress", "ready-for-agent")], totalCount: 120 }, new Date("2026-10-30T10:00:00Z"));
+
+    const response = await server.inject("/api/issues?repo=my-org/repo-a");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      repo: "my-org/repo-a",
+      fetchedAt: "2026-10-30T10:00:00.000Z",
+      stages: ["ready-for-agent", "in-progress"],
+      issues: [
+        { ...labelled(1, "bug"), stage: null },
+        { ...labelled(2, "in-progress", "ready-for-agent"), stage: "in-progress" },
+      ],
+      totalCount: 120,
+      polling: false,
+      error: null,
+    });
+  });
+
+  it("serves a repo with a list of its own by that list, and a repo not polled yet as empty", async () => {
+    const { server } = serverWith();
+
+    const body = (await server.inject("/api/issues?repo=my-org/repo-b")).json();
+
+    expect(body).toEqual({ repo: "my-org/repo-b", fetchedAt: null, stages: ["todo"], issues: [], totalCount: 0, polling: true, error: null });
+  });
+
+  it("serves the stages in effect now, so a reloaded config.yaml reorders the board", async () => {
+    const { server, store, reconfigure } = serverWith();
+    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(2, "in-progress", "ready-for-agent")], totalCount: 1 }, new Date());
+
+    reconfigure({ columns: ["in-progress", "ready-for-agent"], repos: {} });
+    const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
+
+    expect(body.stages).toEqual(["in-progress", "ready-for-agent"]);
+    expect(body.issues[0].stage).toBe("ready-for-agent");
+  });
+
+  it("serves no repo that is not followed", async () => {
+    const { server } = serverWith();
+
+    expect((await server.inject("/api/issues?repo=other-org/repo-z")).statusCode).toBe(404);
+    expect((await server.inject("/api/issues?repo=nonsense")).statusCode).toBe(400);
+    expect((await server.inject("/api/issues")).statusCode).toBe(400);
+  });
+
+  it("hands a demand for a repo's issues to the issue poller and says what came of it", async () => {
+    const { demands, poller } = fakeIssuePoller("join");
+    const { server } = serverWith({ poller });
+
+    const response = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "my-org/repo-a", reason: "open" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ answer: "join" });
+    expect(demands).toEqual([{ repo: "my-org/repo-a", demand: "open" }]);
+  });
+
+  it("refuses a demand with an unknown reason or for a repo not followed", async () => {
+    const { demands, poller } = fakeIssuePoller();
+    const { server } = serverWith({ poller });
+
+    const unknownReason = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "my-org/repo-a", reason: "always" } });
+    const unfollowed = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "other-org/repo-z", reason: "open" } });
+
+    expect(unknownReason.statusCode).toBe(400);
+    expect(unfollowed.statusCode).toBe(404);
+    expect(demands).toEqual([]);
+  });
+
+  it("refuses a demand from another origin, like every write", async () => {
+    const { demands, poller } = fakeIssuePoller();
+    const { server } = serverWith({ poller });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "/api/issues/poll",
+      headers: { host: "127.0.0.1:3000", origin: "http://evil.example" },
+      payload: { repo: "my-org/repo-a", reason: "button" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(demands).toEqual([]);
   });
 });

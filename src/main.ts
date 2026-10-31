@@ -1,10 +1,11 @@
 import { type Config, ConfigError, loadConfig, parseConfig, watchConfig } from "./config.js";
 import { openDataDir } from "./data-dir.js";
 import { openStore } from "./db.js";
+import { createIssuePoller } from "./issue-poller.js";
 import { createNotifier } from "./notifier.js";
 import { type PollerSettings, startPoller } from "./poller.js";
 import type { Missing } from "./domain/settings.js";
-import { buildServer, type DashboardSource, dashboardState } from "./server.js";
+import { buildServer, type DashboardSource, dashboardState, type IssueSource, issueBoardState } from "./server.js";
 import { createSettings } from "./settings.js";
 import { createEventHub } from "./sse.js";
 
@@ -72,6 +73,28 @@ const publishDashboard = () => {
   if (events.clientCount() > 0) events.broadcast("dashboard", dashboardState(dashboard));
 };
 
+// The Issue dashboard: the issues of a repo, polled when a page opens it, apart from the PRs.
+const issues: IssueSource = {
+  repos: () => config.repos,
+  config: () => config.issues,
+  poller: {
+    demand: (repo, demand) => issuePoller.demand(repo, demand),
+    polling: (repo) => issuePoller.polling(repo),
+    error: (repo) => issuePoller.error(repo),
+  },
+};
+/** Pushes a repo's issues as they are now to every open browser; the pages on that repo take them. */
+const publishIssues = (repo: string) => {
+  if (events.clientCount() > 0) events.broadcast("issues", issueBoardState(store, issues, repo));
+};
+/** After a config change: the stages may have changed, so every followed repo with issues saved is pushed again. */
+const publishAllIssues = () => {
+  for (const repo of config.repos) {
+    const saved = store.loadIssues(repo);
+    if (saved) publishIssues(saved.repo);
+  }
+};
+
 // Desktop notifications: what changed between two polls, pushed to the open browsers by the rules in `notifications`.
 const notifier = createNotifier({
   store,
@@ -103,8 +126,10 @@ const server = buildServer({
   acknowledgeNotifications: notifier.acknowledge,
   settings,
   timeZone: TIME_ZONE,
+  issues,
   logger: true,
 });
+const issuePoller = createIssuePoller({ store, token: () => token, log: server.log, onChange: publishIssues });
 const poller = startPoller({
   ...pollerSettings(config, token),
   store,
@@ -121,7 +146,10 @@ const configWatcher = watchConfig(data.configPath, {
     config = next;
     poller.reconfigure(pollerSettings(config, token));
   },
-  onChange: publishDashboard,
+  onChange() {
+    publishDashboard();
+    publishAllIssues();
+  },
   log: server.log,
 });
 

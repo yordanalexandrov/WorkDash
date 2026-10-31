@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 
-/** A tab: `name` is shown, `repo` is the full name, `hue` its project colour. */
-export type IssueTab = { repo: string; name: string; hue: number };
+/** A tab: `name` is shown, `repo` is the full name, `hue` its project colour; `note` says what of the repo shows, as "100 от 240". */
+export type IssueTab = { repo: string; name: string; hue: number; note?: string | null };
 
 type IssueTabsProps = {
   tabs: IssueTab[];
@@ -37,7 +37,7 @@ export function IssueTabs({ tabs, open, onOpen }: IssueTabsProps) {
   });
   return (
     <div class="repo-tabs" role="tablist" aria-label="Repo" ref={list}>
-      {tabs.map(({ repo, name, hue }) => (
+      {tabs.map(({ repo, name, hue, note }) => (
         <button
           key={repo}
           type="button"
@@ -49,6 +49,7 @@ export function IssueTabs({ tabs, open, onOpen }: IssueTabsProps) {
           onClick={() => onOpen(repo)}
         >
           {name}
+          {note ? <span class="tab-note">{note}</span> : null}
         </button>
       ))}
       <span class="ink" ref={ink} aria-hidden="true" hidden />

@@ -8,11 +8,12 @@ import { Settings } from "./components/Settings.js";
 import { TopBar } from "./components/TopBar.js";
 import { ViewToggle } from "./components/ViewToggle.js";
 import type { DashboardState } from "./api.js";
-import { type Dashboard, type DashboardPlace, readDashboard, writeDashboard } from "./dashboard.js";
+import { type Dashboard, type DashboardPlace, issueTabs, pickRepo, readDashboard, writeDashboard } from "./dashboard.js";
 import { configErrorText, errorText, intervalText, missingText, needsNewToken, pollButton, statusText } from "./format.js";
 import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, useBooted } from "./motion.js";
 import { repoHues } from "./palette.js";
 import { useDashboard } from "./useDashboard.js";
+import { useIssues } from "./useIssues.js";
 import { useNotifications } from "./useNotifications.js";
 import { usePolling } from "./usePolling.js";
 import { useSettingsRoute } from "./useSettingsRoute.js";
@@ -37,11 +38,16 @@ export function App() {
   const { state, stream, seen } = useDashboard();
   const notifications = useNotifications();
   const polling = usePolling(state, stream);
-  const pollNowButton = pollButton(state, polling.now);
-  const pollNow = () => !pollNowButton.disabled && polling.pollNow();
   const booted = useBooted();
   const settings = useSettingsRoute();
   const [place, setPlace] = useState<DashboardPlace>(() => readDashboard(location.search));
+  // The Issue dashboard's open repo, while it shows: only then are its issues loaded and polled.
+  const onIssues = state !== null && !settings.open && place.dashboard === "issues";
+  const issueRepo = useMemo(() => (onIssues ? pickRepo(issueTabs(state.issueRepos), place.repo) : null), [onIssues, state?.issueRepos, place.repo]);
+  const issues = useIssues(issueRepo);
+  // "Обнови" (and `r`) polls what the dashboard shown shows: the PRs, or the open repo's issues.
+  const pollNowButton = pollButton(onIssues ? issues.state : state, polling.now);
+  const pollNow = () => !pollNowButton.disabled && (onIssues ? issues.pollNow() : polling.pollNow());
   const [view, setView] = useState<View>(() => readView(location.search));
   const hues = useMemo(() => projectHues(state), [state]);
   // Where each dashboard puts its part of the top bar (the toolbar, the repo tabs), under the toggles.
@@ -109,7 +115,7 @@ export function App() {
             <PollControls
               mode={state.pollMode}
               interval={intervalText(state.pollIntervalMs)}
-              busy={state.polling}
+              busy={onIssues ? (issues.state?.polling ?? false) : state.polling}
               pollNowButton={pollNowButton}
               onMode={polling.setMode}
               onPollNow={pollNow}
@@ -145,6 +151,7 @@ export function App() {
           <IssueDashboard
             issueRepos={state.issueRepos}
             fetched={state.fetchedAt !== null}
+            issues={issues.state}
             hues={hues}
             repo={place.repo}
             onRepo={(repo) => goTo({ dashboard: "issues", repo })}

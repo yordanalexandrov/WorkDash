@@ -35,6 +35,11 @@
   --tint-mix: 17%;
   --row-mix: 11%;
   --stripe-l: 52%;
+  /* Text on a label chip, which carries its GitHub colour in both themes: the same black and white in both. */
+  --label-dark: #1a1f2b;
+  --label-light: #fff;
+  /* The edge of a label chip, so a label as pale as the card still shows where it ends. */
+  --label-edge: rgba(20, 30, 60, 0.14);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -70,6 +75,7 @@
     --tint-mix: 24%;
     --row-mix: 15%;
     --stripe-l: 58%;
+    --label-edge: rgba(200, 215, 255, 0.16);
   }
 }
 
@@ -377,6 +383,15 @@ h1 .live.ok::after {
 
 .repo-tabs .ink[hidden] {
   display: none;
+}
+
+/* "100 от 240" on the open tab: the repo has more open issues than one poll fetches. */
+.tab-note {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Toolbar: the text filter, the repo chips (their dots are the colour legend) and "само моите"; wraps when the repos are many. */
@@ -1132,6 +1147,35 @@ kbd {
   font-size: 10.5px;
 }
 
+/* An issue's labels: each chip in its GitHub colour (--lc), with black or white text by how light that is (labels.ts). */
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lbl {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--lc);
+  box-shadow: inset 0 0 0 1px var(--label-edge);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lbl.dark {
+  color: var(--label-dark);
+}
+
+.lbl.light {
+  color: var(--label-light);
+}
+
 .card-foot {
   display: flex;
   flex-wrap: wrap;
@@ -1224,13 +1268,15 @@ kbd {
   white-space: nowrap;
 }
 
-.reviews {
+.reviews,
+.people {
   display: flex;
   margin-left: auto;
   padding-left: 6px;
 }
 
-.reviews .av {
+.reviews .av,
+.people .av {
   position: relative;
   width: 20px;
   height: 20px;

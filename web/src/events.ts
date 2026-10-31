@@ -1,4 +1,4 @@
-import type { DashboardState } from "./api.js";
+import type { DashboardState, IssueBoardState } from "./api.js";
 import type { MissedNotice, PrEvent } from "./notifications.js";
 
 /** Every event the server pushes over /api/events, by SSE event name; mirrors `ServerEvents` in src/sse.ts. */
@@ -9,6 +9,8 @@ export type ServerEvents = {
   notification: PrEvent;
   /** The events no browser showed, summed up once; `quiet` lists them without a desktop notification. */
   missed: MissedNotice;
+  /** One repo's issues, when a poll of it starts and ends and when its stages change; only a page on that repo takes it. */
+  issues: IssueBoardState;
 };
 
 export type StreamStatus = "connecting" | "open" | "reconnecting";

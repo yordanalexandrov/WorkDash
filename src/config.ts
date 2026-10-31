@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { isMap, isNode, isSeq, parse as parseYaml, parseDocument } from "yaml";
 import { EVENT_TYPES, type EventType } from "./domain/events.js";
+import type { IssuesConfig } from "./domain/issues.js";
 import type { JiraConfig } from "./domain/jira.js";
 import { type NotificationRules, parseQuietHours, type QuietHours } from "./domain/notify.js";
 import { durationMs, formatClock, formatDuration, type SettingsForm, settingsSchema, validateSettings } from "./domain/settings.js";
@@ -12,6 +13,7 @@ export type Config = {
   review: { requiredApprovals: number; recentlyClosedWindowMs: number };
   jira: JiraConfig;
   notifications: NotificationRules;
+  issues: IssuesConfig;
 };
 
 export class ConfigError extends Error {
@@ -32,6 +34,7 @@ function toConfig(raw: SettingsForm): Config {
       enabled: Object.fromEntries(EVENT_TYPES.map((type) => [type, raw.notifications[type]])) as Record<EventType, boolean>,
       quietHours: raw.notifications.quiet_hours === null ? null : (parseQuietHours(raw.notifications.quiet_hours) as QuietHours),
     },
+    issues: raw.issues,
   };
 }
 
@@ -64,6 +67,7 @@ export function formFromConfig(config: Config): SettingsForm {
       ...config.notifications.enabled,
       quiet_hours: quietHours ? `${formatClock(quietHours.start)}-${formatClock(quietHours.end)}` : null,
     },
+    issues: config.issues,
   };
 }
 
