@@ -12,7 +12,7 @@ import { repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
 import { useDashboard } from "./useDashboard.js";
 import { useNotifications } from "./useNotifications.js";
-import { SLASH, useShortcuts } from "./useShortcuts.js";
+import { ESCAPE, SLASH, useShortcuts } from "./useShortcuts.js";
 
 export function App() {
   const { state, stream, seen } = useDashboard();
@@ -20,15 +20,19 @@ export function App() {
   // The filter is not kept between visits, so the board never opens hiding something that waits on me.
   const [filter, setFilter] = useState(NO_FILTER);
   const filterInput = useRef<HTMLInputElement>(null);
-  useShortcuts([{ matches: SLASH, run: () => filterInput.current?.focus() }]);
+  useShortcuts([
+    { matches: SLASH, run: () => filterInput.current?.focus() },
+    { matches: ESCAPE, run: () => setFilter((current) => ({ ...current, query: "" })) },
+  ]);
 
-  const openRepos = useMemo(() => (state ? state.sections.flatMap((s) => s.pullRequests.map((pr) => pr.repo)) : []), [state]);
-  const chips = useMemo(() => repoChips(openRepos, state ? state.recentlyClosed.map((pr) => pr.repo) : []), [openRepos, state]);
+  // The repo of every open PR, one entry per PR, before any filter.
+  const openPrRepos = useMemo(() => (state ? state.sections.flatMap((s) => s.pullRequests.map((pr) => pr.repo)) : []), [state]);
+  const chips = useMemo(() => repoChips(openPrRepos, state ? state.recentlyClosed.map((pr) => pr.repo) : []), [openPrRepos, state]);
   // From every repo, not only those the filter keeps, so a repo keeps its colour while filtering.
   const hues = useMemo(() => repoHues(chips.map((chip) => chip.repo)), [chips]);
   const columns = useMemo(() => (state ? boardColumns(filterDashboard(state, filter)) : []), [state, filter]);
   const shown = columns.reduce((sum, column) => sum + (column.id === "closed" ? 0 : column.count), 0);
-  const nothingOpen = openRepos.length === 0;
+  const nothingOpen = openPrRepos.length === 0;
 
   return (
     <>
@@ -46,7 +50,7 @@ export function App() {
             onChange={setFilter}
             canFilterMine={state.viewer !== null}
             shown={shown}
-            total={openRepos.length}
+            total={openPrRepos.length}
             inputRef={filterInput}
           />
         )}

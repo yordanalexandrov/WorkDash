@@ -39,6 +39,10 @@ describe("closedFields", () => {
     expect(closedFields(closed)).toMatchObject({ repo: "my-org/repo-b", author: "colleague2" });
     for (const query of ["old cards", "colleague2", "repo-b", "7", "#7"]) expect(finds(query), query).toBe(true);
   });
+
+  it("gives a closed PR no branch or Jira texts", () => {
+    expect(closedFields(closed).texts).toEqual(["Drop the old cards", "colleague2", "my-org/repo-b", "7", "#7"]);
+  });
 });
 
 describe("filterDashboard", () => {

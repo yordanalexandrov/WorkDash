@@ -300,7 +300,6 @@ h1 .live.ok::after {
   font: inherit;
   font-size: 12.5px;
   transition:
-    width var(--bounce-ms, 0.35s) var(--bounce, ease-out),
     box-shadow 0.2s,
     border-color 0.2s;
 }
@@ -993,7 +992,8 @@ kbd {
   }
 
   .card:hover,
-  .card:focus-visible {
-    transform: none;
+  .card:focus-visible,
+  .toolbar .chip {
+    transform: none !important;
   }
 }

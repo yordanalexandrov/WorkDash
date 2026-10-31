@@ -13,10 +13,11 @@ export function closedFields(pr: Pick<ClosedPullRequest, "repo" | "number" | "ti
   return { repo: pr.repo, author: pr.author, texts: [pr.title, pr.author, pr.repo, String(pr.number), `#${pr.number}`] };
 }
 
-type Shown = Pick<DashboardState, "sections" | "recentlyClosed">;
+/** The part of the state the filter narrows. */
+type Filterable = Pick<DashboardState, "sections" | "recentlyClosed">;
 
 /** The sections and closed PRs the filter keeps; every section stays, empty or not. */
-export function filterDashboard(state: Shown & Pick<DashboardState, "viewer">, filter: Filter): Shown {
+export function filterDashboard(state: Filterable & Pick<DashboardState, "viewer">, filter: Filter): Filterable {
   return {
     sections: state.sections.map(({ section, pullRequests }) => ({ section, pullRequests: filterItems(pullRequests, filter, prFields, state.viewer) })),
     recentlyClosed: filterItems(state.recentlyClosed, filter, closedFields, state.viewer),

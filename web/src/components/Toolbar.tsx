@@ -1,4 +1,4 @@
-import type { RefObject } from "preact";
+import type { ComponentChildren, RefObject } from "preact";
 import { type Filter, toggleRepo } from "../filter.js";
 
 /** A repo chip: `name` is shown, `repo` is the full name; `count` is how many open items it has before any filter. */
@@ -47,29 +47,31 @@ export function Toolbar({ repos, filter, onChange, canFilterMine, shown, total, 
         </span>
       ) : null}
       <span class="sep" aria-hidden="true" />
-      <button type="button" class={`chip${filter.repos.length === 0 ? " on" : ""}`} aria-pressed={filter.repos.length === 0} onClick={() => onChange({ ...filter, repos: [] })}>
+      <Chip on={filter.repos.length === 0} onClick={() => onChange({ ...filter, repos: [] })}>
         Всички repo-та
-      </button>
-      {repos.map(({ repo, name, hue, count }) => {
-        const on = filter.repos.includes(repo);
-        return (
-          <button key={repo} type="button" class={`chip${on ? " on" : ""}`} aria-pressed={on} title={repo} onClick={() => onChange(toggleRepo(filter, repo))}>
-            <span class="dot" style={{ "--rh": hue }} aria-hidden="true" />
-            {name}
-            <span class="n">{count}</span>
-          </button>
-        );
-      })}
+      </Chip>
+      {repos.map(({ repo, name, hue, count }) => (
+        <Chip key={repo} on={filter.repos.includes(repo)} title={repo} onClick={() => onChange(toggleRepo(filter, repo))}>
+          <span class="dot" style={{ "--rh": hue }} aria-hidden="true" />
+          {name}
+          <span class="n">{count}</span>
+        </Chip>
+      ))}
       <span class="sep" aria-hidden="true" />
-      <button
-        type="button"
-        class={`chip${filter.mine ? " on" : ""}`}
-        aria-pressed={filter.mine}
-        disabled={!canFilterMine}
-        onClick={() => onChange({ ...filter, mine: !filter.mine })}
-      >
+      <Chip on={filter.mine} disabled={!canFilterMine} onClick={() => onChange({ ...filter, mine: !filter.mine })}>
         само моите
-      </button>
+      </Chip>
     </div>
+  );
+}
+
+type ChipProps = { on: boolean; onClick(): void; title?: string; disabled?: boolean; children: ComponentChildren };
+
+/** A toggle pill; `on` shows it pressed. */
+function Chip({ on, onClick, title, disabled, children }: ChipProps) {
+  return (
+    <button type="button" class={`chip${on ? " on" : ""}`} aria-pressed={on} title={title} disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
   );
 }

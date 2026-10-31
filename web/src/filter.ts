@@ -1,6 +1,8 @@
 // The filter of the shared toolbar: repos, "only mine" and a text query. It knows nothing of PRs, so the table and
 // an issues board use it as it is; each says through `fields` what repo, author and texts an item has.
 
+import { sameLogin } from "../../src/domain/activity.js";
+
 /** No repo picked means every repo; `mine` keeps what the viewer wrote. */
 export type Filter = { repos: string[]; mine: boolean; query: string };
 
@@ -17,12 +19,11 @@ export function matchesQuery(texts: string[], query: string): boolean {
 
 /** The items the filter keeps, in their order; with `mine` and no viewer yet, none. */
 export function filterItems<T>(items: T[], filter: Filter, fields: (item: T) => FilterFields, viewer: string | null): T[] {
-  const me = viewer?.toLowerCase();
   return items.filter((item) => {
     const { repo, author, texts } = fields(item);
     return (
       (filter.repos.length === 0 || filter.repos.includes(repo)) &&
-      (!filter.mine || (me !== undefined && author.toLowerCase() === me)) &&
+      (!filter.mine || (viewer !== null && sameLogin(author, viewer))) &&
       matchesQuery(texts, filter.query)
     );
   });
@@ -41,5 +42,5 @@ export function repoChips(openRepos: string[], closedRepos: string[]): RepoChip[
   const counts = new Map<string, number>();
   for (const repo of closedRepos) counts.set(repo, 0);
   for (const repo of openRepos) counts.set(repo, (counts.get(repo) ?? 0) + 1);
-  return [...counts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([repo, count]) => ({ repo, count }));
+  return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([repo, count]) => ({ repo, count }));
 }
