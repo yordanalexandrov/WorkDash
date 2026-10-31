@@ -40,6 +40,7 @@ Every colour is a CSS custom property with a light and a dark value (`prefers-co
 | `--ok` / `--bad` / `--pending` | `#1f9d63` / `#e0453a` / `#c99400` | `#4fd69c` / `#ff6f63` / `#f0c419` |
 | `--blue` / `--merged` | `#3b7cff` / `#7b61e8` | `#6c9dff` / `#a690ff` |
 | `--line` | `rgba(20,30,60,.12)` | `rgba(200,215,255,.11)` |
+| `--chip` / `--chip-on` / `--chip-on-text` | `rgba(255,255,255,.75)` / `#1a1f2b` / `#fff` | `rgba(30,36,48,.8)` / `#e2e7f0` / `#0f1218` |
 
 Surfaces: a slow gradient-mesh background with a faint dot grid; columns and the table are glassy panels over it (radius 14px); cards and rows are solid (radius 10px) with a soft shadow that lifts on hover; chips are pills. Type is `system-ui` 14px; numbers in tables use tabular figures.
 
