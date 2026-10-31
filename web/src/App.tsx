@@ -9,6 +9,7 @@ import { TopBar } from "./components/TopBar.js";
 import { ViewToggle } from "./components/ViewToggle.js";
 import type { DashboardState } from "./api.js";
 import { type Dashboard, type DashboardPlace, issueTabs, pickRepo, readDashboard, writeDashboard } from "./dashboard.js";
+import { NO_FILTER } from "./filter.js";
 import { configErrorText, errorText, intervalText, missingText, needsNewToken, pollButton, statusText } from "./format.js";
 import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, useBooted } from "./motion.js";
 import { repoHues } from "./palette.js";
@@ -49,6 +50,8 @@ export function App() {
   const pollNowButton = pollButton(onIssues ? issues.state : state, polling.now);
   const pollNow = () => !pollNowButton.disabled && (onIssues ? issues.pollNow() : polling.pollNow());
   const [view, setView] = useState<View>(() => readView(location.search));
+  // The Issue dashboard's filter lives here: the dashboard unmounts behind the PRs and Settings, and the filter outlasts that.
+  const [issueFilter, setIssueFilter] = useState(NO_FILTER);
   const hues = useMemo(() => projectHues(state), [state]);
   // Where each dashboard puts its part of the top bar (the toolbar, the repo tabs), under the toggles.
   const [topSlot, setTopSlot] = useState<HTMLDivElement | null>(null);
@@ -153,9 +156,11 @@ export function App() {
             fetched={state.fetchedAt !== null}
             issues={issues.state}
             hues={hues}
-            viewer={state.viewer}
             repo={place.repo}
             onRepo={(repo) => goTo({ dashboard: "issues", repo })}
+            filter={issueFilter}
+            onFilter={setIssueFilter}
+            viewer={state.viewer}
             topSlot={topSlot}
             booted={booted}
           />
