@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGate, flipDeltas, morphTransform, spring } from "../src/motion.js";
+import { createGate, flipDeltas, morphTransform, planLanding, spring, visibleIn } from "../src/motion.js";
 
 /** The points of a linear() easing. */
 function points(easing: string): number[] {
@@ -155,5 +155,46 @@ describe("morphTransform", () => {
 
   it("shrinks onto a smaller rect, moved by the difference of their corners", () => {
     expect(morphTransform(rect(100, 300, 380, 100), rect(260, 60, 760, 400))).toBe("translate(-160px, 240px) scale(0.5, 0.25)");
+  });
+});
+
+describe("visibleIn", () => {
+  const rect = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height }) as DOMRectReadOnly;
+
+  it("takes a rect wholly or partly inside the viewport", () => {
+    expect(visibleIn(rect(100, 100, 280, 120), 1280, 800)).toBe(true);
+    expect(visibleIn(rect(-100, 750, 280, 120), 1280, 800)).toBe(true);
+  });
+
+  it("leaves out a rect above, below, left or right of the viewport", () => {
+    expect(visibleIn(rect(100, -130, 280, 120), 1280, 800)).toBe(false);
+    expect(visibleIn(rect(100, 810, 280, 120), 1280, 800)).toBe(false);
+    expect(visibleIn(rect(-300, 100, 280, 120), 1280, 800)).toBe(false);
+    expect(visibleIn(rect(1290, 100, 280, 120), 1280, 800)).toBe(false);
+  });
+
+  it("leaves out a rect with no width", () => {
+    expect(visibleIn(rect(100, 100, 0, 120), 1280, 800)).toBe(false);
+  });
+});
+
+describe("planLanding", () => {
+  it("pairs a key in both views, lets one only lifted leave and one only landed on arrive", () => {
+    expect(planLanding(["pr:a#1", "pr:a#2"], ["pr:a#3", "pr:a#1"])).toEqual({
+      pairs: [{ key: "pr:a#1", delay: 0 }],
+      leaving: ["pr:a#2"],
+      arriving: ["pr:a#3"],
+    });
+  });
+
+  it("staggers the pairs 18ms apart in the flyers' order, up to 260ms", () => {
+    const keys = Array.from({ length: 20 }, (_, i) => `pr:a#${i}`);
+    const { pairs } = planLanding(keys, [...keys].reverse());
+    expect(pairs.map((pair) => pair.key)).toEqual(keys);
+    expect(pairs.slice(0, 4).map((pair) => pair.delay)).toEqual([0, 18, 36, 54]);
+    expect(pairs[14]!.delay).toBe(252);
+    expect(pairs[15]!.delay).toBe(260);
+    expect(pairs[19]!.delay).toBe(260);
   });
 });

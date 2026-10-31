@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { boardColumns } from "./board.js";
 import { Banners } from "./components/Banners.js";
 import { Board } from "./components/Board.js";
@@ -14,7 +14,7 @@ import { NO_FILTER, repoChips } from "./filter.js";
 import type { DashboardPullRequest, Section } from "./api.js";
 import { findOpen, prKey } from "./detail.js";
 import { configErrorText, errorText, shortRepo, statusText } from "./format.js";
-import { prFlipKey, useBooted } from "./motion.js";
+import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, prFlipKey, useBooted } from "./motion.js";
 import { repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
 import { DEFAULT_SORT, prItems } from "./prTable.js";
@@ -61,10 +61,24 @@ export function App() {
   const openSheet = (pr: DashboardPullRequest, from: HTMLElement) =>
     setSheet({ pr: { repo: pr.repo, number: pr.number }, from: from.getBoundingClientRect(), closing: false });
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
+  const viewRoot = useRef<HTMLDivElement>(null);
+  const fx = useRef<HTMLDivElement>(null);
+  // The cards or rows lifted off the view being left, to land once the next one is in.
+  const lifted = useRef<Flyer[] | null>(null);
+  // A switch while the last one still flies ends it at once and lifts from the real cards or rows.
   const switchView = (next: View) => {
+    if (next === view) return;
+    finishLanding();
+    if (lifted.current) dropFlyers(lifted.current);
+    lifted.current = viewRoot.current && fx.current ? liftFlyers(viewRoot.current, fx.current) : null;
     history.replaceState(history.state, "", writeView(location.href, next));
     setView(next);
   };
+  useLayoutEffect(() => {
+    const flyers = lifted.current;
+    lifted.current = null;
+    if (flyers && viewRoot.current) void land(viewRoot.current, flyers);
+  }, [view]);
   // While the sheet is open, Esc closes it and `/` and `t` do nothing.
   useShortcuts(
     sheet
@@ -117,43 +131,46 @@ export function App() {
         missed={notifications.missed}
         onDismissMissed={notifications.dismissMissed}
       />
-      {state && filtered && view === "table" && (
-        <PrTable
-          items={items}
-          closed={filtered.recentlyClosed}
-          hue={(repo) => repoHue(hues, repo)}
-          query={filter.query}
-          sort={sort}
-          onSort={setSort}
-          groupBy={groupBy}
-          onGroupBy={setGroupBy}
-          collapsed={collapsed}
-          onToggle={(id) => setCollapsed((current) => toggleCollapsed(current, id))}
-          onSeen={seen}
-          onOpen={openSheet}
-          openKey={openKey}
-          booted={booted}
-        />
-      )}
-      {state && view === "board" && (
-        <Board columns={columns} booted={booted} message={nothingOpen && state.fetchedAt ? "Няма PR-и, които да те засягат." : null}>
-          {(column) =>
-            column.id === "closed"
-              ? column.items.map((pr, index) => <ClosedCard key={`${pr.repo}#${pr.number}`} pr={pr} hue={repoHue(hues, pr.repo)} index={index} />)
-              : column.items.map((pr, index) => (
-                  <PrCard
-                    key={`${pr.repo}#${pr.number}`}
-                    pr={pr}
-                    hue={repoHue(hues, pr.repo)}
-                    index={index}
-                    onOpen={openSheet}
-                    ghost={openKey === prKey(pr)}
-                    {...(column.id === "waiting_on_me" ? { onSeen: seen } : {})}
-                  />
-                ))
-          }
-        </Board>
-      )}
+      <div class="view" ref={viewRoot}>
+        {state && filtered && view === "table" && (
+          <PrTable
+            items={items}
+            closed={filtered.recentlyClosed}
+            hue={(repo) => repoHue(hues, repo)}
+            query={filter.query}
+            sort={sort}
+            onSort={setSort}
+            groupBy={groupBy}
+            onGroupBy={setGroupBy}
+            collapsed={collapsed}
+            onToggle={(id) => setCollapsed((current) => toggleCollapsed(current, id))}
+            onSeen={seen}
+            onOpen={openSheet}
+            openKey={openKey}
+            booted={booted}
+          />
+        )}
+        {state && view === "board" && (
+          <Board columns={columns} booted={booted} message={nothingOpen && state.fetchedAt ? "Няма PR-и, които да те засягат." : null}>
+            {(column) =>
+              column.id === "closed"
+                ? column.items.map((pr, index) => <ClosedCard key={`${pr.repo}#${pr.number}`} pr={pr} hue={repoHue(hues, pr.repo)} index={index} />)
+                : column.items.map((pr, index) => (
+                    <PrCard
+                      key={`${pr.repo}#${pr.number}`}
+                      pr={pr}
+                      hue={repoHue(hues, pr.repo)}
+                      index={index}
+                      onOpen={openSheet}
+                      ghost={openKey === prKey(pr)}
+                      {...(column.id === "waiting_on_me" ? { onSeen: seen } : {})}
+                    />
+                  ))
+            }
+          </Board>
+        )}
+      </div>
+      <div class="fx" ref={fx} aria-hidden="true" />
       {sheet && shown.current ? (
         <Sheet
           key={openKey}

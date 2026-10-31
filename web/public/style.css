@@ -285,7 +285,8 @@ h1 .live.ok::after {
   transition: transform var(--glide-ms, 0.4s) var(--glide, ease-out);
 }
 
-.views.table .thumb {
+/* "at-table", not "table": the modifier must not pick up the rules of the view it names (.board is the board itself). */
+.views.at-table .thumb {
   transform: translateX(100%);
 }
 
@@ -1524,9 +1525,11 @@ kbd {
 }
 
 /* Motion: the springs come from web/src/motion.ts as --glide / --bounce (and their -ms durations); see "Motion" in docs/design.md.
-   Only transform and opacity animate. */
+   Only transform and opacity animate, but for the view switch's flyers in .fx, which stretch their box outside the flow. */
 
-/* Entrance cascade: the columns one after another, then the cards in them. Once it has run, cards that come later enter at once. */
+/* Entrance cascade: the columns one after another, then the cards in them. Once it has run, cards that come later enter at once.
+   It runs once per page: a view switched to drops these entrances and lands instead (`land`, whose ENTRANCES name
+   col-enter, enter and row-enter). */
 .col {
   animation: col-enter var(--bounce-ms, 700ms) var(--bounce, ease-out) both;
   animation-delay: calc(var(--ci, 0) * 80ms);
@@ -1557,6 +1560,51 @@ kbd {
 .tablev.booted .trow,
 .tablev.booted .tgroup {
   animation-delay: 0s;
+}
+
+/* The board or the table, whichever shows; only a root for the switch to lift from and land on. */
+.view {
+  display: contents;
+}
+
+/* The effects layer: over the board, under the detail sheet. Flyers move by left/top/width/height, outside the flow. */
+.fx {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+/* A card or row lifted for the switch: a still picture of it, its box stretching to the place it lands on. */
+.flyer {
+  position: absolute;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  translate: none;
+  /* A still picture: whatever the card or row ran (entrance, pulse, hover lift) must not run in its copy. */
+  transition: none !important;
+  animation: none !important;
+}
+
+.flyer *,
+.flyer *::before,
+.flyer *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+.flyer .card {
+  height: 100%;
+  overflow: hidden;
+  transform: none;
+  box-shadow: var(--lifted);
+}
+
+.flyer.trow {
+  box-shadow: var(--lifted);
 }
 
 @keyframes row-enter {

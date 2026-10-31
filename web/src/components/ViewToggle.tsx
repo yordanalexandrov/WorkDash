@@ -9,7 +9,7 @@ const VIEWS: [View, icon: string, name: string][] = [
 export function ViewToggle({ view, onChange }: { view: View; onChange(view: View): void }) {
   return (
     <div class="view-toggle">
-      <div class={`views ${view}`} role="radiogroup" aria-label="Изглед">
+      <div class={`views at-${view}`} role="radiogroup" aria-label="Изглед">
         <span class="thumb" aria-hidden="true" />
         {VIEWS.map(([id, icon, name]) => (
           <button key={id} type="button" role="radio" aria-checked={view === id} class={view === id ? "on" : ""} title={`${name} (t)`} onClick={() => onChange(id)}>
