@@ -60,6 +60,7 @@ Motion explains change: where something came from, where it went, what needs att
 - **FLIP** every reorder: when filtering, sorting, grouping, folding a column or removing a PR, the remaining items glide from their old position to the new one. Nothing jumps.
 - Entrances cascade: columns, then cards (or rows) with a short stagger.
 - **Card ↔ row morph** on switching the view: every card or row in sight is lifted into `.fx` (`liftFlyers`) and lands on the same PR in the new view (`land`), top to bottom; one with no place there falls away, one with no flyer bounces in. The entrance cascade plays once per page, never on a switch; a switch in mid-flight ends the last one at once (`finishLanding`).
+- **Drag to "видях"**: a "Чака теб" card pressed and moved past 7px lifts a copy into `.fx` (`liftClone`) that follows the pointer and leans with its speed; the drop zone bounces in low in the middle while it does. Dropped there, the copy glides in, turns and fades (`dropInto`, which holds the gate); dropped anywhere else, cancelled or put back with Esc, it bounces back onto its card (`returnTo`), or fades if the card has left the column. Under reduced motion it neither leans nor flies.
 - Pulse and glow mean *urgent*: only "Чака теб" items pulse, harder for CI/Sonar failed, review requested, changes requested, conflict and mention. Decoration never pulses.
 - Delight (confetti on merged, sparks on "видях", the 3D tilt on hover) stays small and short, and never covers content.
 - `prefers-reduced-motion: reduce` turns off everything except instant state changes.
