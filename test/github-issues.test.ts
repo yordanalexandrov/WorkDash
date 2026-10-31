@@ -231,7 +231,7 @@ describe("fetchIssues", () => {
     await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch })).rejects.toThrow(/Could not resolve/);
   });
 
-  it("fails with the error types of a rate limit, for classifyPollError", async () => {
+  it("fails with the error types of a rate limit, for classifyGitHubError", async () => {
     const github = fakeGitHub(() => ({ errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] }));
 
     await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch })).rejects.toMatchObject({ errorTypes: ["RATE_LIMITED"] });

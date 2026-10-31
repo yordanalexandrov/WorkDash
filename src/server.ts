@@ -8,7 +8,8 @@ import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import { ISSUE_DEMANDS } from "./domain/issue-poll.js";
 import { type IssueBoardState, type IssuesConfig, stageOf, stagesFor } from "./domain/issues.js";
-import { classifyPollError, type PollHealth } from "./domain/poll-error.js";
+import { classifyGitHubError } from "./domain/github-error.js";
+import type { PollHealth } from "./domain/poll-error.js";
 import type { IssueGraphs } from "./issue-graphs.js";
 import type { IssuePoller } from "./issue-poller.js";
 import { DEMANDS, POLL_MODES } from "./domain/poll-mode.js";
@@ -296,7 +297,7 @@ function registerIssues(server: FastifyInstance, store: SnapshotStore, source: I
     try {
       return await source.graphs.family(repo, number, { refresh });
     } catch (error) {
-      return reply.code(502).send({ error: classifyPollError(error, new Date()) });
+      return reply.code(502).send({ error: classifyGitHubError(error, new Date()) });
     }
   });
 }
