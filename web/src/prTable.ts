@@ -49,7 +49,9 @@ export function prGroupKey({ pr, section }: PrItem, by: GroupBy): string {
   return by === "section" ? section : by === "repo" ? pr.repo : pr.author;
 }
 
-/** Sections group in section order; repos and authors by name. */
-export function prGroupOrder(by: GroupBy): ((a: string, b: string) => number) | undefined {
-  return by === "section" ? (a, b) => SECTIONS.indexOf(a as Section) - SECTIONS.indexOf(b as Section) : undefined;
+/** Sections group in section order, repos by the short name their head shows, authors by login. */
+export function prGroupOrder(by: GroupBy): (a: string, b: string) => number {
+  if (by === "section") return (a, b) => SECTIONS.indexOf(a as Section) - SECTIONS.indexOf(b as Section);
+  if (by === "repo") return (a, b) => shortRepo(a).localeCompare(shortRepo(b)) || a.localeCompare(b);
+  return (a, b) => a.localeCompare(b);
 }

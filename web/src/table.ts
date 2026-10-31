@@ -8,7 +8,7 @@ export type Sort = { key: string; dir: Dir };
 
 /**
  * One column of the table. `value` is what it sorts by (none: the column does not sort; undefined for an item: the item
- * has nothing there and goes after every value), `first` the direction a click
+ * has nothing there and counts as above every value, so last ascending and first descending), `first` the direction a click
  * on it starts from (ascending unless said otherwise). `title` explains a short label; `align` is "r" or "c".
  */
 export type TableColumn<T> = {

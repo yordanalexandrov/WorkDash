@@ -1,6 +1,7 @@
 import type { ClosedPullRequest, DashboardPullRequest, Section } from "../api.js";
 import { ACCENT } from "../board.js";
 import { sectionTitle, shortRepo } from "../format.js";
+import { prFlipKey } from "../motion.js";
 import { type PrItem, PR_COLUMNS, PR_GROUPINGS, prGroupKey, prGroupOrder } from "../prTable.js";
 import { type GroupBy, groupItems, nextSort, type Sort, sortItems } from "../table.js";
 import { Avatar } from "./Avatar.js";
@@ -59,7 +60,7 @@ export function PrTable({ items, closed, hue, query, sort, onSort, groupBy, onGr
       row={(row, index) =>
         "open" in row ? (
           <PrRow
-            key={`${row.open.pr.repo}#${row.open.pr.number}`}
+            key={prFlipKey(row.open.pr)}
             pr={row.open.pr}
             section={row.open.section}
             hue={hue(row.open.pr.repo)}
@@ -67,7 +68,7 @@ export function PrTable({ items, closed, hue, query, sort, onSort, groupBy, onGr
             {...(row.open.section === "waiting_on_me" ? { onSeen } : {})}
           />
         ) : (
-          <ClosedRow key={`${row.closed.repo}#${row.closed.number}`} pr={row.closed} hue={hue(row.closed.repo)} index={index} />
+          <ClosedRow key={prFlipKey(row.closed)} pr={row.closed} hue={hue(row.closed.repo)} index={index} />
         )
       }
     />
@@ -78,7 +79,7 @@ export function PrTable({ items, closed, hue, query, sort, onSort, groupBy, onGr
 function groupHead(by: GroupBy, key: string, hue: (repo: string) => number): GroupHeadLook {
   if (by === "section") return { color: ACCENT[key as Section], label: sectionTitle(key as Section) };
   if (by === "repo") {
-    return { color: `hsl(${hue(key)} 65% var(--stripe-l))`, label: shortRepo(key), sub: key, lead: <span class="dot" style={{ "--rh": hue(key) }} aria-hidden="true" /> };
+    return { color: `hsl(${hue(key)} 70% var(--stripe-l))`, label: shortRepo(key), sub: key, lead: <span class="dot" style={{ "--rh": hue(key) }} aria-hidden="true" /> };
   }
   return { color: "var(--text)", label: key, lead: <Avatar login={key} /> };
 }

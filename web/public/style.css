@@ -1063,8 +1063,8 @@ kbd {
   font-variant-numeric: tabular-nums;
   translate: 0 var(--lift, 0px);
   transition:
-    translate 0.22s ease-out,
-    box-shadow 0.22s ease-out;
+    translate var(--glide-ms) var(--glide),
+    box-shadow 0.25s ease-out;
 }
 
 .trow:hover,
@@ -1139,8 +1139,10 @@ kbd {
   padding-left: 6px;
 }
 
+/* Every key shows: more than fit wrap onto another line. */
 .tc.jira {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  gap: 3px;
 }
 
 .tc .age {
