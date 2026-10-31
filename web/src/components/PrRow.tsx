@@ -131,6 +131,7 @@ export function PrRow({ pr, section, hue, index, onSeen, onOpen, ghost }: PrRowP
           </button>
         ) : null}
       </span>
+      <span class="card-wrap" aria-hidden="true" />
     </div>
   );
 }

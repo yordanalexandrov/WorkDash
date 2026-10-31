@@ -3,6 +3,7 @@ import { boardColumns } from "./board.js";
 import { Banners } from "./components/Banners.js";
 import { Board } from "./components/Board.js";
 import { PrDetail } from "./components/PrDetail.js";
+import { Replay } from "./components/Replay.js";
 import { Sheet } from "./components/Sheet.js";
 import { ClosedCard } from "./components/ClosedCard.js";
 import { DropZone } from "./components/DropZone.js";
@@ -15,14 +16,16 @@ import { NO_FILTER, repoChips } from "./filter.js";
 import type { DashboardPullRequest, Section } from "./api.js";
 import { findOpen, prKey } from "./detail.js";
 import { configErrorText, errorText, shortRepo, statusText } from "./format.js";
-import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, prFlipKey, useBooted } from "./motion.js";
+import { dropFlyers, type Flyer, finishLanding, flash, land, liftFlyers, prFlipKey, useBooted } from "./motion.js";
 import { repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
 import { DEFAULT_SORT, prItems } from "./prTable.js";
+import { type Happening, happenings, WINDOW } from "./replay.js";
 import { type GroupBy, toggleCollapsed } from "./table.js";
 import { useDashboard } from "./useDashboard.js";
 import { useDrag } from "./useDrag.js";
 import { useNotifications } from "./useNotifications.js";
+import type { ReplayRun } from "./useReplay.js";
 import { ESCAPE, SLASH, T, useShortcuts } from "./useShortcuts.js";
 import { readView, type View, writeView } from "./view.js";
 
@@ -31,7 +34,23 @@ type OpenSheet = { pr: { repo: string; number: number }; from: DOMRectReadOnly; 
 
 /** The card or row of a PR in the view shown, if it is there. */
 function source(pr: OpenSheet["pr"]): HTMLElement | null {
-  return document.querySelector<HTMLElement>(`[data-flip="${CSS.escape(prFlipKey(pr))}"]`);
+  return byFlipKey(prFlipKey(pr));
+}
+
+/** The element with the FLIP key `key`, if it is there. */
+function byFlipKey(key: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-flip="${CSS.escape(key)}"]`);
+}
+
+/** A replayed happening flashes the card or row of its PR (`key` is its prKey), if it shows in the view; else only the feed has it. */
+function fire(happening: Happening): void {
+  const el = byFlipKey(`pr:${happening.key}`);
+  if (el && el.getClientRects().length > 0) flash(el, happening.color, el.classList.contains("trow") ? "row" : "card");
+}
+
+/** Where a sheet opened from the feed grows from when its PR does not show: a card's size in the middle of the window. */
+function middleRect(): DOMRect {
+  return new DOMRect(innerWidth / 2 - 140, innerHeight / 2 - 60, 280, 120);
 }
 
 /** Gives the focus back to the card or row of a PR, once the render that shows it again has run. */
@@ -62,6 +81,13 @@ export function App() {
   if (live) shown.current = live;
   const openSheet = (pr: DashboardPullRequest, from: HTMLElement) =>
     setSheet({ pr: { repo: pr.repo, number: pr.number }, from: from.getBoundingClientRect(), closing: false });
+  // A toast in the replay's feed opens the sheet of its PR while it is open, from its card or row if that shows.
+  const openFromFeed = (key: string) => {
+    const found = findOpen(state, key);
+    if (!found) return;
+    const pr = { repo: found.pr.repo, number: found.pr.number };
+    setSheet({ pr, from: source(pr)?.getBoundingClientRect() ?? middleRect(), closing: false });
+  };
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
   const viewRoot = useRef<HTMLDivElement>(null);
   const fx = useRef<HTMLDivElement>(null);
@@ -108,6 +134,18 @@ export function App() {
   const items = useMemo(() => (filtered ? prItems(filtered.sections) : []), [filtered]);
   const nothingOpen = openPrRepos.length === 0;
 
+  // "Пусни деня": the happenings of the PRs the toolbar keeps and the snapshot's time, frozen as it starts.
+  const [replay, setReplay] = useState<ReplayRun | null>(null);
+  const toggleReplay = () => {
+    if (replay || !state?.fetchedAt || !filtered) {
+      setReplay(null);
+      return;
+    }
+    const end = Date.parse(state.fetchedAt);
+    const start = end - WINDOW;
+    setReplay({ events: happenings(filtered.sections.flatMap((s) => s.pullRequests), filtered.recentlyClosed, start, end), start, end });
+  };
+
   return (
     <>
       <div class="bg" aria-hidden="true">
@@ -126,8 +164,20 @@ export function App() {
             shown={items.length}
             total={openPrRepos.length}
             inputRef={filterInput}
+            replay={{ on: replay !== null, disabled: !state.fetchedAt, onToggle: toggleReplay }}
           />
         )}
+        {replay ? (
+          <Replay
+            run={replay}
+            onFire={fire}
+            held={sheet !== null}
+            hue={(repo) => repoHue(hues, repo)}
+            canOpen={(key) => findOpen(state, key) !== undefined}
+            onOpen={openFromFeed}
+            onClose={() => setReplay(null)}
+          />
+        ) : null}
       </TopBar>
       <Banners
         error={errorText(state, stream)}

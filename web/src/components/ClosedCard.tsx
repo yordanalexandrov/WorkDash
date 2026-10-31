@@ -23,6 +23,7 @@ export function ClosedCard({ pr, hue, index }: { pr: ClosedPullRequest; hue: num
           <Avatar login={pr.author} title={`автор: ${pr.author}`} />
           <span class={`closed-st ${merged ? "merged" : "bad"}`}>{merged ? "🎉 merged" : "затворен без merge"}</span>
         </div>
+        <span class="card-wrap" aria-hidden="true" />
       </article>
     </div>
   );

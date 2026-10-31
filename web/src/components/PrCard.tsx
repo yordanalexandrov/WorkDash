@@ -115,6 +115,7 @@ export function PrCard({ pr, hue, index, onSeen, onOpen, ghost, onGrab }: PrCard
             </button>
           ) : null}
         </div>
+        <span class="card-wrap" aria-hidden="true" />
       </article>
     </div>
   );
