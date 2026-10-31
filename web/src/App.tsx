@@ -27,7 +27,7 @@ import { useDashboard } from "./useDashboard.js";
 import { useDrag } from "./useDrag.js";
 import { useNotifications } from "./useNotifications.js";
 import type { ReplayRun } from "./useReplay.js";
-import { ESCAPE, SLASH, T, useShortcuts } from "./useShortcuts.js";
+import { ESCAPE, F, SLASH, T, useShortcuts } from "./useShortcuts.js";
 import { readView, type View, writeView } from "./view.js";
 
 /** The PR whose detail sheet is open, the rect it grew out of, and whether it is shrinking back. */
@@ -106,6 +106,9 @@ export function App() {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set([CLOSED_GROUP]));
   const filterInput = useRef<HTMLInputElement>(null);
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
+  // The sheet's last size: the next one opens in it. Not kept between visits, so a reload opens it normal.
+  const [expanded, setExpanded] = useState(false);
+  const toggleSize = () => setExpanded((current) => !current);
   // What the sheet shows: the PR as the state has it now, or, once it has left the open ones, as it last was.
   const live = sheet ? findOpen(state, prKey(sheet.pr)) : undefined;
   const shown = useRef<{ pr: DashboardPullRequest; section: Section }>();
@@ -141,11 +144,12 @@ export function App() {
     lifted.current = null;
     if (flyers && viewRoot.current) void land(viewRoot.current, flyers);
   }, [view]);
-  // While the sheet is open, Esc closes it and `/` and `t` do nothing. While a card is dragged, Esc puts it back (`useDrag`).
+  // While the sheet is open, Esc closes it, `f` expands or shrinks it and `/` and `t` do nothing. While a card is dragged, Esc puts it back (`useDrag`).
   useShortcuts(
     sheet
       ? [
           { matches: ESCAPE, run: closeSheet },
+          { matches: F, run: () => !sheet.closing && toggleSize() },
           { matches: (event) => SLASH(event) || T(event), run: () => {} },
         ]
       : [
@@ -321,6 +325,8 @@ export function App() {
           label={shown.current.pr.title}
           from={sheet.from}
           closing={sheet.closing}
+          expanded={expanded}
+          onToggleSize={toggleSize}
           target={() => (live ? (source(sheet.pr)?.getBoundingClientRect() ?? null) : null)}
           onClose={closeSheet}
           onClosed={() => {
