@@ -13,6 +13,13 @@ Once the implementation exists, the code holds the values (tokens, palette, spri
 
 **Parity rule**: a new piece of PR data appears in all three places: the card, the table row (as a column, sortable when it has an order) and the detail sheet. A feature that fits only one view is a sign the data needs a different shape.
 
+## Settings
+
+- **Настройки** is a third screen, not a view of the PRs: the gear (⚙) at the end of the top bar, or `#settings` in the URL, puts it in place of the board or table (and closes the sheet and "Пусни деня"); the gear or ✕ or Esc goes back. The view toggle and the toolbar step aside while it shows. Banners about something set there (no token or repos yet, a token GitHub refuses, a rejected config.yaml) link to it with a "⚙ Настройки" chip.
+- One card per part of config.yaml (GitHub, Repos, Екипът, Jira, Review, Нотификации) in a grid of glassy panels like the columns, entering in the columns' cascade. Lists are rows with a ✕ and an add field below; a checkbox is a switch whose knob glides.
+- Everything but the token is one **draft**: the sticky bar at the bottom says whether it has unsaved changes, and "Запази" / "Отказ" act on all of it. A field the server refuses shows its message under it in `--bad`; what GitHub does not know (a repo the token cannot see, a login that does not exist) is a `--pending` warning that never blocks a save.
+- The token is saved on its own, only after GitHub takes it, and shows only masked (`ghp_…1234`), with whose it is, its scopes and its rate limit.
+
 ## Colour roles
 
 Colour carries meaning, and each colour family has exactly one job:

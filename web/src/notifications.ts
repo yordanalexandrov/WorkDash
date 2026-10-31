@@ -26,6 +26,11 @@ const EVENT_TEXT: Record<EventType, { what: (event: PrEvent) => string; missed: 
   team_pr_opened: { what: (e) => `${e.actor} отвори PR`, missed: "Нови PR-и на екипа" },
 };
 
+/** The name of an event type, as a missed summary and the Settings screen list it. */
+export function eventLabel(type: EventType): string {
+  return EVENT_TEXT[type].missed;
+}
+
 /** What happened on the PR, in a few words. */
 export function whatHappened(event: PrEvent): string {
   return EVENT_TEXT[event.type].what(event);

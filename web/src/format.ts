@@ -39,7 +39,7 @@ export type Status = { text: string; stale: boolean };
  */
 export function statusText(state: DashboardState | null, now: Date): Status {
   if (!state) return { text: "Зареждане…", stale: false };
-  if (!state.fetchedAt) return { text: "Чака първия poll…", stale: false };
+  if (!state.fetchedAt) return { text: state.missing.length ? "Чака настройки…" : "Чака първия poll…", stale: false };
   if (state.pollMode === "periodic") return { text: `${state.viewer} · последен успешен poll в ${new Date(state.fetchedAt).toLocaleTimeString()}`, stale: false };
   const ago = now.getTime() - Date.parse(state.fetchedAt);
   return { text: `${state.viewer} · последен poll ${agoText(ago)}`, stale: ago >= STALE_MS };
@@ -71,7 +71,7 @@ export function errorText(state: DashboardState | null, stream: StreamStatus): s
 function pollErrorText({ kind, message, resetAt }: PollError, mode: PollMode): string {
   switch (kind) {
     case "auth":
-      return `GitHub отказва токена (невалиден или изтекъл): ${message}`;
+      return `GitHub отказва токена (невалиден или изтекъл), poll-ът е спрян до нов токен: ${message}`;
     case "rate_limit":
       if (resetAt && mode === "on_demand") return `Изчерпан rate limit на GitHub, „Обнови“ работи пак от ${new Date(resetAt).toLocaleTimeString()}`;
       return resetAt
@@ -82,6 +82,20 @@ function pollErrorText({ kind, message, resetAt }: PollError, mode: PollMode): s
     default:
       return `Последният poll е неуспешен: ${message}`;
   }
+}
+
+/** The banner for a dashboard that cannot poll yet: what to add in Settings; null when nothing is missing. */
+export function missingText(state: DashboardState | null): string | null {
+  const missing = state?.missing ?? [];
+  if (missing.includes("token") && missing.includes("repos")) return "Няма GitHub токен и repo-та: добави ги в Настройки.";
+  if (missing.includes("token")) return "Няма GitHub токен: добави го в Настройки.";
+  if (missing.includes("repos")) return "Няма repo-та за следене: добави ги в Настройки.";
+  return null;
+}
+
+/** Whether the poll error is one only Settings mends: GitHub refuses the token. */
+export function needsNewToken(state: DashboardState | null): boolean {
+  return state?.error?.kind === "auth";
 }
 
 /** The banner for a config.yaml edit the server rejected, or null when the file on disk is in effect. */
