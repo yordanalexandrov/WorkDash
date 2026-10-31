@@ -1,10 +1,11 @@
-import type { Issue, IssueSnapshot } from "../domain/issues.js";
+import type { Issue, IssueSnapshot, LinkedPullRequestStatus } from "../domain/issues.js";
 import { postGraphQL } from "./client.js";
 import { PAGE_SIZE } from "./query.js";
 
 // One query per poll of the open repo: no comment bodies, so it stays cheap enough to run on every visit.
 const LABELS_PAGE_SIZE = 20;
 const ASSIGNEES_PAGE_SIZE = 10;
+const LINKED_PULL_REQUESTS_PAGE_SIZE = 10;
 
 /** The query for the open issues of one repo, the most recently updated first, and how many are open in all. */
 const ISSUES_QUERY = `query RepositoryIssues($owner: String!, $name: String!) {
@@ -22,6 +23,10 @@ const ISSUES_QUERY = `query RepositoryIssues($owner: String!, $name: String!) {
         labels(first: ${LABELS_PAGE_SIZE}) { nodes { name color } }
         assignees(first: ${ASSIGNEES_PAGE_SIZE}) { nodes { login } }
         comments { totalCount }
+        milestone { title dueOn }
+        closedByPullRequestsReferences(first: ${LINKED_PULL_REQUESTS_PAGE_SIZE}) {
+          nodes { number url state isDraft repository { nameWithOwner } }
+        }
       }
     }
   }
@@ -37,6 +42,16 @@ type IssueNode = {
   labels: { nodes: { name: string; color: string }[] };
   assignees: { nodes: { login: string }[] };
   comments: { totalCount: number };
+  milestone: { title: string; dueOn: string | null } | null;
+  closedByPullRequestsReferences: { nodes: LinkedPullRequestNode[] };
+};
+
+type LinkedPullRequestNode = {
+  number: number;
+  url: string;
+  state: "OPEN" | "MERGED" | "CLOSED";
+  isDraft: boolean;
+  repository: { nameWithOwner: string };
 };
 
 type IssuesData = {
@@ -67,7 +82,20 @@ function toIssue(repo: string, node: IssueNode): Issue {
     labels: node.labels.nodes.map(({ name, color }) => ({ name, color })),
     assignees: node.assignees.nodes.map((assignee) => assignee.login),
     comments: node.comments.totalCount,
+    milestone: node.milestone && { title: node.milestone.title, dueOn: node.milestone.dueOn },
+    linkedPullRequests: node.closedByPullRequestsReferences.nodes.map((pr) => ({
+      repo: pr.repository.nameWithOwner,
+      number: pr.number,
+      url: pr.url,
+      status: linkedStatus(pr),
+    })),
     createdAt: node.createdAt,
     updatedAt: node.updatedAt,
   };
+}
+
+/** An open draft is a draft; otherwise GitHub's state says it. */
+function linkedStatus(pr: LinkedPullRequestNode): LinkedPullRequestStatus {
+  if (pr.state === "OPEN") return pr.isDraft ? "draft" : "open";
+  return pr.state === "MERGED" ? "merged" : "closed";
 }

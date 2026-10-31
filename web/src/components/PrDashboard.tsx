@@ -226,6 +226,7 @@ export function PrDashboard({ state, seen, shown, view, hues, topSlot, fx, boote
           <>
             <Toolbar
               repos={chips.map(({ repo, count }) => ({ repo, name: shortRepo(repo), hue: hue(repo), count }))}
+              placeholder="Филтър: PR, автор, branch, Jira…"
               filter={filter}
               onChange={setFilter}
               canFilterMine={state.viewer !== null}

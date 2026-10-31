@@ -39,6 +39,8 @@ export function issue(overrides: Partial<Issue> = {}): Issue {
     labels: [],
     assignees: [],
     comments: 0,
+    milestone: null,
+    linkedPullRequests: [],
     createdAt: "2026-10-29T10:00:00Z",
     updatedAt: "2026-10-30T10:00:00Z",
     ...overrides,
