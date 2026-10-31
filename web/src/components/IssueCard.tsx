@@ -4,6 +4,7 @@ import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { labelChip } from "../labels.js";
 import { Avatar } from "./Avatar.js";
+import { LinkedPrs, MilestoneChip } from "./IssueMarks.js";
 
 type IssueCardProps = {
   issue: StagedIssue;
@@ -11,6 +12,8 @@ type IssueCardProps = {
   hue: number;
   /** The card's place in its column, which sets its turn in the entrance cascade. */
   index: number;
+  /** Whether it is assigned to me, which a quiet "теб" says; it never pulses. */
+  mine: boolean;
 };
 
 /** The FLIP key of an issue's card, so it glides to its new column when its stage changes. */
@@ -20,16 +23,21 @@ function issueFlipKey(issue: { repo: string; number: number }): string {
 
 /**
  * An open issue on the Issue dashboard's board: number, age, title, its labels but the stage label, the author, the
- * comment count and the assignees. No repo tag: the tab says the repo, the stripe and tint its project colour.
+ * comment count and the assignees; its milestone and Linked PRs when it has them, and "теб" when it is mine. No repo tag: the tab says the repo, the stripe and tint its project colour.
  * The slot is what moves (entrance, FLIP), as on the PR board.
  */
-export function IssueCard({ issue, hue, index }: IssueCardProps) {
+export function IssueCard({ issue, hue, index, mine }: IssueCardProps) {
   const labels = cardLabels(issue).map(labelChip);
   return (
     <div class="slot" data-flip={issueFlipKey(issue)} style={{ "--ti": index }}>
       <article class="card" style={{ "--rh": hue }}>
         <div class="card-top">
           <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>
+          {mine ? (
+            <span class="me" title="назначен на теб">
+              теб
+            </span>
+          ) : null}
           <span class="age" title={`отворен ${new Date(issue.createdAt).toLocaleString()} · обновен преди ${age(issue.updatedAt)}`}>
             {age(issue.createdAt)}
           </span>
@@ -44,6 +52,12 @@ export function IssueCard({ issue, hue, index }: IssueCardProps) {
                 {name}
               </span>
             ))}
+          </div>
+        ) : null}
+        {issue.milestone || issue.linkedPullRequests.length ? (
+          <div class="issue-meta">
+            <MilestoneChip issue={issue} />
+            <LinkedPrs issue={issue} />
           </div>
         ) : null}
         <div class="card-foot">

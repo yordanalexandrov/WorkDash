@@ -665,6 +665,17 @@ describe("the issues API", () => {
     expect(body.issues[0].stage).toBe("ready-for-agent");
   });
 
+  it("serves each issue's milestone and Linked PRs as the poll saved them", async () => {
+    const { server, store } = serverWith();
+    const milestone = { title: "v2.0", dueOn: "2026-11-30T00:00:00Z" };
+    const linkedPullRequests = [{ repo: "my-org/repo-a", number: 12, url: "https://github.com/my-org/repo-a/pull/12", status: "draft" as const }];
+    store.saveIssues({ repo: "my-org/repo-a", issues: [issue({ number: 3, milestone, linkedPullRequests })], totalCount: 1 }, new Date());
+
+    const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
+
+    expect(body.issues[0]).toMatchObject({ milestone, linkedPullRequests });
+  });
+
   it("serves no repo that is not followed", async () => {
     const { server } = serverWith();
 

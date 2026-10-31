@@ -153,6 +153,7 @@ export function App() {
             fetched={state.fetchedAt !== null}
             issues={issues.state}
             hues={hues}
+            viewer={state.viewer}
             repo={place.repo}
             onRepo={(repo) => goTo({ dashboard: "issues", repo })}
             topSlot={topSlot}

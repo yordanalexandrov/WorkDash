@@ -4,6 +4,7 @@ import type { IssueBoardState } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
 import { shortRepo } from "../format.js";
 import { issueColumns } from "../issueBoard.js";
+import { assignedToMe } from "../issueMarks.js";
 import { repoHue } from "../palette.js";
 import { Board } from "./Board.js";
 import { IssueCard } from "./IssueCard.js";
@@ -18,6 +19,8 @@ type IssueDashboardProps = {
   issues: IssueBoardState | null;
   /** The project colours, shared with the PR dashboard so a repo has one colour on both. */
   hues: Map<string, number>;
+  /** Who I am on GitHub, so the issues assigned to me say "теб"; null before the first poll. */
+  viewer: string | null;
   /** The repo the URL asks for; the first tab opens when it has none. */
   repo: string | null;
   onRepo(repo: string): void;
@@ -40,7 +43,7 @@ function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardS
 }
 
 /** The Issue dashboard: a tab per repo in the top bar, and the open repo's issues on a board by stage. */
-export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, topSlot, booted }: IssueDashboardProps) {
+export function IssueDashboard({ issueRepos, fetched, issues, hues, viewer, repo, onRepo, topSlot, booted }: IssueDashboardProps) {
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
@@ -61,7 +64,11 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
           )
         : null}
       <Board columns={columns} booted={booted} message={boardMessage(open, fetched, shown)}>
-        {(column) => column.items.map((issue, index) => <IssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)}
+        {(column) =>
+          column.items.map((issue, index) => (
+            <IssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} mine={assignedToMe(issue, viewer)} />
+          ))
+        }
       </Board>
     </>
   );
