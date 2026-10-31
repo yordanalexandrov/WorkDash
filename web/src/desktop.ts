@@ -3,7 +3,7 @@
 export type DesktopBridge = {
   desktop: true;
   /** Shows and focuses the app's window, also when it is hidden. */
-  showWindow(): void;
+  showWindow: () => void;
 };
 
 declare global {

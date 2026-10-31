@@ -65,7 +65,7 @@ type NotificationEnv = {
 const browserEnv = (): NotificationEnv => ({
   Notification: browserNotification,
   registration: serviceWorkerRegistration(),
-  ...(desktopBridge && { focus: () => desktopBridge?.showWindow() }),
+  ...(desktopBridge && { focus: desktopBridge.showWindow }),
 });
 
 /** Shows a notification via the service worker, else `new Notification`; a click opens `url` or the dashboard. */
