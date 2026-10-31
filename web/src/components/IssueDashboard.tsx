@@ -1,6 +1,6 @@
 import type { RefObject } from "preact";
 import { createPortal } from "preact/compat";
-import { useEffect, useMemo, useRef } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { IssueBoardState } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
 import { confetti, middleOf, newlyCompleted } from "../effects.js";
@@ -11,10 +11,13 @@ import { filterIssueColumns, filterIssues } from "../issueFilter.js";
 import { assignedToMe } from "../issueMarks.js";
 import { BOUNCE, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
+import { type GroupBy, toggleCollapsed } from "../table.js";
 import { ESCAPE, SLASH, useShortcuts } from "../useShortcuts.js";
+import type { View } from "../view.js";
 import { Board } from "./Board.js";
 import { ClosedIssueCard } from "./ClosedIssueCard.js";
 import { IssueCard } from "./IssueCard.js";
+import { CLOSED_ISSUES, ISSUE_DEFAULT_SORT, IssueTable } from "./IssueTable.js";
 import { IssueTabs } from "./IssueTabs.js";
 import { Toolbar } from "./Toolbar.js";
 
@@ -35,6 +38,8 @@ type IssueDashboardProps = {
   onFilter(filter: Filter): void;
   /** Who I am, for "само моите" and the "теб" on the issues assigned to me; null until the first poll says. */
   viewer: string | null;
+  /** Board or table, as the app's toggle says. */
+  view: View;
   /** Where in the top bar the tabs go, below the toggles. */
   topSlot: HTMLElement | null;
   /** The effects layer, for the confetti of an issue completed while the board shows. */
@@ -70,17 +75,23 @@ function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardS
 }
 
 /**
- * The Issue dashboard: a tab per repo and the toolbar in the top bar, and the open repo's issues on a board by stage.
+ * The Issue dashboard: a tab per repo and the toolbar in the top bar, and the open repo's issues on a board by stage or
+ * in a table.
  * Its own keys (`/` and Esc for the filter) come before the app's.
  */
-export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, topSlot, fx, booted }: IssueDashboardProps) {
+export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, view, topSlot, fx, booted }: IssueDashboardProps) {
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
   const shown = issues && open && issues.repo.toLowerCase() === open.toLowerCase() ? issues : null;
   // Every column the board has goes through the filter; the toolbar's "N от M" counts the open issues.
   const columns = useMemo(() => (shown ? filterIssueColumns(issueColumns(shown), filter, viewer) : []), [shown, filter, viewer]);
-  const kept = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer).length : 0), [shown, filter, viewer]);
+  const keptIssues = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer) : []), [shown, filter, viewer]);
+  const keptClosed = useMemo(() => (shown ? filterIssues(shown.closed, filter, viewer) : []), [shown, filter, viewer]);
+  // The table's sort, grouping and folded groups outlast a trip to the board and a change of tab, not one to the PRs.
+  const [sort, setSort] = useState(ISSUE_DEFAULT_SORT);
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set([CLOSED_ISSUES]));
   const filterInput = useRef<HTMLInputElement>(null);
   useShortcuts(
     [
@@ -118,7 +129,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
                 filter={filter}
                 onChange={onFilter}
                 canFilterMine={viewer !== null}
-                shown={kept}
+                shown={keptIssues.length}
                 total={shown?.issues.length ?? 0}
                 inputRef={filterInput}
               />
@@ -126,15 +137,36 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
             topSlot,
           )
         : null}
-      <Board columns={columns} booted={booted} message={boardMessage(open, fetched, shown)}>
-        {(column) =>
-          column.closed
-            ? column.items.map((issue, index) => <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
-            : column.items.map((issue, index) => (
-                <IssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} mine={assignedToMe(issue, viewer)} />
-              ))
-        }
-      </Board>
+      {view === "table" && (
+        <IssueTable
+          issues={keptIssues}
+          closed={keptClosed}
+          stages={shown?.stages ?? []}
+          hue={hue}
+          viewer={viewer}
+          // Until the open repo's issues come there is nothing to say "none" about: the table says nothing, as the board.
+          message={boardMessage(open, fetched, shown) ?? (shown ? null : "")}
+          query={filter.query}
+          sort={sort}
+          onSort={setSort}
+          groupBy={groupBy}
+          onGroupBy={setGroupBy}
+          collapsed={collapsed}
+          onToggle={(id) => setCollapsed((current) => toggleCollapsed(current, id))}
+          booted={booted}
+        />
+      )}
+      {view === "board" && (
+        <Board columns={columns} booted={booted} message={boardMessage(open, fetched, shown)}>
+          {(column) =>
+            column.closed
+              ? column.items.map((issue, index) => <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
+              : column.items.map((issue, index) => (
+                  <IssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} mine={assignedToMe(issue, viewer)} />
+                ))
+          }
+        </Board>
+      )}
     </>
   );
 }

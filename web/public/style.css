@@ -1464,6 +1464,17 @@ kbd {
   }
 }
 
+/* The Issue table: #, title, stage, labels, assignees, author, 💬, milestone, Linked PRs, age, updated. */
+.tgrid.issues {
+  grid-template-columns: 46px minmax(260px, 1fr) minmax(70px, 140px) minmax(110px, 240px) max-content max-content 40px minmax(60px, 140px) max-content 46px 50px;
+}
+
+@media (max-width: 1400px) {
+  .tgrid.issues {
+    grid-template-columns: 46px minmax(170px, 1fr) minmax(70px, 120px) minmax(90px, 180px) max-content max-content 40px minmax(60px, 120px) max-content 46px 50px;
+  }
+}
+
 .thead,
 .trow {
   grid-column: 1 / -1;
@@ -1702,6 +1713,20 @@ kbd {
 
 .tc.span2 {
   grid-column: span 2;
+}
+
+.tc.span3 {
+  grid-column: span 3;
+}
+
+/* An issue row's labels wrap rather than being cut, like the Jira keys; its assignees start at the cell's left. */
+.tc.lbls {
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.tc.people {
+  margin-left: 0;
 }
 
 .tgroup {
