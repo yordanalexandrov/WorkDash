@@ -7,3 +7,6 @@ data/
 config.yaml
 *.iml
 web/dist/
+
+# Private terms for scripts/public-guard.ts (real names, logins, Jira keys)
+.public-guard-denylist

@@ -1,0 +1,49 @@
+name: Public
+
+# The repository is public: no employer data and no secrets may land in it (see CLAUDE.md).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # Editing the PR title or body runs the check again.
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  employer-data:
+    name: No employer data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Real names, logins and Jira keys live only in this secret; the script never prints them.
+      - run: node scripts/public-guard.ts "$RANGE"
+        env:
+          PUBLIC_GUARD_DENYLIST: ${{ secrets.PUBLIC_GUARD_DENYLIST }}
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+          PR_TEXT: |
+            ${{ github.event.pull_request.title }}
+            ${{ github.event.pull_request.body }}
+
+  secrets:
+    name: No secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The job only reads; findings show in the log and the job summary.
+          GITLEAKS_ENABLE_COMMENTS: false
