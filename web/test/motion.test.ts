@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGate, flipDeltas, spring } from "../src/motion.js";
+import { createGate, flipDeltas, morphTransform, spring } from "../src/motion.js";
 
 /** The points of a linear() easing. */
 function points(easing: string): number[] {
@@ -141,5 +141,19 @@ describe("createGate", () => {
     expect(seen).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(seen).toEqual(["a"]);
+  });
+});
+
+/** A rect as getBoundingClientRect gives it. */
+const rect = (left: number, top: number, width: number, height: number) =>
+  ({ left, top, width, height, x: left, y: top, right: left + width, bottom: top + height }) as DOMRectReadOnly;
+
+describe("morphTransform", () => {
+  it("leaves an element where it is when the rects are the same", () => {
+    expect(morphTransform(rect(10, 20, 300, 200), rect(10, 20, 300, 200))).toBe("translate(0px, 0px) scale(1, 1)");
+  });
+
+  it("shrinks onto a smaller rect, moved by the difference of their corners", () => {
+    expect(morphTransform(rect(100, 300, 380, 100), rect(260, 60, 760, 400))).toBe("translate(-160px, 240px) scale(0.5, 0.25)");
   });
 });

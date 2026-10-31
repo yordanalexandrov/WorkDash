@@ -237,6 +237,41 @@ export function useBooted(): boolean {
   return booted;
 }
 
+/** The transform that lays an element whose rect is `to` over `from`: translate and scale, with transform-origin 0 0. */
+export function morphTransform(from: DOMRectReadOnly, to: DOMRectReadOnly): string {
+  return `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`;
+}
+
+/** `el` grows out of `from` into its place with GLIDE; nothing moves under reduced motion. */
+export function growFrom(el: HTMLElement, from: DOMRectReadOnly): void {
+  if (reducedMotion()) return;
+  el.animate([{ transform: morphTransform(from, el.getBoundingClientRect()) }, { transform: "none" }], {
+    duration: GLIDE.duration,
+    easing: GLIDE.easing,
+  });
+}
+
+/**
+ * `el` shrinks onto `to` with GLIDE, holding the board's gate meanwhile, so a snapshot that arrives on the way renders after it.
+ * It carries on from wherever a grow still running has it. Resolves when it has shrunk; at once under reduced motion.
+ */
+export function shrinkTo(el: HTMLElement, to: DOMRectReadOnly): Promise<void> {
+  if (reducedMotion()) return Promise.resolve();
+  const now = getComputedStyle(el).transform;
+  for (const animation of el.getAnimations()) animation.cancel();
+  const shrink = el.animate([{ transform: now }, { transform: morphTransform(to, el.getBoundingClientRect()) }], {
+    duration: GLIDE.duration,
+    easing: GLIDE.easing,
+    fill: "forwards",
+  });
+  const done = shrink.finished.then(
+    () => undefined,
+    () => undefined,
+  );
+  holdWhile(done);
+  return done;
+}
+
 // A card slides out to the right and shrinks; a row slides out and folds flat.
 const LEAVE: Record<"card" | "row", Keyframe[]> = {
   card: [
