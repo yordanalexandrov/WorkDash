@@ -1,6 +1,8 @@
 import { join } from "node:path";
-import { app, BrowserWindow, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, type IpcMainEvent, screen, shell } from "electron";
+import { SHOW_WINDOW } from "./ipc.js";
 import { linkTarget } from "./links.js";
+import { allowsPermission } from "./permissions.js";
 import { loadWindowState, saveWindowState } from "./window-state.js";
 
 function stateFile(): string {
@@ -27,6 +29,8 @@ export function openWindow(url: string): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // Built next to main.cjs by `npm run build:desktop`.
+      preload: join(app.getAppPath(), "dist", "preload.cjs"),
       // SSE and notifications keep going while the window is hidden or in the background.
       backgroundThrottling: false,
     },
@@ -51,6 +55,18 @@ export function openWindow(url: string): BrowserWindow {
     event.preventDefault();
     toBrowser(event.url);
   });
+
+  // The page's web notifications show as native ones; it may ask for nothing else.
+  const session = window.webContents.session;
+  session.setPermissionRequestHandler((_contents, permission, callback) => callback(allowsPermission(permission)));
+  session.setPermissionCheckHandler((_contents, permission) => allowsPermission(permission));
+
+  // A click on the missed summary shows the window, also when it is hidden.
+  const onShowWindow = (event: IpcMainEvent) => {
+    if (event.sender === window.webContents) showWindow(window);
+  };
+  ipcMain.on(SHOW_WINDOW, onShowWindow);
+  window.once("closed", () => ipcMain.off(SHOW_WINDOW, onShowWindow));
 
   void window.loadURL(url);
   return window;

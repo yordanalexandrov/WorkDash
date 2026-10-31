@@ -122,7 +122,7 @@ Service worker-ът, а с него и инсталирането, изискв�
 
 ```sh
 npm install --prefix desktop   # веднъж: Electron и better-sqlite3 на desktop пакета
-npm run desktop                # билдва web/dist и desktop/dist/main.cjs и пуска Electron
+npm run desktop                # билдва web/dist и desktop/dist (main.cjs, preload.cjs) и пуска Electron
 ```
 
 Сървърът върви в процеса на Electron на свободен порт на `127.0.0.1` (ADR 0002). Данните, размерът и позицията на

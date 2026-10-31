@@ -2,6 +2,7 @@
 
 import type { EventType, PrEvent } from "../../src/domain/events.js";
 import type { Missed, MissedNotice } from "../../src/domain/notify.js";
+import { desktopBridge } from "./desktop.js";
 import { serviceWorkerRegistration } from "./serviceWorker.js";
 
 export type { Missed, MissedNotice, PrEvent };
@@ -57,13 +58,19 @@ type NotificationEnv = {
   Notification: typeof Notification | undefined;
   registration: Promise<ServiceWorkerRegistration | null>;
   open?: (url: string) => void;
+  /** Brings the dashboard forward; in the desktop app it also shows the hidden window. */
+  focus?: () => void;
 };
 
-const browserEnv = (): NotificationEnv => ({ Notification: browserNotification, registration: serviceWorkerRegistration() });
+const browserEnv = (): NotificationEnv => ({
+  Notification: browserNotification,
+  registration: serviceWorkerRegistration(),
+  ...(desktopBridge && { focus: () => desktopBridge?.showWindow() }),
+});
 
 /** Shows a notification via the service worker, else `new Notification`; a click opens `url` or the dashboard. */
 async function show(env: NotificationEnv, title: string, options: { body: string; tag: string }, url?: string): Promise<boolean> {
-  const { Notification: NotificationApi, open = (target) => window.open(target, "_blank") } = env;
+  const { Notification: NotificationApi, open = (target) => window.open(target, "_blank"), focus = () => window.focus() } = env;
   if (notificationPermission(NotificationApi) !== "granted") return false;
   const registration = await env.registration;
   if (registration) {
@@ -73,7 +80,7 @@ async function show(env: NotificationEnv, title: string, options: { body: string
   const notification = new NotificationApi!(title, options);
   notification.onclick = () => {
     if (url) open(url);
-    else window.focus();
+    else focus();
     notification.close();
   };
   return true;
