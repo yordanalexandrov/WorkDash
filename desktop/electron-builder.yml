@@ -30,12 +30,16 @@ linux:
     - target: deb
       arch: [x64]
   executableName: workdash
-  icon: ../web/public/icons/icon-512.png
+  # hicolor/<n>x<n>/apps/workdash.png: the app menu, the dock and Alt+Tab take the icon from the .desktop entry, not the
+  # window. Made from web/public/icons/icon-512.png (test/icons.test.ts), e.g. with Pillow's resize(LANCZOS).
+  icon: build/icons
   category: Development
   synopsis: GitHub pull requests that need you, on one screen
   maintainer: Yordan Alexandrov <lamercian@gmail.com>
   desktop:
     entry:
       Name: WorkDash
-      StartupWMClass: WorkDash
+      # What the window reports, from desktopName in package.json: WM_CLASS on X11, app_id on Wayland. The dock
+      # matches it to workdash.desktop.
+      StartupWMClass: workdash
 

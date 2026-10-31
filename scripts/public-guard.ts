@@ -51,7 +51,8 @@ function main(range: string | undefined) {
   const report = (where: string, text: string) => findLeaks(text, denylist).forEach(({ line, kind }) => found.push(`${where}:${line}: ${kind}`));
 
   for (const path of git("ls-files", "-z").split("\0")) {
-    if (!path || path === "package-lock.json") continue;
+    // npm writes the lockfiles from the registry: package authors' addresses, not ours.
+    if (!path || path.endsWith("package-lock.json")) continue;
     const content = readFileSync(path);
     if (!content.includes(0)) report(path, content.toString("utf8"));
   }

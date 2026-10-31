@@ -138,6 +138,22 @@ sudo chown root desktop/node_modules/electron/dist/chrome-sandbox
 sudo chmod 4755 desktop/node_modules/electron/dist/chrome-sandbox
 ```
 
+#### deb пакет
+
+```sh
+npm run build:deb                                    # desktop/release/workdash_<версия>_amd64.deb
+sudo apt install ./desktop/release/workdash_*_amd64.deb
+```
+
+Пакетът (Ubuntu 22.04+, Linux Mint 21+, x64) слага приложението в `/opt/WorkDash`, команда `workdash` в `/usr/bin`,
+запис в менюто с приложения и иконите от `desktop/build/icons` в `hicolor`. На Ubuntu 24.04 инсталира и AppArmor
+профил, който позволява user namespaces на `/opt/WorkDash/workdash`, така че sandbox-ът работи без горните
+`chown`/`chmod`. Dock-ът и Alt+Tab взимат иконата от `workdash.desktop` по WM_CLASS / app id `workdash`
+(`desktopName` в `desktop/package.json`); `npm run desktop` получава същата икона, ако пакетът е инсталиран.
+
+Версията на `desktop/` следва тази на корена. Release: `npm version <patch|minor|major>` вдига и двете, прави
+commit и таг `v<версия>`; `git push --follow-tags` пуска `release.yml`, който прикача deb-а към draft Release.
+
 ## Разработка
 
 ```sh
