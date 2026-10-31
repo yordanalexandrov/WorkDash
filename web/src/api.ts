@@ -1,4 +1,5 @@
 import type { ClassifiedPullRequest, Section } from "../../src/domain/classify.js";
+import type { IssueFamily } from "../../src/domain/issue-graph.js";
 import type { IssueDemand, IssuePollAnswer } from "../../src/domain/issue-poll.js";
 import type { ClosedIssue, IssueBoardState, IssueLabel, StagedIssue } from "../../src/domain/issues.js";
 import type { JiraLink } from "../../src/domain/jira.js";
@@ -8,7 +9,7 @@ import type { FieldIssue, Missing, SaveResult, SettingsForm, TokenStatus } from 
 import type { ClosedPullRequest } from "../../src/domain/types.js";
 import type { NamesCheck, TokenCheck } from "../../src/github/rest.js";
 
-export type { ClassifiedPullRequest, ClosedIssue, ClosedPullRequest, Demand, FieldIssue, IssueBoardState, IssueLabel, JiraLink, StagedIssue, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
+export type { ClassifiedPullRequest, ClosedIssue, ClosedPullRequest, Demand, FieldIssue, IssueBoardState, IssueFamily, IssueLabel, JiraLink, StagedIssue, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
 
 /** A PR as /api/prs serves it: classified, with links to the Jira tickets it names. */
 export type DashboardPullRequest = ClassifiedPullRequest & { jira: JiraLink[] };
@@ -75,6 +76,17 @@ export async function loadIssues(repo: string): Promise<IssueBoardState> {
   const response = await fetch(`/api/issues?repo=${encodeURIComponent(repo)}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return (await response.json()) as IssueBoardState;
+}
+
+/**
+ * The family of an issue, for its Dependency graph: what the server fetched within the last minute, unless `refresh` (a poll
+ * brought a change in the family drawn).
+ */
+export async function loadIssueGraph(issue: { repo: string; number: number }, refresh: boolean): Promise<IssueFamily> {
+  const query = new URLSearchParams({ repo: issue.repo, number: String(issue.number), ...(refresh ? { refresh: "true" } : {}) });
+  const response = await fetch(`/api/issues/graph?${query}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as IssueFamily;
 }
 
 /** Asks the server for a poll of a repo's issues; its start and end come back over the event stream as `issues` events. */

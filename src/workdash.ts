@@ -7,6 +7,7 @@ import { groupIntoSections, waitingOnMe } from "./domain/classify.js";
 import type { Missing } from "./domain/settings.js";
 import { createIssuePoller } from "./issue-poller.js";
 import { createNotifier } from "./notifier.js";
+import { createIssueGraphs } from "./issue-graphs.js";
 import { type PollerSettings, startPoller } from "./poller.js";
 import { buildServer, type DashboardSource, dashboardState, type IssueSource, issueBoardState } from "./server.js";
 import { createSettings } from "./settings.js";
@@ -142,6 +143,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     get poller() {
       return issuePoller;
     },
+    graphs: createIssueGraphs({ token: () => token }),
   };
   /** Pushes a repo's issues as they are now to every open browser; the pages on that repo take them. */
   const publishIssues = (repo: string) => {

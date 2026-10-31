@@ -1,4 +1,7 @@
+import type { IssueBoardState } from "../api.js";
 import { count } from "../badges.js";
+import { hasDependencies } from "../issueGraph.js";
+import { Dependencies } from "./Dependencies.js";
 import { cleanBody, latest } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
@@ -19,14 +22,17 @@ type IssueDetailProps = {
   mine: boolean;
   /** The issue has left the board (closed before the window, or no longer among the fetched ones); the sheet shows its last data. */
   gone: boolean;
+  /** The open repo's issues as they are now, for the Dependency graph. */
+  board: IssueBoardState | null;
 };
 
 /**
  * Everything about one issue ("Anatomy" → Detail sheet in docs/design.md): every fact of its card and row, with its stage
- * as a pill and every other label (a closed one: how it was closed and all its labels), plus the description, the latest comments and when it was opened, updated and closed.
+ * as a pill and every other label (a closed one: how it was closed and all its labels), plus the description, its
+ * Dependency graph when it has a parent, sub-issues or blockers, the latest comments and when it was opened, updated and closed.
  * Texts are markdown.
  */
-export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
+export function IssueDetail({ issue, hue, mine, gone, board }: IssueDetailProps) {
   const body = cleanBody(issue.body);
   const comments = latest(issue.latestComments, LATEST, (comment) => comment.createdAt);
   return (
@@ -72,6 +78,7 @@ export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
         <section class="pane">
           <h3>Описание</h3>
           {body ? <Markdown text={body} class="desc" /> : <p class="none">Няма описание</p>}
+          {hasDependencies(issue) ? <Dependencies issue={issue} board={board} /> : null}
         </section>
         <section class="pane">
           <h3>Последни коментари</h3>

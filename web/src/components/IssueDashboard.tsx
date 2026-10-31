@@ -260,7 +260,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
             refocus(sheet);
           }}
         >
-          <IssueDetail issue={shownSheet.current} hue={hue} mine={assignedToMe(shownSheet.current, viewer)} gone={!live} />
+          <IssueDetail issue={shownSheet.current} hue={hue} mine={assignedToMe(shownSheet.current, viewer)} gone={!live} board={shown} />
         </Sheet>
       ) : null}
     </>

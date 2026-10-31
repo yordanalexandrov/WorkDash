@@ -2012,6 +2012,82 @@ kbd {
   font-size: 13px;
 }
 
+/* "Зависимости": the summary line (a spinner while the graph loads), then the Dependency graph at its natural width. */
+.detail .deps-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail .deps .spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--line);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.detail .graph {
+  overflow-x: auto;
+}
+
+.detail .graph svg {
+  display: block;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* The nodes take their colours from the tokens, not mermaid's theme, so they read in both themes and follow a switch of
+   it; mermaid's own rules sit under the SVG's id, hence !important. Status family only: see "Colour roles". */
+.graph g.node :is(rect, path, polygon, circle) {
+  fill: var(--card) !important;
+  stroke: var(--faint) !important;
+  stroke-width: 1px !important;
+}
+
+.graph g.node .nodeLabel,
+.graph g.node text {
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+
+.graph g.node.dep-blocked :is(rect, path, polygon, circle) {
+  stroke: var(--pending) !important;
+  stroke-width: 2px !important;
+}
+
+.graph g.node.dep-completed :is(rect, path, polygon, circle) {
+  stroke: var(--merged) !important;
+}
+
+.graph g.node.dep-not_planned :is(rect, path, polygon, circle) {
+  stroke: var(--muted) !important;
+  stroke-dasharray: 4 3 !important;
+}
+
+.graph g.node.dep-not_planned .nodeLabel {
+  color: var(--muted) !important;
+}
+
+.graph g.node.dep-current :is(rect, path, polygon, circle) {
+  stroke: var(--blue) !important;
+  stroke-width: 3px !important;
+}
+
+.graph :is(.flowchart-link, .edgePath path) {
+  stroke: var(--muted) !important;
+}
+
+.graph .marker {
+  fill: var(--muted) !important;
+  stroke: var(--muted) !important;
+}
+
 .detail .item {
   display: flex;
   align-items: flex-start;
