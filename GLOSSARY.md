@@ -16,6 +16,14 @@ _Avoid_: Refresh, sync, reload
 When polls happen, the same for every open dashboard: **Periodic** (на всеки интервал) or **On-demand** (при поискване: when I come back to the dashboard or press "Обнови").
 _Avoid_: Refresh mode, auto-refresh
 
+**Desktop app**:
+The dashboard as an application of its own, with a window and a tray icon, beside the Docker one; both show the same dashboard.
+_Avoid_: Electron app, native app, client
+
+**Notification pause** (Пауза на нотификациите):
+A switch in the desktop app's tray that holds notifications back until it is switched off; what happened meanwhile then comes as one missed summary, as after quiet hours.
+_Avoid_: Mute, do not disturb, snooze
+
 **Settings** (Настройки):
 What I set up once for the dashboard and change from its Settings screen: the GitHub token, the poll interval, the repos, the team, Jira, review and notifications. The poll mode is not a setting: it is switched from the toolbar.
 _Avoid_: Config, preferences, options
