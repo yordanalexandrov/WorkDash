@@ -104,8 +104,8 @@ CI (`.github/workflows/ci.yml`) пуска typecheck, lint, тестовете �
 и проверява, че Docker образът се сглобява.
 `.github/workflows/public.yml` пази публичното repo: `scripts/public-guard.ts` търси чужди имейли, Jira
 инстанции и термини от частен списък във файловете, commit-ите и описанието на PR-а, а gitleaks търси
-токени. Списъкът (истински имена, логини, Jira ключове; по един на ред) е в secret-а
-`PUBLIC_GUARD_DENYLIST`, а локално в git-ignored файла `.public-guard-denylist`. CodeQL и Dependabot
+токени. Списъкът (истински имена, логини, Jira ключове) е в secret-а `PUBLIC_GUARD_DENYLIST`
+на един ред, разделен със запетаи, за да го маскира логът цял, а локално в git-ignored файла `.public-guard-denylist`. CodeQL и Dependabot
 са включени в настройките на repo-то и в `.github/dependabot.yml`.
 
 Frontend-ът е Preact (TSX) в `web/src`, сглобен от esbuild в `web/dist`; статичните файлове са в `web/public`.

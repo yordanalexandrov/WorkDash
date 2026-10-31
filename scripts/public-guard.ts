@@ -1,7 +1,7 @@
 // Fails when something that identifies the author's employer is about to go public: see "Public repository" in CLAUDE.md.
 // Scans tracked files, commit authors and messages in a range, and the PR title and body.
 // Real names, logins and Jira keys come from a private denylist: the PUBLIC_GUARD_DENYLIST secret in CI,
-// the git-ignored .public-guard-denylist locally; one term per line, # for comments.
+// the git-ignored .public-guard-denylist locally. In the secret keep them on one line, comma-separated, so the log masks it whole.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -27,12 +27,18 @@ export function findLeaks(text: string, denylist: string[] = []): Leak[] {
   return leaks;
 }
 
-function readDenylist(): string[] {
-  const raw = process.env.PUBLIC_GUARD_DENYLIST ?? (existsSync(".public-guard-denylist") ? readFileSync(".public-guard-denylist", "utf8") : "");
+/** Terms one per line or comma-separated; blank lines and lines starting with # are skipped. */
+export function parseDenylist(raw: string): string[] {
   return raw
     .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .flatMap((line) => line.split(","))
     .map((term) => term.trim())
-    .filter((term) => term && !term.startsWith("#"));
+    .filter(Boolean);
+}
+
+function readDenylist(): string[] {
+  return parseDenylist(process.env.PUBLIC_GUARD_DENYLIST ?? (existsSync(".public-guard-denylist") ? readFileSync(".public-guard-denylist", "utf8") : ""));
 }
 
 const git = (...args: string[]) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });

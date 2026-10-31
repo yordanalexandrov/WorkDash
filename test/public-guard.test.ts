@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findLeaks } from "../scripts/public-guard.js";
+import { findLeaks, parseDenylist } from "../scripts/public-guard.js";
 
 describe("findLeaks", () => {
   it("passes placeholders, the personal address and GitHub's noreply addresses", () => {
@@ -34,5 +34,12 @@ describe("findLeaks", () => {
 
   it("matches denylisted terms in Cyrillic too", () => {
     expect(findLeaks("работа за Фирма ООД", ["фирма"])).toEqual([{ line: 1, kind: "denylisted term" }]);
+  });
+});
+
+describe("parseDenylist", () => {
+  // A one-line secret is masked whole in the Actions log; a multi-line one is masked line by line at best.
+  it("takes terms one per line or comma-separated, skipping blanks and # comments", () => {
+    expect(parseDenylist("# names\nAcme, jdoe\n\n  PROJ ,\n")).toEqual(["Acme", "jdoe", "PROJ"]);
   });
 });
