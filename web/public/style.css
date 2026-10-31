@@ -345,6 +345,273 @@ h1 .live.ok::after {
   font-variant-numeric: tabular-nums;
 }
 
+/* "Пусни деня": on the right of the toolbar, a slowly sliding gradient (a picture twice its width moving by transform). */
+.toolbar .play {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-left: auto;
+  border: 0;
+  color: var(--on-status);
+  font-weight: 650;
+  box-shadow: 0 4px 16px -4px color-mix(in srgb, var(--merged) 60%, transparent);
+}
+
+.toolbar .play::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: 200%;
+  background: linear-gradient(90deg, var(--blue), var(--merged) 16.7%, var(--bad) 33.3%, var(--blue) 50%, var(--merged) 66.7%, var(--bad) 83.3%, var(--blue));
+  animation: play-slide 6s linear infinite;
+}
+
+.toolbar .play.on {
+  color: var(--chip-on-text);
+  background: var(--chip-on);
+  box-shadow: none;
+}
+
+.toolbar .play.on::before {
+  display: none;
+}
+
+.toolbar .play:disabled {
+  opacity: 0.5;
+}
+
+@keyframes play-slide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* The replay's panel under the toolbar: play/pause, the clock, the track of the 48 hours, the speeds and ✕. */
+.replay-wrap {
+  width: 100%;
+}
+
+.replay {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--col-solid);
+  box-shadow: var(--shadow);
+  animation: replay-in var(--bounce-ms, 600ms) var(--bounce, ease-out) both;
+}
+
+@keyframes replay-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+}
+
+.replay .btn {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--chip);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.replay .btn.on {
+  color: var(--chip-on-text);
+  background: var(--chip-on);
+}
+
+.replay .clock {
+  min-width: 132px;
+  font: 600 20px/1 ui-monospace, monospace;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.replay .clock small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font: 11px system-ui, sans-serif;
+}
+
+.replay .track {
+  position: relative;
+  height: 44px;
+}
+
+.replay svg {
+  position: absolute;
+  inset: 0 0 12px;
+  width: 100%;
+  height: 32px;
+}
+
+.replay .bar {
+  fill: var(--muted);
+}
+
+.replay .ahead {
+  opacity: 0.28;
+}
+
+.replay .bar.played {
+  fill: var(--merged);
+}
+
+.replay .now {
+  fill: var(--bad);
+}
+
+.replay input {
+  position: absolute;
+  right: 0;
+  bottom: -4px;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--merged);
+}
+
+.replay .speeds {
+  display: flex;
+  gap: 4px;
+}
+
+.replay .fired {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* The replay's feed on the right, under the bar: only the toasts take clicks, not the strip they are in. */
+.feed {
+  position: fixed;
+  right: 16px;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  pointer-events: none;
+}
+
+/* A toast bounces in from the right (backwards only, so that fading can move it after) and fades out before it goes. */
+.toast {
+  padding: 8px 10px;
+  border-left: 3px solid var(--c);
+  border-radius: 10px;
+  background: var(--col-solid);
+  box-shadow: var(--lifted);
+  font-size: 12.5px;
+  pointer-events: auto;
+  animation: toast-in var(--bounce-ms, 600ms) var(--bounce, ease-out) backwards;
+  transition:
+    opacity var(--glide-ms) var(--glide),
+    transform var(--glide-ms) var(--glide);
+}
+
+.toast.opens {
+  cursor: pointer;
+}
+
+.toast.old {
+  opacity: 0;
+  transform: translateX(30px);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+.toast .line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toast .tag {
+  margin-left: auto;
+}
+
+.toast .snip {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What a replayed happening flashes a card or row with, clipped to it: a ripple, a sweep, a glow. */
+.card-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  margin: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--rc) 0%, transparent 70%);
+  opacity: 0;
+}
+
+.sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--rc) 50%, transparent);
+  opacity: 0.45;
+}
+
+.glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 2px var(--rc),
+    inset 0 0 24px -4px var(--rc);
+  opacity: 0;
+}
+
+/* The flash under reduced motion: an outline, on and off. */
+.card.flashed,
+.trow.flashed {
+  outline: 2px solid var(--rc);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .replay {
+    grid-template-columns: auto 1fr;
+  }
+
+  .replay .track {
+    grid-column: 1 / -1;
+  }
+
+  .feed {
+    top: auto !important;
+    bottom: 16px;
+    width: calc(100vw - 32px);
+  }
+}
+
 .filter {
   position: relative;
   display: inline-flex;
@@ -1888,6 +2155,12 @@ kbd {
 
   .trow {
     translate: none !important;
+  }
+
+  /* The feed only comes and goes: a toast stays as it is until it is removed. */
+  .toast.old {
+    opacity: 1;
+    transform: none;
   }
 
   /* The zone only changes colour and text: no halo, no turning border, no growth. */

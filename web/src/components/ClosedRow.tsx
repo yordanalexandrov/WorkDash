@@ -36,6 +36,7 @@ export function ClosedRow({ pr, hue, index }: { pr: ClosedPullRequest; hue: numb
         <span class="age" title={`затворен ${new Date(pr.closedAt).toLocaleString()}`}>{`преди ${age(pr.closedAt)}`}</span>
       </span>
       <span class="tc" />
+      <span class="card-wrap" aria-hidden="true" />
     </div>
   );
 }

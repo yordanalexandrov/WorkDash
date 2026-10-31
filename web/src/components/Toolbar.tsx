@@ -14,10 +14,15 @@ type ToolbarProps = {
   shown: number;
   total: number;
   inputRef: RefObject<HTMLInputElement>;
+  /** "Пусни деня": whether it runs, whether it can (not before the first snapshot), and starting or stopping it. */
+  replay: { on: boolean; disabled: boolean; onToggle(): void };
 };
 
-/** The toolbar over the board (and later the table): the text filter, the repo chips that double as the colour legend, "само моите". */
-export function Toolbar({ repos, filter, onChange, canFilterMine, shown, total, inputRef }: ToolbarProps) {
+/**
+ * The toolbar over both views: the text filter, the repo chips that double as the colour legend, "само моите", and on the right
+ * "Пусни деня".
+ */
+export function Toolbar({ repos, filter, onChange, canFilterMine, shown, total, inputRef, replay }: ToolbarProps) {
   const { query } = filter;
   return (
     <div class="toolbar">
@@ -61,6 +66,16 @@ export function Toolbar({ repos, filter, onChange, canFilterMine, shown, total, 
       <Chip on={filter.mine} disabled={!canFilterMine} onClick={() => onChange({ ...filter, mine: !filter.mine })}>
         само моите
       </Chip>
+      <button
+        type="button"
+        class={`chip play${replay.on ? " on" : ""}`}
+        aria-pressed={replay.on}
+        title="Повтори активността от последните 48ч"
+        disabled={replay.disabled}
+        onClick={replay.onToggle}
+      >
+        <span>{replay.on ? "■ Спри" : "▶ Пусни деня"}</span>
+      </button>
     </div>
   );
 }

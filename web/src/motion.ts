@@ -553,3 +553,49 @@ export function land(root: HTMLElement, flyers: Flyer[]): Promise<void> {
   holdWhile(done);
   return done;
 }
+
+// A happening replayed on a card: a round ripple from its middle and a little bounce; on a row: a light sweep from left to
+// right and a short glow. Both live in the card's or row's `.card-wrap`, which clips them.
+const RIPPLE: Keyframe[] = [{ transform: "scale(0)", opacity: 0.9 }, { transform: "scale(9)", opacity: 0 }];
+const HOP: Keyframe[] = [{ scale: "1" }, { scale: "1.045", offset: 0.35 }, { scale: "1" }];
+const SWEEP: Keyframe[] = [{ transform: "translateX(-100%)" }, { transform: "translateX(100%)" }];
+const GLOW: Keyframe[] = [{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }];
+/** How long a flash stays under reduced motion: an outline, on and off. */
+const OUTLINE_MS = 600;
+const outlines = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+/**
+ * Something just happened to the PR of `el` (its [data-flip] slot or row): it is scrolled into sight and flashes in `color`.
+ * Under reduced motion it scrolls at once and is outlined in `color` for 600ms, with nothing moving.
+ */
+export function flash(el: HTMLElement, color: string, kind: "card" | "row"): void {
+  const wrap = el.querySelector<HTMLElement>(".card-wrap");
+  const box = kind === "card" ? el.querySelector<HTMLElement>(".card") : el;
+  if (!wrap || !box) return;
+  const reduced = reducedMotion();
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduced ? "auto" : "smooth" });
+  if (reduced) {
+    box.style.setProperty("--rc", color);
+    box.classList.add("flashed");
+    clearTimeout(outlines.get(box));
+    outlines.set(box, setTimeout(() => box.classList.remove("flashed"), OUTLINE_MS));
+    return;
+  }
+  const play = (kindOf: string, keyframes: Keyframe[], spring: Spring) => {
+    const bit = document.createElement("span");
+    bit.className = kindOf;
+    bit.style.setProperty("--rc", color);
+    wrap.appendChild(bit);
+    void bit.animate(keyframes, { duration: spring.duration, easing: spring.easing }).finished.then(
+      () => bit.remove(),
+      () => bit.remove(),
+    );
+  };
+  if (kind === "card") {
+    play("ripple", RIPPLE, GLIDE);
+    box.animate(HOP, { duration: BOUNCE.duration, easing: BOUNCE.easing });
+  } else {
+    play("sweep", SWEEP, GLIDE);
+    play("glow", GLOW, GLIDE);
+  }
+}
