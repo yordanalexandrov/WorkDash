@@ -8,6 +8,8 @@ import { GroupHead, type GroupHeadLook } from "./GroupHead.js";
 export type TableGroup<R> = { id: string; head?: GroupHeadLook; items: R[] };
 
 type TableProps<R> = {
+  /** A class for the grid, whose columns differ per kind of table (`issues`); the PR table has none. */
+  kind?: string;
   /** The header; only key, label, title, alignment and whether it sorts are read here. */
   columns: TableColumn<never>[];
   sort: Sort;
@@ -30,10 +32,10 @@ type TableProps<R> = {
 
 /**
  * A glassy panel: "Групирай по", a sticky header that sorts on a click, and one flat list of group heads and rows,
- * so sorting, grouping and folding glide the rows to their new places (FLIP). It knows nothing of PRs.
+ * so sorting, grouping and folding glide the rows to their new places (FLIP). It knows nothing of PRs or issues.
  */
 export function Table<R>(props: TableProps<R>) {
-  const { columns, sort, onSort, groupings, groupBy, onGroupBy, groups, collapsed, onToggle, row, message, booted } = props;
+  const { kind, columns, sort, onSort, groupings, groupBy, onGroupBy, groups, collapsed, onToggle, row, message, booted } = props;
   const ref = useRef<HTMLDivElement>(null);
   useFlip(ref);
   let index = 0;
@@ -70,7 +72,7 @@ export function Table<R>(props: TableProps<R>) {
           <span class="hint">клик на ред отваря детайли · клик на колона сортира</span>
         </div>
         <div ref={ref} class="tscroll" data-flip-root>
-          <div class="tgrid" role="table">
+          <div class={`tgrid${kind ? ` ${kind}` : ""}`} role="table">
             <div class="thead" role="row">
               {columns.map((column) => {
                 const on = sort.key === column.key;

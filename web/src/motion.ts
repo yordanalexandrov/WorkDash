@@ -135,12 +135,20 @@ export function startMotion(root: HTMLElement): void {
   pause();
 }
 
-/** Every card or row of a PR, in any view. */
-const PR_FLIP = '[data-flip^="pr:"]';
+/** Every card or row of a PR or an issue, in any view. */
+const ITEM_FLIP = '[data-flip^="pr:"], [data-flip^="issue:"]';
 
 /** The FLIP key of a PR: the same in every view, so its card and its row are one thing that moves. */
 export function prFlipKey(pr: { repo: string; number: number }): string {
   return `pr:${pr.repo}#${pr.number}`;
+}
+
+/**
+ * The FLIP key of an issue's card, and of its row in the table; a row of an issue that is in more than one group (one per
+ * assignee) has it only once (see `issueRows`), so the card lands on one of them.
+ */
+export function issueFlipKey(issue: { repo: string; number: number }): string {
+  return `issue:${issue.repo}#${issue.number}`;
 }
 
 /** Position in the layout, ignoring transforms but not scrolling, relative to `root` (the [data-flip-root] FLIP runs on). */
@@ -356,13 +364,13 @@ function picture(el: HTMLElement, kind: string): HTMLElement {
 }
 
 /**
- * Copies every [data-flip^="pr:"] under `root` that shows in the viewport into `layer`, on its rect, before the old view goes.
+ * Copies every card or row (FLIP key `pr:` or `issue:`) under `root` that shows in the viewport into `layer`, on its rect, before the old view goes.
  * Nothing is lifted under reduced motion.
  */
 export function liftFlyers(root: HTMLElement, layer: HTMLElement): Flyer[] {
   if (reducedMotion()) return [];
   const flyers: Flyer[] = [];
-  root.querySelectorAll<HTMLElement>(PR_FLIP).forEach((el) => {
+  root.querySelectorAll<HTMLElement>(ITEM_FLIP).forEach((el) => {
     const from = el.getBoundingClientRect();
     if (!visibleIn(from, innerWidth, innerHeight)) return;
     const copy = picture(el, "flyer");
@@ -494,7 +502,7 @@ export function land(root: HTMLElement, flyers: Flyer[]): Promise<void> {
   // Only what shows is landed on: a PR scrolled out of sight in the new view lets its flyer fall away, like a folded one.
   // Measured before anything moves, so every flyer heads for where its target rests.
   const targets = new Map<string, { el: HTMLElement; rest: DOMRectReadOnly }>();
-  root.querySelectorAll<HTMLElement>(PR_FLIP).forEach((el) => {
+  root.querySelectorAll<HTMLElement>(ITEM_FLIP).forEach((el) => {
     const rest = el.getBoundingClientRect();
     if (visibleIn(rest, innerWidth, innerHeight)) targets.set(el.dataset.flip!, { el, rest });
   });

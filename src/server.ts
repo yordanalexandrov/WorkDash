@@ -6,22 +6,33 @@ import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
+import { ISSUE_DEMANDS } from "./domain/issue-poll.js";
+import { type IssueBoardState, type IssuesConfig, stageOf, stagesFor } from "./domain/issues.js";
 import type { PollHealth } from "./domain/poll-error.js";
+import type { IssuePoller } from "./issue-poller.js";
 import { DEMANDS, POLL_MODES } from "./domain/poll-mode.js";
 import type { Poller } from "./poller.js";
 import type { Settings } from "./settings.js";
 import type { Missing } from "./domain/settings.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
+import { sameRepo } from "./domain/repos.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
 
+const repoName = z.string().regex(/^[^/\s]+\/[^/\s]+$/);
+
 const SeenRequest = z.object({
-  repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
+  repo: repoName,
   number: z.number().int().positive(),
   at: z.iso.datetime({ offset: true }).optional(),
 });
 
 const AckRequest = z.object({ ids: z.array(z.string()) });
+
+const IssuesQuery = z.object({ repo: repoName });
+
+// The body names the demand `reason`, as the spec's API does.
+const IssuePollRequest = z.object({ repo: repoName, reason: z.enum(ISSUE_DEMANDS) }).transform(({ repo, reason }) => ({ repo, demand: reason }));
 
 const PollRequest = z.object({ demand: z.enum(DEMANDS) });
 
@@ -32,6 +43,8 @@ const SaveSettingsRequest = z.object({ settings: z.unknown(), hash: z.string() }
 const TokenRequest = z.object({ token: z.string().trim().min(1) });
 
 const CheckNamesRequest = z.object({ repos: z.array(z.string()).max(100), team: z.array(z.string()).max(100) });
+
+const LabelsRequest = z.object({ repos: z.array(repoName).max(100) });
 
 /** The names this machine answers to; a request under any other host name reached it by DNS rebinding. */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -45,6 +58,49 @@ type PollControl = Pick<Poller, "mode" | "polling" | "setMode" | "demand">;
 
 /** For a dashboard without a poller: Periodic, never polling, deaf to demands. */
 const NO_POLLER: PollControl = { mode: () => "periodic", polling: () => false, setMode: () => {}, demand: () => "skip" };
+
+/** What the Issue dashboard is built from, besides the store. Read on every call, like DashboardSource. */
+export type IssueSource = {
+  /** The followed repos; only their issues are served and polled. */
+  repos: () => string[];
+  /** The stage labels in effect. */
+  config: () => IssuesConfig;
+  /** How far back closed issues still show (`recently_closed_window`). */
+  recentlyClosedWindowMs: () => number;
+  poller: Pick<IssuePoller, "demand" | "polling" | "error">;
+};
+
+/** For a dashboard without issues: no repo followed, so every request for one is refused. */
+const NO_ISSUES: IssueSource = {
+  repos: () => [],
+  config: () => ({ columns: [], repos: {} }),
+  recentlyClosedWindowMs: () => 0,
+  poller: { demand: () => ({ answer: "skip", dueAt: new Date(Date.now() + 3_600_000).toISOString() }), polling: () => false, error: () => null },
+};
+
+/**
+ * What GET /api/issues returns and the `issues` event carries for `repo`: its saved issues, each in its stage, those closed
+ * within the window as it is now, and how its poll goes.
+ */
+export function issueBoardState(store: SnapshotStore, source: IssueSource, repo: string, now = new Date()): IssueBoardState {
+  const snapshot = store.loadIssues(repo);
+  const stages = stagesFor(source.config(), repo);
+  return {
+    repo,
+    fetchedAt: snapshot?.fetchedAt ?? null,
+    stages,
+    issues: (snapshot?.issues ?? []).map((issue) => ({ ...issue, stage: stageOf(issue, stages) })),
+    totalCount: snapshot?.totalCount ?? 0,
+    closed: withinWindow(snapshot?.closed ?? [], now, source.recentlyClosedWindowMs()),
+    polling: source.poller.polling(repo),
+    error: source.poller.error(repo),
+  };
+}
+
+/** Whether `repo` is one of the followed repos, whatever the case of its name. */
+function follows(source: IssueSource, repo: string): boolean {
+  return source.repos().some((followed) => sameRepo(followed, repo));
+}
 
 // Static files are kept in web/public; the bundle built from web/src lands in web/dist.
 const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
@@ -99,6 +155,8 @@ export function dashboardState({
     })),
     // Filtered here too, so an entry expires on time even while polling fails.
     recentlyClosed: withinWindow(store.loadRecentlyClosed(), now(), recentlyClosedWindowMs()),
+    /** The followed repos whose issues are on in GitHub: the Issue dashboard's tabs. */
+    issueRepos: store.loadIssueRepos(),
   };
 }
 
@@ -116,6 +174,8 @@ export function buildServer(
     settings?: Settings;
     /** The zone quiet hours are read in, shown next to them. */
     timeZone?: string;
+    /** The Issue dashboard's side; without it no repo's issues are served. */
+    issues?: IssueSource;
     logger?: boolean;
   },
 ): FastifyInstance {
@@ -176,6 +236,8 @@ export function buildServer(
     return reply.code(204).send();
   });
 
+  registerIssues(server, options.store, options.issues ?? NO_ISSUES);
+
   if (options.settings) registerSettings(server, options.settings, options.timeZone);
 
   server.get("/api/events", (request, reply) => {
@@ -194,6 +256,26 @@ export function buildServer(
   return server;
 }
 
+/**
+ * The Issue dashboard's API: a repo's saved issues, and demands to poll them. A poll's start and end reach every page as
+ * an `issues` event for the repo, sent by whoever runs the issue poller.
+ */
+function registerIssues(server: FastifyInstance, store: SnapshotStore, source: IssueSource): void {
+  server.get("/api/issues", async (request, reply) => {
+    const parsed = IssuesQuery.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    if (!follows(source, parsed.data.repo)) return reply.code(404).send({ error: "not a followed repo" });
+    return issueBoardState(store, source, parsed.data.repo);
+  });
+
+  server.post("/api/issues/poll", async (request, reply) => {
+    const parsed = IssuePollRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    if (!follows(source, parsed.data.repo)) return reply.code(404).send({ error: "not a followed repo" });
+    return source.poller.demand(parsed.data.repo, parsed.data.demand);
+  });
+}
+
 /** The Settings screen's API. The token goes in, never out: only whether one is saved and its masked form. */
 function registerSettings(server: FastifyInstance, settings: Settings, timeZone: string | undefined): void {
   server.get("/api/config", async () => ({ ...settings.read(), token: settings.token(), timeZone: timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone }));
@@ -208,6 +290,12 @@ function registerSettings(server: FastifyInstance, settings: Settings, timeZone:
   });
 
   server.get("/api/config/suggestions", async () => ({ repos: await settings.suggestions() }));
+
+  server.post("/api/config/labels", async (request, reply) => {
+    const parsed = LabelsRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    return settings.labels(parsed.data.repos);
+  });
 
   server.post("/api/config/check", async (request, reply) => {
     const parsed = CheckNamesRequest.safeParse(request.body);

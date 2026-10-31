@@ -154,6 +154,55 @@ describe("startPoller details", () => {
   });
 });
 
+describe("startPoller issue repos", () => {
+  it("saves which repos have their issues on, as the poll read them", async () => {
+    const store = openStore(":memory:");
+    const fetch = async () =>
+      Response.json({
+        data: {
+          viewer: { login: "me" },
+          r0: { nameWithOwner: "my-org/repo-a", hasIssuesEnabled: true, pullRequests: { nodes: [], pageInfo: { hasNextPage: false } } },
+          r1: { nameWithOwner: "my-org/repo-b", hasIssuesEnabled: false, pullRequests: { nodes: [], pageInfo: { hasNextPage: false } } },
+        },
+      });
+
+    const poller = startPoller({ repos: ["my-org/repo-a", "my-org/repo-b"], token: "t", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000, store, log: quietLog, fetch });
+    await vi.waitFor(() => expect(store.loadSnapshot()).not.toBeNull());
+    poller.stop();
+
+    expect(store.loadIssueRepos()).toEqual(["my-org/repo-a"]);
+  });
+
+  it("keeps the tab of a repo the poll could not read, as the last poll that read it saw it", async () => {
+    const store = openStore(":memory:");
+    store.saveIssueRepos(["my-org/repo-a", "my-org/repo-b"]);
+    const fetch = async () =>
+      Response.json({
+        data: {
+          viewer: { login: "me" },
+          r0: { nameWithOwner: "my-org/repo-a", hasIssuesEnabled: false, pullRequests: { nodes: [], pageInfo: { hasNextPage: false } } },
+          r1: null,
+          r2: null,
+        },
+        errors: [{ message: "Could not resolve to a Repository" }],
+      });
+
+    const poller = startPoller({
+      repos: ["my-org/repo-a", "My-Org/Repo-B", "my-org/repo-c"],
+      token: "t",
+      intervalMs: 3_600_000,
+      recentlyClosedWindowMs: 3_600_000,
+      store,
+      log: quietLog,
+      fetch,
+    });
+    await vi.waitFor(() => expect(store.loadSnapshot()).not.toBeNull());
+    poller.stop();
+
+    expect(store.loadIssueRepos()).toEqual(["my-org/repo-b"]);
+  });
+});
+
 describe("startPoller seen baseline", () => {
   it("marks each PR seen when a poll first observes it, leaving existing marks alone", async () => {
     const store = openStore(":memory:");

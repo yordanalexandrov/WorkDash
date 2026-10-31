@@ -92,6 +92,19 @@ describe("groupItems", () => {
   });
 });
 
+describe("groupItems with several keys", () => {
+  it("puts an item in the group of each of its keys, and one with none in the group of the empty key", () => {
+    type Card = { title: string; people: string[] };
+    const cards: Card[] = [{ title: "c1", people: ["zed", "amy"] }, { title: "c2", people: [] }, { title: "c3", people: ["amy"] }];
+    const groups = groupItems(cards, "person", (card) => (card.people.length ? card.people : [""]));
+    expect(groups.map((g) => [g.id, g.items.map((c) => c.title)])).toEqual([
+      ["person:", ["c2"]],
+      ["person:amy", ["c1", "c3"]],
+      ["person:zed", ["c1"]],
+    ]);
+  });
+});
+
 describe("toggleCollapsed", () => {
   it("folds a group that is open and opens one that is folded, leaving the set it was given alone", () => {
     const none = new Set<string>();
