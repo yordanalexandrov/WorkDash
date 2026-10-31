@@ -7,6 +7,9 @@ export type Shortcut = { matches(event: KeyboardEvent): boolean; run(): void };
 /** `/`, also on a Bulgarian layout, where the key under it types something else. */
 export const SLASH = (event: KeyboardEvent) => event.key === "/" || event.code === "Slash";
 
+/** `t`, also on a Bulgarian layout, where the key types "т" or "ь". */
+export const T = (event: KeyboardEvent) => event.key === "t" || event.code === "KeyT";
+
 export const ESCAPE = (event: KeyboardEvent) => event.key === "Escape";
 
 /** Whether the key press is typing into a field rather than a shortcut. */

@@ -10,8 +10,8 @@ export type BoardColumn = Omit<ColumnHead, "id"> & (
   | { id: "closed"; items: ClosedPullRequest[] }
 );
 
-// The section accents from docs/design.md: the top border of the column.
-const ACCENT: Record<ColumnId, string> = {
+// The section accents from docs/design.md: the top border of the column, the section pill and group head in the table.
+export const ACCENT: Record<ColumnId, string> = {
   waiting_on_me: "var(--bad)",
   free_for_review: "var(--blue)",
   ready_to_merge: "var(--ok)",

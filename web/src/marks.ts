@@ -1,7 +1,7 @@
-// The small marks on a card: its footer and how hard it pulses; the reason texts stay in badges.ts.
+// The small marks on a card or row: its footer, how hard it pulses and how the table ranks them; the reason texts stay in badges.ts.
 
 import { sameLogin } from "../../src/domain/activity.js";
-import type { Reason } from "../../src/domain/classify.js";
+import type { Reason, Section } from "../../src/domain/classify.js";
 import type { CiState, MergeStateStatus, ReviewState } from "../../src/domain/types.js";
 import type { ClassifiedPullRequest } from "./api.js";
 import type { Badge } from "./badges.js";
@@ -35,11 +35,16 @@ export type CheckRing = { label: "CI" | "Sonar"; state: CiState; kind: "ok" | "b
 
 const CHECK_KINDS: Record<CiState, CheckRing["kind"]> = { SUCCESS: "ok", FAILURE: "bad", ERROR: "bad", PENDING: "pending", EXPECTED: "pending" };
 
+/** The ring of one check. */
+export function checkRing(label: CheckRing["label"], state: CiState): CheckRing {
+  return { label, state, kind: CHECK_KINDS[state] };
+}
+
 /** The CI and Sonar rings: none for a check without a state, nor for the failure the reason already names. */
 export function checkRings(pr: ClassifiedPullRequest): CheckRing[] {
   const rings: CheckRing[] = [];
-  if (pr.ci && pr.reason !== "ci_failed") rings.push({ label: "CI", state: pr.ci, kind: CHECK_KINDS[pr.ci] });
-  if (pr.sonar && pr.reason !== "sonar_failed") rings.push({ label: "Sonar", state: pr.sonar, kind: CHECK_KINDS[pr.sonar] });
+  if (pr.ci && pr.reason !== "ci_failed") rings.push(checkRing("CI", pr.ci));
+  if (pr.sonar && pr.reason !== "sonar_failed") rings.push(checkRing("Sonar", pr.sonar));
   return rings;
 }
 
@@ -78,4 +83,58 @@ const URGENT = new Set<Reason>(["ci_failed", "sonar_failed", "review_requested",
 export function urgency(reason: Reason | undefined): "u1" | "u2" | undefined {
   if (!reason) return undefined;
   return URGENT.has(reason) ? "u2" : "u1";
+}
+
+const SECTION_SHORT: Record<Section, string> = {
+  waiting_on_me: "теб",
+  free_for_review: "review",
+  ready_to_merge: "merge",
+  waiting_on_others: "други",
+  team: "екип",
+};
+
+/** The section in a word, for its pill in the table. */
+export function sectionShort(section: Section): string {
+  return SECTION_SHORT[section] ?? section;
+}
+
+// The ranks the table sorts by: the lower, the sooner it needs me.
+
+const REASON_ORDER: Reason[] = [
+  "ci_failed",
+  "sonar_failed",
+  "changes_requested",
+  "conflict",
+  "unread_comments",
+  "needs_rebase",
+  "review_requested",
+  "mention",
+  "re_review",
+];
+
+/** How urgent the reason is; no reason comes last. */
+export function reasonRank(reason: Reason | undefined): number {
+  const rank = reason ? REASON_ORDER.indexOf(reason) : -1;
+  return rank < 0 ? REASON_ORDER.length : rank;
+}
+
+const CHECK_RANK: Record<CiState, number> = { FAILURE: 0, ERROR: 0, PENDING: 1, EXPECTED: 1, SUCCESS: 2 };
+
+/** Failed, then running, then passed, then no check at all. */
+export function checkRank(state: CiState | null): number {
+  return state ? CHECK_RANK[state] : 3;
+}
+
+const MERGE_RANK: Record<MergeStateStatus, number> = { DIRTY: 0, BEHIND: 1, BLOCKED: 2, DRAFT: 3, UNKNOWN: 4, UNSTABLE: 5, HAS_HOOKS: 5, CLEAN: 6 };
+
+/** Conflict, behind, blocked, draft, unknown, unstable or hooks, clean; a conflict `mergeable` says outranks a draft, a draft the state. */
+export function mergeRank(pr: ClassifiedPullRequest): number {
+  return MERGE_RANK[pr.mergeable === "CONFLICTING" ? "DIRTY" : pr.isDraft ? "DRAFT" : pr.mergeStateStatus];
+}
+
+const REVIEW_SCORE: Partial<Record<ReviewState, number>> = { APPROVED: 10, CHANGES_REQUESTED: -10, COMMENTED: 1 };
+
+/** How the reviews went: an approval counts 10, changes requested -10, a comment 1. */
+export function reviewRank(pr: ClassifiedPullRequest): number {
+  return pr.reviews.reduce((score, review) => score + (REVIEW_SCORE[review.state] ?? 0), 0);
 }

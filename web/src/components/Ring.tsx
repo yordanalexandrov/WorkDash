@@ -1,7 +1,7 @@
 import type { CheckRing } from "../marks.js";
 
-/** A CI or Sonar result as a ring: full with a tick, full with a cross, or a partial arc while it runs. */
-export function Ring({ ring }: { ring: CheckRing }) {
+/** A CI or Sonar result as a ring: full with a tick, full with a cross, or a partial arc while it runs; `bare` leaves the label out. */
+export function Ring({ ring, bare }: { ring: CheckRing; bare?: boolean }) {
   return (
     <span class={`chk ${ring.kind}`} title={`${ring.label}: ${ring.state}`}>
       <svg viewBox="0 0 16 16" fill="none" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -10,7 +10,7 @@ export function Ring({ ring }: { ring: CheckRing }) {
         {ring.kind === "ok" ? <path d="M5.4 8.2l1.8 1.8 3.4-3.6" stroke="currentColor" stroke-width="1.6" /> : null}
         {ring.kind === "bad" ? <path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.6" /> : null}
       </svg>
-      {ring.label}
+      {bare ? null : ring.label}
     </span>
   );
 }
