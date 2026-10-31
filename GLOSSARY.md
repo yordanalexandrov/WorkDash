@@ -51,8 +51,12 @@ _Avoid_: Subtask, child task, subticket
 An issue that has to be closed before another one can be done, as GitHub records it. An open issue with an open blocker is **blocked** (блокиран).
 _Avoid_: Dependency, prerequisite, "depends on"
 
+**Family**:
+The issues one parent issue holds together: the parent, its **head**, and its sub-issues, its **members**. A sub-issue's family is its parent's, an issue with sub-issues is the head of its own, and an issue with neither has no family.
+_Avoid_: Tree, group, epic
+
 **Dependency graph** (Зависимости):
-The picture in an issue's detail sheet of the sub-issues of one parent issue and the blockers between them, with the issue itself marked; for an issue with no parent and no sub-issues, the issue with its own blockers and the issues it blocks.
+The picture in an issue's detail sheet of the issue's family and the blockers between its issues, with the issue itself marked; for an issue with no family, the issue with its own blockers and the issues it blocks.
 _Avoid_: Task graph, dependency tree, roadmap
 
 **Linked PR**:
