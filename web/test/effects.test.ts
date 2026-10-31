@@ -49,11 +49,11 @@ describe("watchCompleted", () => {
   };
   const saved = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T05:00:00Z" });
 
-  it("gives the key of an issue completed between two poll answers that came in while the page showed the repo", () => {
+  it("gives the FLIP key of the card of an issue completed between two poll answers that came in while the page showed the repo", () => {
     const first = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
     const second = board([closedIssue({ number: 2 }), closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:01:00Z" });
 
-    expect(along([saved, first, second])).toEqual([[], [], ["my-org/repo-a#2"]]);
+    expect(along([saved, first, second])).toEqual([[], [], ["issue:my-org/repo-a#2"]]);
   });
 
   it("gives nothing for the first poll answer after the saved issues, however long ago they were saved", () => {
@@ -72,7 +72,7 @@ describe("watchCompleted", () => {
     const first = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
     const second = board([closedIssue({ number: 2 }), closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:01:00Z" });
 
-    expect(along([saved, saved, first, first, second])).toEqual([[], [], [], [], ["my-org/repo-a#2"]]);
+    expect(along([saved, saved, first, first, second])).toEqual([[], [], [], [], ["issue:my-org/repo-a#2"]]);
   });
 
   it("leaves out an issue closed as not planned, and one already among the closed ones", () => {

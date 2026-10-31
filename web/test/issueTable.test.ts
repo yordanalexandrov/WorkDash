@@ -111,6 +111,13 @@ describe("issueGroups", () => {
       ["parent:", [1]],
     ]);
   });
+
+  it("puts issues under one parent in one group, whatever the case GitHub names the parent's repo in", () => {
+    const parent = (repo: string) => ({ repo, number: 79, title: "Parent 79" });
+    const issues = [staged({ number: 2, parent: parent("my-org/repo-a") }), staged({ number: 3, parent: parent("My-Org/Repo-A") })];
+
+    expect(groupsOf(issues, "parent").map(([, numbers]) => numbers)).toEqual([[2, 3]]);
+  });
 });
 
 describe("parentGroupLabel", () => {

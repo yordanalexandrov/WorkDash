@@ -1,9 +1,9 @@
 // The Dependency graph (GLOSSARY.md) of an issue's detail sheet: what of its family is drawn, and the mermaid code that
-// draws it. No DOM: the sheet's DependencyGraph renders the code and finds each node's issue again by its id.
+// draws it. No DOM: the sheet's `Dependencies` (its `GraphDrawing`) renders the code and finds each node's issue again by its id.
 
 import type { FamilyMember, GraphIssue, IssueFamily } from "../../src/domain/issue-graph.js";
 import type { Issue } from "../../src/domain/issues.js";
-import { sameRepo } from "../../src/domain/repos.js";
+import { type IssueRef, issueKey, sameIssue, sameRepo } from "../../src/domain/repos.js";
 import type { IssueBoardState } from "./api.js";
 import { count } from "./badges.js";
 import type { ShownIssue } from "./issueDetail.js";
@@ -34,10 +34,6 @@ export type DrawnGraph = {
 /** How long a title may be on its node before it is shortened. */
 const TITLE_LENGTH = 40;
 
-const keyOf = (issue: { repo: string; number: number }) => `${issue.repo.toLowerCase()}#${issue.number}`;
-
-const sameIssue = (a: { repo: string; number: number }, b: { repo: string; number: number }) => a.number === b.number && sameRepo(a.repo, b.repo);
-
 /**
  * What is drawn of a family: the head's sub-issues (the head too when it is the open issue; the issue alone when it has no
  * family) and the blockers between them, each arrow once though both its ends record it; and, one step out, the open
@@ -48,18 +44,18 @@ export function familyGraph(family: IssueFamily): DrawnGraph {
   const isHead = !family.head || sameIssue(family.head, family.issue);
   const members: FamilyMember[] = isHead ? [family.issue, ...family.members] : family.members;
   const nodes: GraphNode[] = members.map((member, index) => ({ id: `n${index}`, issue: member, marks: marksOf(member, family.issue) }));
-  const ids = new Map(nodes.map((node) => [keyOf(node.issue), node.id]));
+  const ids = new Map(nodes.map((node) => [issueKey(node.issue), node.id]));
   for (const neighbour of [...family.issue.blockedBy, ...family.issue.blocking]) {
-    if (ids.has(keyOf(neighbour))) continue;
+    if (ids.has(issueKey(neighbour))) continue;
     const id = `n${nodes.length}`;
     nodes.push({ id, issue: neighbour, marks: ["external", ...(neighbour.state === "open" ? [] : [neighbour.state])] });
-    ids.set(keyOf(neighbour), id);
+    ids.set(issueKey(neighbour), id);
   }
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();
   const connect = (blocker: GraphIssue, blocked: GraphIssue) => {
-    const from = ids.get(keyOf(blocker));
-    const to = ids.get(keyOf(blocked));
+    const from = ids.get(issueKey(blocker));
+    const to = ids.get(issueKey(blocked));
     if (!from || !to || seen.has(`${from}>${to}`)) return;
     seen.add(`${from}>${to}`);
     edges.push({ from, to });
@@ -97,7 +93,7 @@ export function graphNodeAt(graph: DrawnGraph, domId: string): GraphNode | undef
  * A node's issue as the open repo's issues have it (open, or closed within the window), so opening the node switches the
  * sheet to it; undefined when it is not among them (closed before the window, of another repo), and GitHub opens instead.
  */
-export function nodeInSnapshot(issue: { repo: string; number: number }, board: IssueBoardState | null): ShownIssue | undefined {
+export function nodeInSnapshot(issue: IssueRef, board: IssueBoardState | null): ShownIssue | undefined {
   // GitHub's name of the repo may differ in case from the followed one the state is under.
   return [...(board?.issues ?? []), ...(board?.closed ?? [])].find((shown) => sameIssue(shown, issue));
 }

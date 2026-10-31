@@ -1,8 +1,7 @@
 // The Issue dashboard's table: the columns (every fact of the issue card), how issues group, and the FLIP key of each row
 // (see table.ts for the sorting and grouping themselves).
 
-import type { ParentIssue } from "../../src/domain/issues.js";
-import { sameRepo } from "../../src/domain/repos.js";
+import { issueKey, sameRepo } from "../../src/domain/repos.js";
 import type { StagedIssue } from "./api.js";
 import { shortRepo } from "./format.js";
 import { cardLabels } from "./issueBoard.js";
@@ -50,14 +49,11 @@ export const ISSUE_GROUPINGS: [GroupBy, string][] = [
   ["parent", "родител"],
 ];
 
-/** The key of a parent's group: its repo and number. */
-const parentKey = (parent: ParentIssue) => `${parent.repo}#${parent.number}`;
-
 /** The group or groups an issue falls in; the empty key is "Без етап", "Без assignee", "Без milestone" or "Без родител". */
 function groupKeys(issue: StagedIssue, by: GroupBy): string | string[] {
   if (by === "stage") return issue.stage ?? "";
   if (by === "assignee") return issue.assignees.length ? issue.assignees : [""];
-  if (by === "parent") return issue.parent ? parentKey(issue.parent) : "";
+  if (by === "parent") return issue.parent ? issueKey(issue.parent) : "";
   return issue.milestone?.title ?? "";
 }
 
@@ -68,7 +64,7 @@ function groupKeys(issue: StagedIssue, by: GroupBy): string | string[] {
  */
 export function issueGroups(issues: StagedIssue[], by: GroupBy, stages: string[]): Group<StagedIssue>[] {
   const milestones = new Map(issues.flatMap((issue) => (issue.milestone ? [[issue.milestone.title, due(issue.milestone)] as const] : [])));
-  const parents = new Map(issues.flatMap((issue) => (issue.parent ? [[parentKey(issue.parent), { ...issue.parent, own: sameRepo(issue.parent.repo, issue.repo) }] as const] : [])));
+  const parents = new Map(issues.flatMap((issue) => (issue.parent ? [[issueKey(issue.parent), { ...issue.parent, own: sameRepo(issue.parent.repo, issue.repo) }] as const] : [])));
   const byParent = (a: string, b: string): number => {
     const [p, q] = [parents.get(a)!, parents.get(b)!];
     return Number(q.own) - Number(p.own) || p.repo.localeCompare(q.repo) || p.number - q.number;

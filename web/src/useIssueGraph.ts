@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import type { IssueRef } from "../../src/domain/repos.js";
 import { type IssueBoardState, type IssueFamily, loadIssueGraph } from "./api.js";
 import { familyChanged } from "./issueGraph.js";
 
@@ -10,7 +11,7 @@ export type IssueGraphState = { family: IssueFamily | null; loading: boolean; fa
  * within the minute), and again with `refresh` when a poll of the open repo (`board`) changes the family drawn. Either poll
  * mode brings `board` the same way, so it works alike in both.
  */
-export function useIssueGraph(issue: { repo: string; number: number }, board: IssueBoardState | null): IssueGraphState {
+export function useIssueGraph(issue: IssueRef, board: IssueBoardState | null): IssueGraphState {
   const [state, setState] = useState<IssueGraphState>({ family: null, loading: true, failed: false });
   const asked = useRef(0);
   const family = useRef<IssueFamily | null>(null);

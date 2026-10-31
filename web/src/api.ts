@@ -4,6 +4,7 @@ import type { IssueDemand, IssuePollAnswer } from "../../src/domain/issue-poll.j
 import type { ClosedIssue, IssueBoardState, IssueLabel, StagedIssue } from "../../src/domain/issues.js";
 import type { JiraLink } from "../../src/domain/jira.js";
 import type { PollError } from "../../src/domain/poll-error.js";
+import type { IssueRef } from "../../src/domain/repos.js";
 import type { Demand, DemandAnswer, PollMode } from "../../src/domain/poll-mode.js";
 import type { FieldIssue, Missing, SaveResult, SettingsForm, TokenStatus } from "../../src/domain/settings.js";
 import type { ClosedPullRequest } from "../../src/domain/types.js";
@@ -82,7 +83,7 @@ export async function loadIssues(repo: string): Promise<IssueBoardState> {
  * The family of an issue, for its Dependency graph: what the server fetched within the last minute, unless `refresh` (a poll
  * brought a change in the family drawn).
  */
-export async function loadIssueGraph(issue: { repo: string; number: number }, refresh: boolean): Promise<IssueFamily> {
+export async function loadIssueGraph(issue: IssueRef, refresh: boolean): Promise<IssueFamily> {
   const query = new URLSearchParams({ repo: issue.repo, number: String(issue.number), ...(refresh ? { refresh: "true" } : {}) });
   const response = await fetch(`/api/issues/graph?${query}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);

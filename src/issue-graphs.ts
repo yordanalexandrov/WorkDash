@@ -1,5 +1,5 @@
 import type { IssueFamily } from "./domain/issue-graph.js";
-import { repoKey } from "./domain/repos.js";
+import { issueKey } from "./domain/repos.js";
 import { fetchIssueFamily } from "./github/issue-graph.js";
 
 /** How long an issue's family, once fetched, is served again instead of asking GitHub: its sheet opened again soon after. */
@@ -19,7 +19,7 @@ export function createIssueGraphs(options: { token: () => string | null; fetch?:
   const kept = new Map<string, { at: number; family: Promise<IssueFamily> }>();
   return {
     family(repo, number, { refresh = false } = {}) {
-      const key = `${repoKey(repo)}#${number}`;
+      const key = issueKey({ repo, number });
       const at = now().getTime();
       for (const [old, entry] of kept) if (at - entry.at >= GRAPH_GAP_MS) kept.delete(old);
       const hit = kept.get(key);
