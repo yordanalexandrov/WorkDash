@@ -70,3 +70,46 @@ describe("the desktop app's token store", () => {
     expect(logged.join("\n")).toMatch(/0600/);
   });
 });
+
+describe("the desktop app's token store, when the saved token cannot be read", () => {
+  /** Encryption whose decrypt fails, as safeStorage does after the keyring was reset or the file was damaged. */
+  function brokenDecryption(): Encryption {
+    return {
+      ...fakeEncryption(true, "gnome_libsecret"),
+      decryptString: () => {
+        throw new Error("Error while decrypting the ciphertext provided to safeStorage.decryptString.");
+      },
+    };
+  }
+
+  it("has no token, says so in the log, and a new token replaces the unreadable file", () => {
+    const userData = mkdtempSync(join(tmpdir(), "workdash-tokens-"));
+    writeFileSync(join(userData, "github-token.enc"), "garbage");
+    const logged: string[] = [];
+    const tokens = openTokenStore(userData, brokenDecryption(), (line) => logged.push(line));
+    expect(tokens.get()).toBeNull();
+    expect(logged.join("\n")).toMatch(/could not read/i);
+    tokens.set(TOKEN);
+    expect(openTokenStore(userData, fakeEncryption(true, "gnome_libsecret"), () => {}).get()).toBe(TOKEN);
+  });
+});
+
+describe("the desktop app's token store, with a plain-text token from before the keyring", () => {
+  it("moves the token into the keyring and deletes the plain file", () => {
+    const userData = mkdtempSync(join(tmpdir(), "workdash-tokens-"));
+    writeFileSync(join(userData, "github-token"), "ghp_old\n", { mode: 0o600 });
+    const logged: string[] = [];
+    const tokens = openTokenStore(userData, fakeEncryption(true, "gnome_libsecret"), (line) => logged.push(line));
+    expect(tokens.get()).toBe("ghp_old");
+    expect(readdirSync(userData)).toEqual(["github-token.enc"]);
+    expect(filesIn(userData)).not.toContain("ghp_old");
+    expect(logged.join("\n")).toMatch(/moved/i);
+  });
+
+  it("leaves the plain file alone when an encrypted token is already there", () => {
+    const userData = mkdtempSync(join(tmpdir(), "workdash-tokens-"));
+    openTokenStore(userData, fakeEncryption(true, "gnome_libsecret"), () => {}).set(TOKEN);
+    writeFileSync(join(userData, "github-token"), "ghp_old\n", { mode: 0o600 });
+    expect(openTokenStore(userData, fakeEncryption(true, "gnome_libsecret"), () => {}).get()).toBe(TOKEN);
+  });
+});

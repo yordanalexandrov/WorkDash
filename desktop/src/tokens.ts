@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomically } from "../../src/atomic-write.js";
 import { fileTokenStore, type TokenStore } from "../../src/token-store.js";
@@ -17,7 +17,8 @@ const NO_KEYRING = new Set(["basic_text", "unknown"]);
 /**
  * Where the desktop app keeps the GitHub token: encrypted with the OS keyring (`safeStorage`) in
  * `userData/github-token.enc`, or, when there is no unlocked keyring, in the same 0600 file as `npm start`.
- * Says in `log` which one it took.
+ * Says in `log` which one it took. A plain-text token left from before the keyring is moved into it. A saved
+ * token that cannot be read or decrypted counts as none, so the app asks for it again instead of not starting.
  */
 export function openTokenStore(userData: string, encryption: Encryption, log: (line: string) => void): TokenStore {
   const plainPath = join(userData, "github-token");
@@ -30,13 +31,14 @@ export function openTokenStore(userData: string, encryption: Encryption, log: (l
   }
   const path = join(userData, "github-token.enc");
   log(`GitHub token: encrypted with the OS keyring (backend ${backend}) in ${path}`);
-  return {
+  const store: TokenStore = {
     get() {
       try {
         return encryption.decryptString(readFileSync(path)).trim() || null;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw error;
+        log(`GitHub token: could not read ${path}, asking for the token again (${(error as Error).message})`);
+        return null;
       }
     },
     set(token) {
@@ -45,4 +47,12 @@ export function openTokenStore(userData: string, encryption: Encryption, log: (l
       rmSync(plainPath, { force: true });
     },
   };
+  if (!existsSync(path)) {
+    const plain = fileTokenStore(plainPath).get();
+    if (plain) {
+      store.set(plain);
+      log(`GitHub token: moved from the 0600 file ${plainPath} into the OS keyring`);
+    }
+  }
+  return store;
 }
