@@ -62,7 +62,8 @@ export function createIssuePoller(options: {
     state.polling = true;
     changed(repo);
     try {
-      const snapshot = await fetchIssues({ repo, token: withToken, fetch });
+      // The saved issues lend their comments to the unchanged ones, so only the changed ones' are fetched.
+      const snapshot = await fetchIssues({ repo, token: withToken, fetch, previous: store.loadIssues(repo)?.issues });
       store.saveIssues(snapshot, new Date());
       state.error = null;
       rateLimit = null;

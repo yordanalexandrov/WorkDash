@@ -1,6 +1,7 @@
 // The Issue dashboard's domain: the issues of one repo as a poll fetches them, and the stage each one is in.
 
 import type { PollError } from "./poll-error.js";
+import type { Comment } from "./types.js";
 
 /** The stage labels from config.yaml: the common list, and the repos that have a list of their own. */
 export type IssuesConfig = {
@@ -26,15 +27,21 @@ export type Issue = {
   number: number;
   title: string;
   url: string;
+  /** The description, as markdown. */
+  body: string;
   author: string;
   labels: IssueLabel[];
   assignees: string[];
   /** How many comments it has. */
   comments: number;
+  /** Its latest comments by people, oldest first; fetched apart, and only when the issue changed since the last poll. */
+  latestComments: Comment[];
   milestone: Milestone | null;
   linkedPullRequests: LinkedPullRequest[];
   createdAt: string;
   updatedAt: string;
+  /** When it was closed; null while it is open. */
+  closedAt: string | null;
 };
 
 /** The issues of one repo as one poll fetched them: the most recently updated open ones, and how many are open in all. */

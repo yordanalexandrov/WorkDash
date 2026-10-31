@@ -2,12 +2,21 @@ import { describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import { createIssuePoller } from "../src/issue-poller.js";
 
-/** A stand-in for GitHub that answers the issues query of any repo with one issue, and records which repos it was asked for. */
-function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean } = {}) {
+/**
+ * A stand-in for GitHub that answers the issues query of any repo with one issue, and records which repos it was asked for;
+ * with `comments`, the issue has one, and the comments queries it answers are recorded apart.
+ */
+function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean; comments?: boolean } = {}) {
   const calls: string[] = [];
+  const commentCalls: string[] = [];
   const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
-    const { variables } = JSON.parse(String(init?.body)) as { variables: { owner: string; name: string } };
+    const { query, variables } = JSON.parse(String(init?.body)) as { query: string; variables: { owner: string; name: string } };
     const repo = `${variables.owner}/${variables.name}`;
+    if (query.startsWith("query IssueComments")) {
+      commentCalls.push(repo);
+      const comment = { id: "c1", author: { __typename: "User", login: "colleague2" }, createdAt: "2026-10-30T09:00:00Z", body: "On it" };
+      return Response.json({ data: { repository: { i0: { number: 1, comments: { nodes: [comment] } } } } });
+    }
     calls.push(repo);
     await new Promise((resolve) => setTimeout(resolve, 10));
     if (options.rateLimited) {
@@ -19,18 +28,20 @@ function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean } = {}) {
       number: 1,
       title: "Issue 1",
       url: `https://github.com/${repo}/issues/1`,
+      body: "",
       createdAt: "2026-10-29T10:00:00Z",
       updatedAt: "2026-10-30T10:00:00Z",
+      closedAt: null,
       author: { login: "colleague1" },
       labels: { nodes: [] },
       assignees: { nodes: [] },
-      comments: { totalCount: 0 },
+      comments: { totalCount: options.comments ? 1 : 0 },
       milestone: null,
       closedByPullRequestsReferences: { nodes: [] },
     };
     return Response.json({ data: { repository: { nameWithOwner: repo, issues: { totalCount: 1, nodes: [node] } } } });
   };
-  return { fetch, calls };
+  return { fetch, calls, commentCalls };
 }
 
 const quietLog = { info() {}, error() {} };
@@ -43,7 +54,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
   }
 }
 
-function setUp(options: { fail?: boolean; rateLimited?: boolean; token?: string | null } = {}) {
+function setUp(options: { fail?: boolean; rateLimited?: boolean; comments?: boolean; token?: string | null } = {}) {
   const github = fakeGitHub(options);
   const store = openStore(":memory:");
   const changes: { repo: string; polling: boolean }[] = [];
@@ -102,6 +113,19 @@ describe("createIssuePoller", () => {
 
     await waitFor(() => changes.length === 4);
     expect(github.calls).toEqual(["my-org/repo-a", "my-org/repo-a"]);
+  });
+
+  it("fetches the comments of an issue once, and keeps them while it is unchanged", async () => {
+    const { github, store, poller, changes } = setUp({ comments: true });
+    poller.demand("my-org/repo-a", "open");
+    await waitFor(() => changes.length === 2);
+
+    poller.demand("my-org/repo-a", "button");
+    await waitFor(() => changes.length === 4);
+
+    expect(github.calls).toEqual(["my-org/repo-a", "my-org/repo-a"]);
+    expect(github.commentCalls).toEqual(["my-org/repo-a"]);
+    expect(store.loadIssues("my-org/repo-a")?.issues[0]?.latestComments.map((comment) => comment.body)).toEqual(["On it"]);
   });
 
   it("does not poll a repo saved less than a minute ago, after a restart", async () => {

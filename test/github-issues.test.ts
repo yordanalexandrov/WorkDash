@@ -20,8 +20,10 @@ function issueNode(number: number, overrides: Record<string, unknown> = {}) {
     number,
     title: `Issue ${number}`,
     url: `https://github.com/my-org/repo-a/issues/${number}`,
+    body: "",
     createdAt: "2026-10-29T10:00:00Z",
     updatedAt: "2026-10-30T10:00:00Z",
+    closedAt: null,
     author: { login: "colleague1" },
     labels: { nodes: [] },
     assignees: { nodes: [] },
@@ -34,6 +36,30 @@ function issueNode(number: number, overrides: Record<string, unknown> = {}) {
 
 function repository(nodes: unknown[], totalCount = nodes.length) {
   return { data: { repository: { nameWithOwner: "my-org/repo-a", issues: { totalCount, nodes } } } };
+}
+
+type CommentNode = { id: string; author: { __typename: string; login: string } | null; createdAt: string; body: string };
+
+function commentNode(id: string, createdAt: string, overrides: Partial<CommentNode> = {}): CommentNode {
+  return { id, author: { __typename: "User", login: "colleague2" }, createdAt, body: `comment ${id}`, ...overrides };
+}
+
+/**
+ * A stand-in for api.github.com that answers the issues query with `nodes`, and the comments query (by its operation name)
+ * with `comments` of every issue it asks for by `iN: issue(number: N)`, recording the numbers each comments query asked for.
+ */
+function fakeGitHubWithComments(nodes: unknown[], comments: Record<number, CommentNode[]> = {}) {
+  const commentQueries: number[][] = [];
+  const github = fakeGitHub(() => repository(nodes));
+  const fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    const { query } = JSON.parse(String(init?.body)) as Call;
+    if (!query.startsWith("query IssueComments")) return github.fetch(url, init);
+    const asked = [...query.matchAll(/(i\d+): issue\(number: (\d+)\)/g)].map(([, alias, number]) => [alias!, Number(number)] as const);
+    commentQueries.push(asked.map(([, number]) => number));
+    const repository = Object.fromEntries(asked.map(([alias, number]) => [alias, { number, comments: { nodes: comments[number] ?? [] } }]));
+    return Response.json({ data: { repository } });
+  };
+  return { fetch, commentQueries };
 }
 
 describe("fetchIssues", () => {
@@ -49,15 +75,13 @@ describe("fetchIssues", () => {
   });
 
   it("reads each issue with its labels and their colours, assignees, author and comment count", async () => {
-    const github = fakeGitHub(() =>
-      repository([
-        issueNode(7, {
-          labels: { nodes: [{ name: "bug", color: "d73a4a" }, { name: "in-progress", color: "0e8a16" }] },
-          assignees: { nodes: [{ login: "me" }, { login: "colleague2" }] },
-          comments: { totalCount: 3 },
-        }),
-      ]),
-    );
+    const github = fakeGitHubWithComments([
+      issueNode(7, {
+        labels: { nodes: [{ name: "bug", color: "d73a4a" }, { name: "in-progress", color: "0e8a16" }] },
+        assignees: { nodes: [{ login: "me" }, { login: "colleague2" }] },
+        comments: { totalCount: 3 },
+      }),
+    ]);
 
     const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
 
@@ -137,5 +161,67 @@ describe("fetchIssues", () => {
     const github = fakeGitHub(() => ({ errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] }));
 
     await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch })).rejects.toMatchObject({ errorTypes: ["RATE_LIMITED"] });
+  });
+
+  it("reads the description, and no closing date for an open issue", async () => {
+    const github = fakeGitHub(() => repository([issueNode(1, { body: "Steps to reproduce" })]));
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+
+    expect(snapshot.issues[0]).toMatchObject({ body: "Steps to reproduce", closedAt: null });
+  });
+
+  it("fetches the latest comments of an issue with comments, oldest first, without the bots'", async () => {
+    const github = fakeGitHubWithComments([issueNode(7, { comments: { totalCount: 3 } })], {
+      7: [
+        commentNode("c2", "2026-10-30T09:00:00Z"),
+        commentNode("c1", "2026-10-29T12:00:00Z", { author: null }),
+        commentNode("c3", "2026-10-30T10:00:00Z", { author: { __typename: "Bot", login: "ci-bot" } }),
+      ],
+    });
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+
+    expect(snapshot.issues[0]!.latestComments).toEqual([
+      { id: "c1", author: "ghost", createdAt: "2026-10-29T12:00:00Z", body: "comment c1" },
+      { id: "c2", author: "colleague2", createdAt: "2026-10-30T09:00:00Z", body: "comment c2" },
+    ]);
+  });
+
+  it("fetches comments only for the issues that changed since the last poll, and keeps the others' as they were", async () => {
+    const kept = { id: "old", author: "colleague1", createdAt: "2026-10-28T10:00:00Z", body: "kept" };
+    const previous = [
+      issue({ number: 1, comments: 1, latestComments: [kept] }),
+      issue({ number: 2, comments: 1, updatedAt: "2026-10-29T10:00:00Z" }),
+    ];
+    const github = fakeGitHubWithComments(
+      [issueNode(1, { comments: { totalCount: 1 } }), issueNode(2, { comments: { totalCount: 2 } }), issueNode(3, { comments: { totalCount: 1 } })],
+      { 2: [commentNode("c2", "2026-10-30T09:00:00Z")], 3: [commentNode("c3", "2026-10-30T09:30:00Z")] },
+    );
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch, previous });
+
+    expect(github.commentQueries).toEqual([[2, 3]]);
+    expect(snapshot.issues.map((i) => i.latestComments.map((c) => c.id))).toEqual([["old"], ["c2"], ["c3"]]);
+  });
+
+  it("asks nothing more when no issue changed or the changed ones have no comments", async () => {
+    const github = fakeGitHubWithComments([issueNode(1), issueNode(2, { updatedAt: "2026-10-31T10:00:00Z" })]);
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch, previous: [issue({ number: 1 })] });
+
+    expect(github.commentQueries).toEqual([]);
+    expect(snapshot.issues.map((i) => i.latestComments)).toEqual([[], []]);
+  });
+
+  it("fails when GitHub returns no comments for a changed issue, so the poll is tried again", async () => {
+    const github = fakeGitHub(() => repository([issueNode(1, { comments: { totalCount: 1 } })]));
+    const fetch = async (url: string | URL | Request, init?: RequestInit) => {
+      const { query } = JSON.parse(String(init?.body)) as Call;
+      if (query.startsWith("query IssueComments")) return Response.json({ data: { repository: { i0: null } } });
+      return github.fetch(url, init);
+    };
+
+    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", fetch })).rejects.toThrow(/no comments for my-org\/repo-a#1/);
   });
 });

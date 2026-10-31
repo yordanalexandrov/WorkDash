@@ -35,14 +35,17 @@ export function issue(overrides: Partial<Issue> = {}): Issue {
     number,
     title: `Issue ${number}`,
     url: `https://github.com/my-org/repo-a/issues/${number}`,
+    body: "",
     author: "colleague1",
     labels: [],
     assignees: [],
     comments: 0,
+    latestComments: [],
     milestone: null,
     linkedPullRequests: [],
     createdAt: "2026-10-29T10:00:00Z",
     updatedAt: "2026-10-30T10:00:00Z",
+    closedAt: null,
     ...overrides,
   };
 }
