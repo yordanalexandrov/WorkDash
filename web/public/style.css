@@ -2795,6 +2795,36 @@ kbd {
   background: color-mix(in srgb, var(--bad) 12%, transparent);
 }
 
+/* ↑ and ↓ of an ordered list (the stages): a move, not a removal, so the accent and not --bad. */
+.names .mv {
+  padding: 2px 5px;
+}
+
+.names .mv:hover:not(:disabled) {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.names .mv:disabled {
+  color: var(--faint);
+  background: transparent;
+  opacity: 0.35;
+  cursor: default;
+}
+
+.set-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.set-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .names-add {
   display: flex;
   gap: 6px;

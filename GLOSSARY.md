@@ -17,7 +17,7 @@ When polls happen, the same for every open dashboard: **Periodic** (на все�
 _Avoid_: Refresh mode, auto-refresh
 
 **Settings** (Настройки):
-What I set up once for the dashboard and change from its Settings screen: the GitHub token, the poll interval, the repos, the team, Jira, review and notifications. The poll mode is not a setting: it is switched from the toolbar.
+What I set up once for the dashboard and change from its Settings screen: the GitHub token, the poll interval, the repos, the team, Jira, review, notifications and the stage labels (a common list, and a list of its own for some repos). The poll mode is not a setting: it is switched from the toolbar.
 _Avoid_: Config, preferences, options
 
 **Section**:

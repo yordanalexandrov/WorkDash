@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { EVENT_TYPES } from "../../../src/domain/events.js";
 import {
   checkNames,
@@ -7,6 +7,7 @@ import {
   type FieldIssue,
   loadSettings,
   type NamesCheck,
+  repoLabels,
   repoSuggestions,
   saveSettings,
   saveToken,
@@ -14,8 +15,22 @@ import {
   type SettingsRead,
   type TokenCheck,
 } from "../api.js";
+import { shortRepo } from "../format.js";
+import { useFlip } from "../motion.js";
 import { eventLabel } from "../notifications.js";
-import { changed, issueAt, readQuiet, strayIssues, withItem, writeQuiet } from "../settingsDraft.js";
+import {
+  changed,
+  issueAt,
+  labelHints,
+  missingFrom,
+  moved,
+  onCommonList,
+  readQuiet,
+  type RepoLabels,
+  strayIssues,
+  withItem,
+  writeQuiet,
+} from "../settingsDraft.js";
 import { ESCAPE, useShortcuts } from "../useShortcuts.js";
 import { Avatar } from "./Avatar.js";
 
@@ -27,6 +42,7 @@ const FIELD_PATHS = [
   /^jira\.(base_url|project_keys)(\[\d+\])?$/,
   /^review\.(required_approvals|recently_closed_window)$/,
   /^notifications\.quiet_hours$/,
+  /^issues\.(columns|repos\..+\.columns)(\[\d+\])?$/,
 ];
 
 const shownByField = (path: string) => FIELD_PATHS.some((pattern) => pattern.test(path));
@@ -42,6 +58,7 @@ export function Settings({ onClose }: { onClose(): void }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [checks, setChecks] = useState<NamesCheck>({ repos: {}, team: {} });
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [labels, setLabels] = useState<RepoLabels>({});
   const [tokenCheck, setTokenCheck] = useState<TokenCheck | "checking" | null>(null);
 
   const dirty = read !== null && draft !== null && changed(draft, read.settings);
@@ -53,6 +70,16 @@ export function Settings({ onClose }: { onClose(): void }) {
       .catch(() => {});
     repoSuggestions()
       .then(setSuggestions)
+      .catch(() => {});
+    lookUpLabels([...form.repos, ...Object.keys(form.issues.repos)]);
+  };
+
+  /** Asks GitHub for the labels of the repos whose labels are not known yet, as hints for the stages. */
+  const lookUpLabels = (repos: string[]) => {
+    const unknown = [...new Set(repos)].filter((repo) => !(repo in labels));
+    if (!unknown.length) return;
+    repoLabels(unknown)
+      .then((found) => setLabels((current) => ({ ...current, ...found })))
       .catch(() => {});
   };
 
@@ -108,6 +135,7 @@ export function Settings({ onClose }: { onClose(): void }) {
     edit({ [list]: next });
     const added = next.at(-1)!;
     if (read.token.set) {
+      if (list === "repos") lookUpLabels([added]);
       checkNames(list === "repos" ? { repos: [added], team: [] } : { repos: [], team: [added] })
         .then((found) => setChecks((current) => ({ repos: { ...current.repos, ...found.repos }, team: { ...current.team, ...found.team } })))
         .catch(() => {});
@@ -145,6 +173,11 @@ export function Settings({ onClose }: { onClose(): void }) {
       .catch(() => {});
     lookUp(draft);
   };
+
+  const editIssues = (next: Partial<SettingsForm["issues"]>) => edit({ issues: { ...draft.issues, ...next } });
+  const editOwnList = (repo: string, columns: string[]) => editIssues({ repos: { ...draft.issues.repos, [repo]: { columns } } });
+  const dropOwnList = (repo: string) => editIssues({ repos: Object.fromEntries(Object.entries(draft.issues.repos).filter(([name]) => name !== repo)) });
+  const common = onCommonList(draft.issues, draft.repos);
 
   const stray = strayIssues(issues, shownByField);
   const quiet = readQuiet(draft.notifications.quiet_hours);
@@ -300,6 +333,51 @@ export function Settings({ onClose }: { onClose(): void }) {
             </div>
           </Field>
         </Card>
+
+        <Card title="Issues" index={6}>
+          <Field label="Етапи" hint="Колоните на Issue таблото след „Без етап“, в този ред. За всяко repo без свой списък.">
+            <StageList
+              columns={draft.issues.columns}
+              path="issues.columns"
+              repos={common}
+              labels={labels}
+              issues={issues}
+              missing={(repos) => `Няма го в ${repos.map(shortRepo).join(", ")}`}
+              onChange={(columns) => editIssues({ columns })}
+            />
+          </Field>
+          {Object.entries(draft.issues.repos).map(([repo, { columns }]) => (
+            <div class="set-field" key={repo}>
+              <div class="set-label-row">
+                <span class="set-label">Етапи на {repo}</span>
+                <button type="button" class="chip" title="Repo-то минава на общия списък" onClick={() => dropOwnList(repo)}>
+                  Към общия
+                </button>
+              </div>
+              <StageList
+                columns={columns}
+                path={`issues.repos.${repo}.columns`}
+                repos={[repo]}
+                labels={labels}
+                issues={issues}
+                missing={() => "Няма го в repo-то"}
+                onChange={(next) => editOwnList(repo, next)}
+              />
+            </div>
+          ))}
+          {common.length > 0 && (
+            <div class="set-field">
+              <span class="set-label">Свой списък за</span>
+              <div class="set-chips">
+                {common.map((repo) => (
+                  <button type="button" class="chip" key={repo} title={`${repo} получава свои етапи, отначало като общите`} onClick={() => editOwnList(repo, draft.issues.columns)}>
+                    + {shortRepo(repo)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
       </div>
 
       <footer class={`set-actions${dirty ? " dirty" : ""}`}>
@@ -336,6 +414,40 @@ function Field({ label, hint, issue, children }: { label: string; hint?: string;
   );
 }
 
+type StageListProps = {
+  columns: string[];
+  /** The path of the list in config.yaml: "issues.columns" or "issues.repos.<repo>.columns". */
+  path: string;
+  /** The repos that take this list, whose labels it is offered and checked against. */
+  repos: string[];
+  labels: RepoLabels;
+  issues: FieldIssue[];
+  /** The warning for a stage the labels of `repos` (some of them) do not have. */
+  missing(repos: string[]): string;
+  onChange(columns: string[]): void;
+};
+
+/** A list of stage labels in the order of the board's columns: hints from the repos' labels, a warning for one they lack. */
+function StageList({ columns, path, repos, labels, issues, missing, onChange }: StageListProps) {
+  return (
+    <NameList
+      items={columns}
+      path={path}
+      issues={issues}
+      placeholder="етикет"
+      suggestions={labelHints(labels, repos, columns)}
+      warning={(label) => {
+        const lacking = missingFrom(label, labels, repos);
+        return lacking.length ? missing(lacking) : null;
+      }}
+      empty="Няма етапи: всички issues са в „Без етап“."
+      onAdd={(label) => onChange(withItem(columns, label))}
+      onRemove={(label) => onChange(columns.filter((l) => l !== label))}
+      onMove={(from, to) => onChange(moved(columns, from, to))}
+    />
+  );
+}
+
 type NameListProps = {
   items: string[];
   /** The path of the list in config.yaml, for its issues: "repos", then "repos[1]" for an item. */
@@ -349,11 +461,15 @@ type NameListProps = {
   empty?: string;
   onAdd(item: string): void;
   onRemove(item: string): void;
+  /** Makes the list ordered: each item gets ↑ and ↓, and glides to its new place. */
+  onMove?(from: number, to: number): void;
 };
 
 /** A list of names with a ✕ on each and a field to add one; an item GitHub does not know gets a warning, not a block. */
-function NameList({ items, path, issues, placeholder, suggestions = [], mono, lead, warning, empty, onAdd, onRemove }: NameListProps) {
+function NameList({ items, path, issues, placeholder, suggestions = [], mono, lead, warning, empty, onAdd, onRemove, onMove }: NameListProps) {
   const [value, setValue] = useState("");
+  const list = useRef<HTMLUListElement>(null);
+  useFlip(list);
   const listId = `${path}-hints`;
   const add = () => {
     onAdd(value);
@@ -363,15 +479,32 @@ function NameList({ items, path, issues, placeholder, suggestions = [], mono, le
   return (
     <div class="names">
       {items.length === 0 && empty ? <p class="set-hint">{empty}</p> : null}
-      <ul>
+      <ul ref={list} data-flip-root>
         {items.map((item, index) => {
           const issue = issueAt(issues, `${path}[${index}]`);
           const warn = issue ? null : (warning?.(item) ?? null);
           return (
-            <li key={item} class={issue ? "bad" : warn ? "warn" : ""}>
+            <li key={item} data-flip={`name:${item}`} class={issue ? "bad" : warn ? "warn" : ""}>
               {lead?.(item)}
               <span class={mono ? "name mono" : "name"}>{item}</span>
               {(issue ?? warn) && <span class={issue ? "set-issue" : "set-warn"}>{issue ?? `⚠ ${warn}`}</span>}
+              {onMove && (
+                <>
+                  <button type="button" class="x mv" aria-label={`${item} по-напред`} title="По-напред" disabled={index === 0} onClick={() => onMove(index, index - 1)}>
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    class="x mv"
+                    aria-label={`${item} по-назад`}
+                    title="По-назад"
+                    disabled={index === items.length - 1}
+                    onClick={() => onMove(index, index + 1)}
+                  >
+                    ↓
+                  </button>
+                </>
+              )}
               <button type="button" class="x" aria-label={`Махни ${item}`} title="Махни" onClick={() => onRemove(item)}>
                 ✕
               </button>

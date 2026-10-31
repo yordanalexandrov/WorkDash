@@ -1,4 +1,6 @@
-/** The few GitHub REST calls the Settings screen makes to check a token, a repo or a login. */
+/** The few GitHub REST calls the Settings screen makes: to check a token, a repo or a login, and for hints. */
+
+import type { IssueLabel } from "../domain/issues.js";
 
 const API = "https://api.github.com";
 
@@ -100,5 +102,16 @@ export async function accessibleRepos(token: string, fetch: Fetch = globalThis.f
     return ((await response.json()) as { full_name: string }[]).map((repo) => repo.full_name);
   } catch {
     return [];
+  }
+}
+
+/** Up to 100 of the repo's labels, as hints for its stage labels; null when GitHub does not answer, so none is doubted. */
+export async function repoLabels(repo: string, token: string, fetch: Fetch = globalThis.fetch): Promise<IssueLabel[] | null> {
+  try {
+    const response = await get(`/repos/${repo.split("/").map(encodeURIComponent).join("/")}/labels?per_page=100`, token, fetch);
+    if (!response.ok) return null;
+    return ((await response.json()) as IssueLabel[]).map(({ name, color }) => ({ name, color }));
+  } catch {
+    return null;
   }
 }
