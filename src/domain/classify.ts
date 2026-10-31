@@ -98,3 +98,8 @@ export function groupIntoSections(
   }
   return SECTIONS.map((section) => ({ section, pullRequests: bySection.get(section)! }));
 }
+
+/** How many PRs wait on me: the count on the Чака теб column, before any filter. */
+export function waitingOnMe(sections: { section: Section; pullRequests: unknown[] }[]): number {
+  return sections.find(({ section }) => section === "waiting_on_me")?.pullRequests.length ?? 0;
+}

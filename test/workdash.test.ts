@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { TokenStore } from "../src/token-store.js";
+import { openStore } from "../src/db.js";
 import { startWorkDash } from "../src/workdash.js";
+import { pullRequest } from "./fixtures.js";
 
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 
@@ -99,6 +101,41 @@ describe("startWorkDash", () => {
     try {
       const response = await fetch(`${workdash.url}/api/prs`);
       expect(await response.json()).toMatchObject({ missing: ["repos"] });
+    } finally {
+      await workdash.close();
+    }
+  });
+
+  it("tells how many PRs wait on me, and again once one of them is seen", async () => {
+    mkdirSync(dataDir, { recursive: true });
+    const seeded = openStore(join(dataDir, "workdash.db"));
+    const comment = { id: "c1", author: "colleague1", createdAt: "2026-10-30T09:59:00Z", body: "why?" };
+    seeded.saveSnapshot(
+      { viewer: "me", pullRequests: [pullRequest({ number: 4, comments: [comment] }), pullRequest({ number: 5, ci: "FAILURE" }), pullRequest({ number: 6, comments: [comment] })] },
+      new Date("2026-10-30T10:00:00Z"),
+    );
+    seeded.close();
+    const workdash = await startWorkDash({ dataDir, tokens: memoryTokens(), host: "127.0.0.1", port: 0, webRoot, logger: false });
+    try {
+      const counts: number[] = [];
+      const unsubscribe = workdash.onWaitingOnMe((count) => counts.push(count));
+      expect(counts).toEqual([3]);
+
+      const seen = await fetch(`${workdash.url}/api/seen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo: "my-org/repo-a", number: 4, at: "2026-10-30T10:00:00.000Z" }),
+      });
+      expect(seen.status).toBe(204);
+      expect(counts).toEqual([3, 2]);
+
+      unsubscribe();
+      await fetch(`${workdash.url}/api/seen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo: "my-org/repo-a", number: 6 }),
+      });
+      expect(counts).toEqual([3, 2]);
     } finally {
       await workdash.close();
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, groupIntoSections, type ClassifyRules } from "../src/domain/classify.js";
+import { classify, groupIntoSections, waitingOnMe, type ClassifyRules } from "../src/domain/classify.js";
 import type { Comment, PullRequest, Review } from "../src/domain/types.js";
 import { pullRequest } from "./fixtures.js";
 
@@ -263,5 +263,21 @@ describe("groupIntoSections: seen marks", () => {
     ]);
     expect(sections[1]?.pullRequests).toEqual([expect.objectContaining({ number: 3, unreadComments: 0 })]);
     expect(sections[1]?.pullRequests[0]).not.toHaveProperty("reReview");
+  });
+});
+
+describe("waitingOnMe", () => {
+  it("counts the PRs in Чака теб and no other section", () => {
+    const sections = groupIntoSections(
+      [pullRequest({ number: 1, ci: "FAILURE" }), pullRequest({ number: 2, mergeable: "CONFLICTING" }), pullRequest({ number: 3 })],
+      "me",
+      { team: [], requiredApprovals: 1 },
+    );
+
+    expect(waitingOnMe(sections)).toBe(2);
+  });
+
+  it("is 0 when nothing waits on me", () => {
+    expect(waitingOnMe(groupIntoSections([pullRequest()], "me", { team: [], requiredApprovals: 1 }))).toBe(0);
   });
 });

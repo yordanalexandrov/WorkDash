@@ -7,8 +7,16 @@ function stateFile(): string {
   return join(app.getPath("userData"), "window-state.json");
 }
 
-/** Opens the dashboard at `url` in a window that comes back at its last size and position, and keeps other sites out of it. */
-export function openWindow(url: string): BrowserWindow {
+/** The app's icon, for the window and the tray. */
+export function appIcon(): string {
+  return join(app.getAppPath(), "..", "web", "public", "icons", "icon-512.png");
+}
+
+/**
+ * Opens the dashboard at `url` in a window that comes back at its last size and position, and keeps other sites out of
+ * it. Closing it only hides it, so the page goes on polling and notifying, unless the app is quitting.
+ */
+export function openWindow(url: string, quitting: () => boolean): BrowserWindow {
   const state = loadWindowState(
     stateFile(),
     screen.getAllDisplays().map((display) => display.workArea),
@@ -21,7 +29,7 @@ export function openWindow(url: string): BrowserWindow {
     minWidth: 480,
     minHeight: 360,
     title: "WorkDash",
-    icon: join(app.getAppPath(), "..", "web", "public", "icons", "icon-512.png"),
+    icon: appIcon(),
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -34,8 +42,11 @@ export function openWindow(url: string): BrowserWindow {
   if (state.maximized) window.maximize();
   window.once("ready-to-show", () => window.show());
 
-  window.on("close", () => {
+  window.on("close", (event) => {
     saveWindowState(stateFile(), { ...window.getNormalBounds(), maximized: window.isMaximized() });
+    if (quitting()) return;
+    event.preventDefault();
+    window.hide();
   });
 
   // Links to GitHub, Jira and the rest open in the default browser; the window only ever shows the dashboard.

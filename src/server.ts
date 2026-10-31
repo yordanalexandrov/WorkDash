@@ -109,6 +109,8 @@ export function buildServer(
     pendingNotifications?: () => ServerEvent[];
     /** Takes the ids of the notifications a browser showed. */
     acknowledgeNotifications?: (ids: string[]) => void;
+    /** Called once a PR is marked seen, after every open page has its new state. */
+    onSeen?: () => void;
     /** The Settings screen's side; without it the dashboard has no /api/config or /api/token. */
     settings?: Settings;
     /** The zone quiet hours are read in, shown next to them. */
@@ -153,6 +155,7 @@ export function buildServer(
     const now = Date.now();
     options.store.markSeen(repo, number, new Date(at ? Math.min(Date.parse(at), now) : now));
     events.broadcast("dashboard", dashboardState(options));
+    options.onSeen?.();
     return reply.code(204).send();
   });
 

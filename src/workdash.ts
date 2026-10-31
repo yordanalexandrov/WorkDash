@@ -3,6 +3,7 @@ import type { FastifyServerOptions } from "fastify";
 import { type Config, ConfigError, loadConfig, parseConfig, watchConfig } from "./config.js";
 import { type Legacy, openDataDir } from "./data-dir.js";
 import { openStore } from "./db.js";
+import { groupIntoSections, waitingOnMe } from "./domain/classify.js";
 import type { Missing } from "./domain/settings.js";
 import { createNotifier } from "./notifier.js";
 import { type PollerSettings, startPoller } from "./poller.js";
@@ -36,6 +37,11 @@ export type WorkDashOptions = {
 export type WorkDash = {
   /** Where it answers, with the port it actually listens on. */
   url: string;
+  /**
+   * Calls `listener` with how many PRs wait on me (the Чака теб count) right away, then each time it changes: after a
+   * poll, a PR marked seen or a change of settings. Returns what stops it.
+   */
+  onWaitingOnMe(listener: (count: number) => void): () => void;
   /** Stops the config watcher, the poller and the server, then closes the database. */
   close(): Promise<void>;
 };
@@ -90,11 +96,32 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     configError: () => configWatcher.error(),
     missing: () => [...(token === null ? ["token" as const] : []), ...(config.repos.length === 0 ? ["repos" as const] : [])] satisfies Missing[],
   };
+  // The Чака теб count, for whoever shows it outside the page (the desktop app's tray). Read from the store and the
+  // rules alone, so it is right before the poller exists and with no browser open.
+  const countWaiting = () => {
+    const snapshot = store.loadSnapshot();
+    return waitingOnMe(groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", dashboard.rules(), store.loadSeen()));
+  };
+  const waitingListeners = new Set<(count: number) => void>();
+  let waiting = countWaiting();
+  const refreshWaiting = () => {
+    const count = countWaiting();
+    if (count === waiting) return;
+    waiting = count;
+    for (const listener of waitingListeners) listener(count);
+  };
+  const onWaitingOnMe = (listener: (count: number) => void) => {
+    waitingListeners.add(listener);
+    listener(waiting);
+    return () => void waitingListeners.delete(listener);
+  };
+
   /**
    * Pushes the dashboard as it is now to every open browser. With none open it does nothing, which also keeps the
    * first poll, started before the poller is assigned and the server listens, from reading the poller too early.
    */
   const publishDashboard = () => {
+    refreshWaiting();
     if (events.clientCount() > 0) events.broadcast("dashboard", dashboardState(dashboard));
   };
 
@@ -127,6 +154,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     events,
     pendingNotifications: notifier.takePending,
     acknowledgeNotifications: notifier.acknowledge,
+    onSeen: refreshWaiting,
     settings,
     timeZone,
     webRoot: options.webRoot,
@@ -153,6 +181,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
   });
 
   const close = async () => {
+    waitingListeners.clear();
     configWatcher.close();
     clearInterval(missedTimer);
     poller.stop();
@@ -168,5 +197,5 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
   }
   const { port } = server.server.address() as AddressInfo;
   const host = options.host.includes(":") ? `[${options.host}]` : options.host;
-  return { url: `http://${host}:${port}`, close };
+  return { url: `http://${host}:${port}`, onWaitingOnMe, close };
 }
