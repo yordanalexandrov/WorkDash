@@ -48,7 +48,7 @@ Surfaces: a slow gradient-mesh background with a faint dot grid; columns and the
 
 - **Card**: top row = repo tag, `#number`, age on the right. Then the reason label (only in "Чака теб"), the title (link to the PR), Jira keys as small mono chips. Footer = author initials avatar, CI and Sonar rings, merge state, unread count, reviewer avatars (a dot per review state; requested reviewers who have not answered as dashed circles), "видях" on "Чака теб" cards. Drafts get diagonal stripes in the project colour.
 - **Row**: the same facts as the card, one per column, same marks (rings, avatars, badges), same project stripe and tint; the section is a small dot-and-label pill ("теб", "review", "merge", "други", "екип").
-- **Detail sheet**: opens from the card or row it belongs to (it grows out of that rect and shrinks back into it); holds the description, latest comments, commits, reviews, Jira, branch. Esc or ✕ closes it.
+- **Detail sheet**: opens from the card or row it belongs to (it grows out of that rect and shrinks back into it); holds the description, latest comments, commits, reviews, Jira, branch. The description and the comments are GitHub-flavoured markdown (`Markdown`: `marked`, then `DOMPurify`), with ```mermaid blocks drawn as diagrams; mermaid loads only when a text has one. ⤢ / ⤡ or `f` expand it to 24px off every edge of the window (columns `2fr / 1fr`) and back; the next sheet opens in the last size, until a reload. Esc or ✕ closes it.
 
 ## Motion
 
@@ -69,11 +69,12 @@ Motion explains change: where something came from, where it went, what needs att
   - **Tilt** (`tilt.ts`): an open PR's card leans up to ±4.5° towards the mouse (not touch, not while a button is down) and a soft shine follows it; it is the inner `.card` that leans, never the `[data-flip]` slot, so FLIP, entrances and the hover lift carry on. Rows, closed cards, flyers and drag copies do not lean.
   - **Counts** in the heads of the board's columns count up with ease-out over 700ms (`CountUp`; a count is text, not something moving, so it keeps its own curve): from 0 on load in the cascade, from the old value on a change. What they last showed, and whether the confetti has played, live outside the board, so going back to it from the table (or folding a column) neither counts from 0 nor bursts again.
   - Particles are the one exception to the two springs: they follow physics (gravity, a burst), not something moving to a new place, so they use their own `cubic-bezier` curves. They are also the one place where the project hues (`PALETTE` in `palette.ts`, at the stripe's saturation) do not mean a project; sparks are `--ok` mixed lighter with `color-mix`. They live in `.fx`, move only by `transform` and `opacity` and are removed at their end.
+- **Sheet size**: switching between normal and expanded, the content fades out, the box glides from one rect to the other (`morphTransform`, GLIDE) and the content fades back in, so no text shows stretched.
 - `prefers-reduced-motion: reduce` turns off everything except instant state changes.
 
 ## Interaction
 
-- Shortcuts: `/` focuses the filter, Esc clears it or closes the sheet, `t` toggles the view, Enter on a focused card or row opens the sheet. Shortcuts are ignored while typing in an input. Match `t` by `event.code` (`KeyT`) as well, so it works on a Bulgarian layout.
+- Shortcuts: `/` focuses the filter, Esc clears it or closes the sheet, `t` toggles the view, `f` expands or shrinks the open sheet, Enter on a focused card or row opens the sheet. Shortcuts are ignored while typing in an input. Match `t` and `f` by `event.code` (`KeyT`, `KeyF`) as well, so it works on a Bulgarian layout.
 - Every PR title and number links to GitHub in a new tab.
 - "видях" is reachable both as a button and by dragging a "Чака теб" card onto the "видях" drop zone (pointer events, so touch works).
 - Anything clickable shows it: hover lift, focus ring (`--blue`), pointer cursor.
