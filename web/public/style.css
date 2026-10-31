@@ -1791,18 +1791,18 @@ kbd {
   text-align: center;
 }
 
-/* An open PR's card or row opens its detail sheet; a closed one does not, so it does not lift either. */
+/* An open PR's card or row opens its detail sheet, and so does an issue's, closed or not; a closed PR's does not, so it does not lift either. */
 .card.opens,
 .trow.opens {
   cursor: pointer;
 }
 
-.card.closed:hover {
+.card.closed:not(.opens):hover {
   transform: none;
   box-shadow: none;
 }
 
-.trow.closedrow:hover {
+.trow.closedrow:not(.opens):hover {
   --lift: 0px;
   box-shadow: none;
 }

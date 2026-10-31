@@ -1,14 +1,14 @@
 import type { RefObject } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { IssueBoardState, StagedIssue } from "../api.js";
+import type { IssueBoardState } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
 import { confetti, middleOf, NO_WATCH, watchCompleted } from "../effects.js";
 import type { Filter } from "../filter.js";
 import { shortRepo } from "../format.js";
 import { issueColumns } from "../issueBoard.js";
 import { filterIssueColumns, filterIssues } from "../issueFilter.js";
-import { findIssue, issueKey } from "../issueDetail.js";
+import { findIssue, issueKey, type ShownIssue } from "../issueDetail.js";
 import { assignedToMe } from "../issueMarks.js";
 import { BOUNCE, issueFlipKey, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
@@ -120,15 +120,16 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const filterInput = useRef<HTMLInputElement>(null);
 
   // The detail sheet. A card opens it with `openSheet`, and so does a row of the table: both carry the issue's FLIP key, which
-  // the sheet grows out of and shrinks back into. It shows the issue as the state has it now, or as it last was once it is gone.
+  // the sheet grows out of and shrinks back into; so do a closed card and row. It shows the issue as the state has it now (an
+  // issue that closes while it is open shows closed), or as it last was once it is gone.
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
   // The sheet's last size: the next one opens in it, while the dashboard shows.
   const [expanded, setExpanded] = useState(false);
   const openKey = sheet ? issueKey(sheet.issue) : null;
   const live = openKey ? findIssue(shown, openKey) : undefined;
-  const shownSheet = useRef<StagedIssue>();
+  const shownSheet = useRef<ShownIssue>();
   if (live) shownSheet.current = live;
-  const openSheet = (issue: StagedIssue, from: HTMLElement) =>
+  const openSheet = (issue: ShownIssue, from: HTMLElement) =>
     setSheet({ issue: { repo: issue.repo, number: issue.number }, flip: from.dataset["flip"] ?? issueFlipKey(issue), from: from.getBoundingClientRect(), closing: false });
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
   // Another repo's tab takes the sheet with it.
@@ -211,7 +212,16 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
         <Board columns={columns} booted={booted} message={boardMessage(open, fetched, shown)}>
           {(column) =>
             column.closed
-              ? column.items.map((issue, index) => <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={index} />)
+              ? column.items.map((issue, index) => (
+                  <ClosedIssueCard
+                    key={`${issue.repo}#${issue.number}`}
+                    issue={issue}
+                    hue={hue}
+                    index={index}
+                    onOpen={openSheet}
+                    ghost={sheet?.flip === issueFlipKey(issue)}
+                  />
+                ))
               : column.items.map((issue, index) => (
                   <IssueCard
                     key={`${issue.repo}#${issue.number}`}

@@ -1,5 +1,6 @@
 import type { ClosedIssue, StagedIssue } from "../api.js";
-import { assignedToMe } from "../issueMarks.js";
+import type { ShownIssue } from "../issueDetail.js";
+import { assignedToMe, stageMark } from "../issueMarks.js";
 import { issueFlipKey } from "../motion.js";
 import { ISSUE_GROUPINGS, issueGroups, type IssueRow as Row, issueRows, issueTableColumns } from "../issueTable.js";
 import { type GroupBy, nextSort, type Sort, sortItems } from "../table.js";
@@ -35,8 +36,8 @@ type IssueTableProps = {
   onGroupBy(by: GroupBy): void;
   collapsed: ReadonlySet<string>;
   onToggle(id: string): void;
-  /** Opens the detail sheet of an open issue, growing out of its row. */
-  onOpen(issue: StagedIssue, from: HTMLElement): void;
+  /** Opens the detail sheet of an issue, open or closed, growing out of its row. */
+  onOpen(issue: ShownIssue, from: HTMLElement): void;
   /** The FLIP key of the card or row the sheet is open from, which hides while it is; null while no sheet is open. */
   openFlip: string | null;
   booted: boolean;
@@ -74,7 +75,14 @@ export function IssueTable({ issues, closed, stages, hue, viewer, message, query
       booted={booted}
       row={(row, index) =>
         "closed" in row ? (
-          <ClosedIssueRow key={issueFlipKey(row.closed)} issue={row.closed} hue={hue} index={index} />
+          <ClosedIssueRow
+            key={issueFlipKey(row.closed)}
+            issue={row.closed}
+            hue={hue}
+            index={index}
+            onOpen={onOpen}
+            ghost={openFlip === issueFlipKey(row.closed)}
+          />
         ) : (
           <IssueRow
             key={row.flip}
@@ -94,7 +102,7 @@ export function IssueTable({ issues, closed, stages, hue, viewer, message, query
 
 /** A stage's head in its accent with the label's name; an assignee's with the avatar; a milestone's with ⚑. The empty key is "Без …". */
 function groupHead(by: GroupBy, key: string): GroupHeadLook {
-  if (by === "stage") return key ? { color: "var(--blue)", label: key } : { color: "var(--faint)", label: "Без етап" };
+  if (by === "stage") return { color: stageMark(key || null).accent, label: key || "Без етап" };
   if (by === "assignee") return key ? { color: "var(--text)", label: key, lead: <Avatar login={key} /> } : { color: "var(--faint)", label: "Без assignee" };
   return key ? { color: "var(--muted)", label: `⚑ ${key}` } : { color: "var(--faint)", label: "Без milestone" };
 }

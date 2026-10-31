@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issue } from "../../test/fixtures.js";
+import { closedIssue, issue } from "../../test/fixtures.js";
 import type { IssueBoardState } from "../src/api.js";
 import { findIssue, issueDates } from "../src/issueDetail.js";
 
@@ -27,13 +27,23 @@ describe("findIssue", () => {
       { ...issue({ number: 7 }), stage: "in-progress" },
     ],
     totalCount: 2,
-    closed: [],
+    closed: [closedIssue({ number: 4, closedAs: "not_planned" })],
     polling: false,
     error: null,
   };
 
   it("finds an issue of the state by its repo and number, with its stage as the state has it now", () => {
     expect(findIssue(state, "my-org/repo-a#7")).toMatchObject({ number: 7, stage: "in-progress" });
+  });
+
+  it("finds an issue closed within the window too, as closed", () => {
+    expect(findIssue(state, "my-org/repo-a#4")).toMatchObject({ number: 4, closedAs: "not_planned" });
+  });
+
+  it("finds an issue that closed while its sheet was open among the closed ones, not as gone", () => {
+    const closedSince = { ...state, issues: state.issues.filter((open) => open.number !== 7), closed: [closedIssue({ number: 7 }), ...state.closed] };
+
+    expect(findIssue(closedSince, "my-org/repo-a#7")).toMatchObject({ number: 7, closedAs: "completed" });
   });
 
   it("finds nothing for an issue no longer in the state, nor before the state has come", () => {

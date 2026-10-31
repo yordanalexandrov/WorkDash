@@ -4,10 +4,9 @@ import { count } from "../badges.js";
 import { sheetOpeners } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
-import { labelChip } from "../labels.js";
 import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
-import { LinkedPrs, MilestoneChip } from "./IssueMarks.js";
+import { LabelChips, LinkedPrs, MeChip, MilestoneChip } from "./IssueMarks.js";
 
 type IssueCardProps = {
   issue: StagedIssue;
@@ -30,17 +29,13 @@ type IssueCardProps = {
  */
 export function IssueCard({ issue, hue, index, mine, onOpen, ghost }: IssueCardProps) {
   const slot = useRef<HTMLDivElement>(null);
-  const labels = cardLabels(issue).map(labelChip);
+  const labels = cardLabels(issue);
   return (
     <div ref={slot} class={ghost ? "slot ghost" : "slot"} data-flip={issueFlipKey(issue)} style={{ "--ti": index }}>
       <article class="card opens" style={{ "--rh": hue }} tabIndex={0} {...sheetOpeners(() => onOpen(issue, slot.current!))}>
         <div class="card-top">
           <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>
-          {mine ? (
-            <span class="me" title="назначен на теб">
-              теб
-            </span>
-          ) : null}
+          {mine ? <MeChip /> : null}
           <span class="age" title={`отворен ${new Date(issue.createdAt).toLocaleString()} · обновен преди ${age(issue.updatedAt)}`}>
             {age(issue.createdAt)}
           </span>
@@ -50,11 +45,7 @@ export function IssueCard({ issue, hue, index, mine, onOpen, ghost }: IssueCardP
         </a>
         {labels.length ? (
           <div class="labels">
-            {labels.map(({ name, background, ink }) => (
-              <span key={name} class={`lbl ${ink}`} style={{ "--lc": background }}>
-                {name}
-              </span>
-            ))}
+            <LabelChips labels={labels} />
           </div>
         ) : null}
         {issue.milestone || issue.linkedPullRequests.length ? (

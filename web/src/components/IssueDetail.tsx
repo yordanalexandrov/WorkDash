@@ -1,31 +1,29 @@
-import type { StagedIssue } from "../api.js";
 import { count } from "../badges.js";
 import { cleanBody, latest } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
-import { issueDates } from "../issueDetail.js";
-import { labelChip } from "../labels.js";
+import { isClosed, issueDates, type ShownIssue } from "../issueDetail.js";
 import { Avatar } from "./Avatar.js";
-import { LinkedPrs, MilestoneChip } from "./IssueMarks.js";
+import { ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill } from "./IssueMarks.js";
 import { Markdown } from "./Markdown.js";
-import { SectionPill } from "./SectionPill.js";
 
 /** How many comments the sheet lists, the latest first. */
 const LATEST = 6;
 
 type IssueDetailProps = {
-  issue: StagedIssue;
+  /** Open, in its stage, or closed within the window. */
+  issue: ShownIssue;
   /** The project hue of the repo tag. */
   hue: number;
   /** Whether it is assigned to me: the same quiet "теб" as on its card. */
   mine: boolean;
-  /** The issue has left the board (closed, or no longer among the fetched ones); the sheet shows its last data. */
+  /** The issue has left the board (closed before the window, or no longer among the fetched ones); the sheet shows its last data. */
   gone: boolean;
 };
 
 /**
  * Everything about one issue ("Anatomy" → Detail sheet in docs/design.md): every fact of its card and row, with its stage
- * as a pill and every other label, plus the description, the latest comments and when it was opened, updated and closed.
+ * as a pill and every other label (a closed one: how it was closed and all its labels), plus the description, the latest comments and when it was opened, updated and closed.
  * Texts are markdown.
  */
 export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
@@ -39,11 +37,7 @@ export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
             {issue.repo}
           </span>
           <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>
-          {mine ? (
-            <span class="me" title="назначен на теб">
-              теб
-            </span>
-          ) : null}
+          {mine ? <MeChip /> : null}
           <span class="age">{issueDates(issue)}</span>
         </div>
         <h2>
@@ -52,14 +46,8 @@ export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
           </a>
         </h2>
         <div class="meta">
-          <SectionPill accent={issue.stage ? "var(--blue)" : "var(--faint)"} label={issue.stage ?? "Без етап"} title="етап" />
-          {cardLabels(issue)
-            .map(labelChip)
-            .map(({ name, background, ink }) => (
-              <span key={name} class={`lbl ${ink}`} style={{ "--lc": background }}>
-                {name}
-              </span>
-            ))}
+          {isClosed(issue) ? <ClosedAsMark closedAs={issue.closedAs} /> : <StagePill stage={issue.stage} />}
+          <LabelChips labels={isClosed(issue) ? issue.labels : cardLabels(issue)} />
           <MilestoneChip issue={issue} />
           <LinkedPrs issue={issue} />
           {issue.comments ? <span class="ic muted">{`💬 ${count(issue.comments, "коментар", "коментара")}`}</span> : null}

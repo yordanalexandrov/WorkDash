@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignedToMe, linkedPrMark, milestoneMark } from "../src/issueMarks.js";
+import { assignedToMe, closedAsMark, linkedPrMark, milestoneMark, stageMark } from "../src/issueMarks.js";
 
 const linked = (status: "open" | "draft" | "merged" | "closed", repo = "my-org/repo-a", number = 12) => ({
   repo,
@@ -49,5 +49,19 @@ describe("milestoneMark", () => {
 
   it("says when a milestone has no due date", () => {
     expect(milestoneMark({ title: "Someday", dueOn: null }).title).toBe("milestone Someday · без срок");
+  });
+});
+
+describe("stageMark", () => {
+  it("draws a stage in --blue with its name, and none in --faint as „без етап“", () => {
+    expect(stageMark("in-progress")).toEqual({ accent: "var(--blue)", label: "in-progress", title: "етап in-progress" });
+    expect(stageMark(null)).toEqual({ accent: "var(--faint)", label: "без етап", title: "без етап" });
+  });
+});
+
+describe("closedAsMark", () => {
+  it("says a completed issue in --merged and one not planned in --muted", () => {
+    expect(closedAsMark("completed")).toEqual({ kind: "merged", text: "🎉 завършен" });
+    expect(closedAsMark("not_planned")).toEqual({ kind: "muted", text: "не е планиран" });
   });
 });

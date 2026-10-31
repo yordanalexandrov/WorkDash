@@ -4,26 +4,16 @@ import { count } from "../badges.js";
 import { sheetOpeners } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
-import { labelChip } from "../labels.js";
 import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
-import { LinkedPrs, MilestoneChip } from "./IssueMarks.js";
-import { SectionPill } from "./SectionPill.js";
+import { ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill } from "./IssueMarks.js";
 
 const none = <span class="dim">·</span>;
 
 /** The label chips in their GitHub colours, as on the card; more than fit wrap onto another line. */
 function Labels({ labels }: { labels: IssueLabel[] }) {
   return (
-    <span class="tc lbls">
-      {labels.length
-        ? labels.map(labelChip).map(({ name, background, ink }) => (
-            <span key={name} class={`lbl ${ink}`} style={{ "--lc": background }}>
-              {name}
-            </span>
-          ))
-        : none}
-    </span>
+    <span class="tc lbls">{labels.length ? <LabelChips labels={labels} /> : none}</span>
   );
 }
 
@@ -60,17 +50,13 @@ export function IssueRow({ issue, flip, hue, index, mine, onOpen, ghost }: Issue
         <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>
       </span>
       <span class="tc tt">
-        {mine ? (
-          <span class="me" title="назначен на теб">
-            теб
-          </span>
-        ) : null}
+        {mine ? <MeChip /> : null}
         <a href={issue.url} target="_blank" rel="noopener" title={issue.title}>
           {issue.title}
         </a>
       </span>
       <span class="tc">
-        {issue.stage === null ? <SectionPill accent="var(--faint)" label="без етап" /> : <SectionPill accent="var(--blue)" label={issue.stage} title={`етап ${issue.stage}`} />}
+        <StagePill stage={issue.stage} />
       </span>
       <Labels labels={cardLabels(issue)} />
       <span class="tc people" title="назначени">
@@ -105,14 +91,35 @@ export function IssueRow({ issue, flip, hue, index, mine, onOpen, ghost }: Issue
   );
 }
 
+type ClosedIssueRowProps = {
+  issue: ClosedIssue;
+  /** The project hue: stripe and tint. */
+  hue: number;
+  /** The row's place in the table, which sets its turn in the entrance cascade. */
+  index: number;
+  /** Opens the detail sheet, growing out of `from`. */
+  onOpen(issue: ClosedIssue, from: HTMLElement): void;
+  /** Hidden while its sheet is open, so the sheet looks like the row grown. */
+  ghost: boolean;
+};
+
 /**
- * An issue closed within the configured window, as a row: lighter and dashed like a closed PR's, with all its labels, and how
- * it was closed where the people and marks would be, completed in `--merged` and not planned in `--muted`.
+ * An issue closed within the configured window, as a row: lighter and dashed like a closed PR's, with all its labels, no
+ * stage, and how it was closed where the people and marks would be, completed in `--merged` and not planned in `--muted`.
+ * A click or Enter on it opens its detail sheet.
  */
-export function ClosedIssueRow({ issue, hue, index }: { issue: ClosedIssue; hue: number; index: number }) {
-  const completed = issue.closedAs === "completed";
+export function ClosedIssueRow({ issue, hue, index, onOpen, ghost }: ClosedIssueRowProps) {
+  const ref = useRef<HTMLDivElement>(null);
   return (
-    <div role="row" class="trow closedrow" data-flip={issueFlipKey(issue)} style={{ "--rh": hue, "--ti": index }}>
+    <div
+      ref={ref}
+      role="row"
+      class={ghost ? "trow closedrow opens ghost" : "trow closedrow opens"}
+      data-flip={issueFlipKey(issue)}
+      style={{ "--rh": hue, "--ti": index }}
+      tabIndex={0}
+      {...sheetOpeners(() => onOpen(issue, ref.current!))}
+    >
       <span class="tc r">
         <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>
       </span>
@@ -121,9 +128,7 @@ export function ClosedIssueRow({ issue, hue, index }: { issue: ClosedIssue; hue:
           {issue.title}
         </a>
       </span>
-      <span class="tc">
-        <SectionPill accent={completed ? "var(--merged)" : "var(--muted)"} label={completed ? "завършен" : "не е планиран"} />
-      </span>
+      <span class="tc">{none}</span>
       <Labels labels={issue.labels} />
       <span class="tc" />
       <span class="tc who">
@@ -131,7 +136,7 @@ export function ClosedIssueRow({ issue, hue, index }: { issue: ClosedIssue; hue:
         <span>{issue.author}</span>
       </span>
       <span class="tc span3">
-        <span class={`closed-st ${completed ? "merged" : "muted"}`}>{completed ? "🎉 завършен" : "не е планиран"}</span>
+        <ClosedAsMark closedAs={issue.closedAs} />
       </span>
       <span class="tc r span2">
         <span class="age" title={`затворен ${new Date(issue.closedAt).toLocaleString()}`}>{`преди ${age(issue.closedAt)}`}</span>
