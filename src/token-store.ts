@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { writeFileAtomically } from "./atomic-write.js";
 
-/** Where the GitHub token is kept, apart from the settings. The desktop app will keep it in the OS keychain instead. */
+/** Where the GitHub token is kept, apart from the settings. The desktop app keeps it encrypted with the OS keyring when it can (desktop/src/tokens.ts). */
 export type TokenStore = {
   /** The token, or null when none has been saved. */
   get(): string | null;
