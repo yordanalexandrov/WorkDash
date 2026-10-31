@@ -675,6 +675,14 @@ kbd {
   font-size: 11px;
 }
 
+/* The handle of a card that can be dragged onto "видях". */
+.grip {
+  margin-right: -2px;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: -2px;
+}
+
 .tag {
   max-width: 150px;
   overflow: hidden;
@@ -1607,6 +1615,121 @@ kbd {
   box-shadow: var(--lifted);
 }
 
+/* Drag to "видях": a "Чака теб" card is picked up by a press (touch does not scroll the column from it), a still picture of it
+   follows the pointer in .fx, and the drop zone shows while it does. The copy moves by transform (the drag) and scale (the lift). */
+.slot.drag {
+  touch-action: none;
+}
+
+.slot.drag .card {
+  cursor: grab;
+}
+
+.dragging,
+.dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.clone {
+  position: absolute;
+  margin: 0;
+  pointer-events: none;
+  translate: none;
+  transition: none !important;
+  animation: none !important;
+}
+
+.clone *,
+.clone *::before,
+.clone *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+.clone .card {
+  height: 100%;
+  transform: none;
+  box-shadow: var(--lifted), 0 0 0 2px var(--bad);
+}
+
+/* Under the copy, over the board. Its halo and turning border are the hot column's, in --ok and faster. */
+.drop {
+  position: fixed;
+  left: calc(50% - 150px);
+  bottom: 74px;
+  z-index: 29;
+  display: grid;
+  place-items: center;
+  width: 300px;
+  height: 92px;
+  border-radius: 22px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 750;
+  text-align: center;
+  pointer-events: none;
+  animation: zone-enter var(--bounce-ms, 650ms) var(--bounce, ease-out) both;
+  transition: transform var(--bounce-ms, 650ms) var(--bounce, ease-out);
+}
+
+.drop.over {
+  transform: scale(1.1);
+}
+
+.drop small {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.drop > div {
+  position: relative;
+  z-index: 1;
+}
+
+.drop > .ring,
+.drop > .halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  pointer-events: none;
+}
+
+.drop > .ring {
+  overflow: hidden;
+}
+
+.drop > .ring::before {
+  background: conic-gradient(from 0deg, var(--ok), var(--blue), var(--merged), var(--ok));
+  animation-duration: 2.5s;
+}
+
+.drop > .ring::after {
+  inset: 3px;
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--col-solid) 92%, var(--ok));
+}
+
+.drop.over > .ring::after {
+  background: color-mix(in srgb, var(--col-solid) 70%, var(--ok));
+}
+
+.drop > .halo {
+  inset: -4px;
+  border-radius: 26px;
+  box-shadow: 0 0 40px 4px color-mix(in srgb, var(--ok) 55%, transparent);
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+@keyframes zone-enter {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.8);
+  }
+}
+
 @keyframes row-enter {
   from {
     opacity: 0;
@@ -1765,5 +1888,21 @@ kbd {
 
   .trow {
     translate: none !important;
+  }
+
+  /* The zone only changes colour and text: no halo, no turning border, no growth. */
+  .drop {
+    border: 3px solid var(--ok);
+    background: color-mix(in srgb, var(--col-solid) 92%, var(--ok));
+  }
+
+  .drop.over {
+    transform: none;
+    background: color-mix(in srgb, var(--col-solid) 70%, var(--ok));
+  }
+
+  .drop > .ring,
+  .drop > .halo {
+    display: none;
   }
 }

@@ -5,6 +5,7 @@ import { Board } from "./components/Board.js";
 import { PrDetail } from "./components/PrDetail.js";
 import { Sheet } from "./components/Sheet.js";
 import { ClosedCard } from "./components/ClosedCard.js";
+import { DropZone } from "./components/DropZone.js";
 import { PrCard } from "./components/PrCard.js";
 import { CLOSED_GROUP, PrTable } from "./components/PrTable.js";
 import { Toolbar } from "./components/Toolbar.js";
@@ -20,6 +21,7 @@ import { filterDashboard } from "./prFilter.js";
 import { DEFAULT_SORT, prItems } from "./prTable.js";
 import { type GroupBy, toggleCollapsed } from "./table.js";
 import { useDashboard } from "./useDashboard.js";
+import { useDrag } from "./useDrag.js";
 import { useNotifications } from "./useNotifications.js";
 import { ESCAPE, SLASH, T, useShortcuts } from "./useShortcuts.js";
 import { readView, type View, writeView } from "./view.js";
@@ -63,6 +65,8 @@ export function App() {
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
   const viewRoot = useRef<HTMLDivElement>(null);
   const fx = useRef<HTMLDivElement>(null);
+  const zone = useRef<HTMLDivElement>(null);
+  const drag = useDrag(fx, zone);
   // The cards or rows lifted off the view being left, to land once the next one is in.
   const lifted = useRef<Flyer[] | null>(null);
   // A switch while the last one still flies ends it at once and lifts from the real cards or rows.
@@ -79,7 +83,7 @@ export function App() {
     lifted.current = null;
     if (flyers && viewRoot.current) void land(viewRoot.current, flyers);
   }, [view]);
-  // While the sheet is open, Esc closes it and `/` and `t` do nothing.
+  // While the sheet is open, Esc closes it and `/` and `t` do nothing; while a card is dragged, Esc puts it back.
   useShortcuts(
     sheet
       ? [
@@ -87,6 +91,7 @@ export function App() {
           { matches: (event) => SLASH(event) || T(event), run: () => {} },
         ]
       : [
+          ...(drag.zone === "off" ? [] : [{ matches: ESCAPE, run: drag.cancel }]),
           { matches: SLASH, run: () => filterInput.current?.focus() },
           { matches: ESCAPE, run: () => setFilter((current) => ({ ...current, query: "" })) },
           { matches: T, run: () => switchView(view === "board" ? "table" : "board") },
@@ -162,14 +167,26 @@ export function App() {
                       hue={repoHue(hues, pr.repo)}
                       index={index}
                       onOpen={openSheet}
-                      ghost={openKey === prKey(pr)}
+                      ghost={openKey === prKey(pr) || drag.held.has(prFlipKey(pr))}
                       {...(column.id === "waiting_on_me" ? { onSeen: seen } : {})}
+                      {...(column.id === "waiting_on_me" && !sheet
+                        ? { onGrab: (event: PointerEvent, slot: HTMLElement) => drag.grab(event, slot, () => seen(pr)) }
+                        : {})}
                     />
                   ))
             }
           </Board>
         )}
       </div>
+      {drag.zone === "off" ? null : (
+        <DropZone
+          zoneRef={zone}
+          over={drag.zone === "over"}
+          label="↓ Хвърли тук · видях"
+          overLabel="Пусни! ✓"
+          hint="пусни другаде, за да върнеш картата"
+        />
+      )}
       <div class="fx" ref={fx} aria-hidden="true" />
       {sheet && shown.current ? (
         <Sheet

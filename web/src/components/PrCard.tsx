@@ -18,22 +18,30 @@ type PrCardProps = {
   onSeen?: (pr: DashboardPullRequest) => Promise<void>;
   /** Opens the detail sheet, growing out of `from`. */
   onOpen(pr: DashboardPullRequest, from: HTMLElement): void;
-  /** Hidden while its sheet is open, so the sheet looks like the card grown. */
+  /** Hidden while its sheet is open, so the sheet looks like the card grown, and while it is dragged. */
   ghost: boolean;
+  /** Makes the card draggable onto "видях" (only in "Чака теб"): a press on it, handed the slot that moves. */
+  onGrab?: (event: PointerEvent, slot: HTMLElement) => void;
 };
 
 /**
  * An open PR on the board, laid out as "Anatomy" in docs/design.md describes. The slot around the card is what moves
  * (entrance, FLIP, leaving on "видях"); a "Чака теб" card pulses as urgently as its reason.
  */
-export function PrCard({ pr, hue, index, onSeen, onOpen, ghost }: PrCardProps) {
+export function PrCard({ pr, hue, index, onSeen, onOpen, ghost, onGrab }: PrCardProps) {
   const slot = useRef<HTMLDivElement>(null);
   const reason = reasonBadge(pr);
   const merge = mergeMark(pr);
   const unread = unreadCount(pr);
   const pulse = urgency(pr.reason);
   return (
-    <div ref={slot} class={`slot${pulse ? ` ${pulse}` : ""}${ghost ? " ghost" : ""}`} data-flip={prFlipKey(pr)} style={{ "--ti": index }}>
+    <div
+      ref={slot}
+      class={`slot${pulse ? ` ${pulse}` : ""}${ghost ? " ghost" : ""}${onGrab ? " drag" : ""}`}
+      data-flip={prFlipKey(pr)}
+      style={{ "--ti": index }}
+      {...(onGrab ? { onPointerDown: (event: PointerEvent) => onGrab(event, slot.current!) } : {})}
+    >
       <article
         class={`card opens${pr.isDraft ? " draft" : ""}`}
         style={{ "--rh": hue }}
@@ -41,6 +49,11 @@ export function PrCard({ pr, hue, index, onSeen, onOpen, ghost }: PrCardProps) {
         {...sheetOpeners(() => onOpen(pr, slot.current!))}
       >
         <div class="card-top">
+          {onGrab ? (
+            <span class="grip" title="Влачи до „видях“" aria-hidden="true">
+              ⠿
+            </span>
+          ) : null}
           <span class="tag" title={pr.repo}>
             {shortRepo(pr.repo)}
           </span>

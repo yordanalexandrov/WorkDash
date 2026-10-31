@@ -49,7 +49,7 @@ export function flipDeltas(before: Map<string, Pos>, after: Map<string, Pos>): M
 }
 
 /** The longest a gate holds for one animation, even if it never ends. */
-const MAX_HOLD_MS = 1500;
+export const MAX_HOLD_MS = 1500;
 
 export type Gate<T> = {
   /** Lets `value` through now, or, while held, keeps it as the one to let through when the hold ends. */
@@ -341,9 +341,23 @@ function box(rect: DOMRectReadOnly): Keyframe {
   return { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` };
 }
 
+/** A copy of `el` that is only a picture, with the class `kind`: no key, id, focus or animations of its own. */
+function picture(el: HTMLElement, kind: string): HTMLElement {
+  const copy = el.cloneNode(true) as HTMLElement;
+  copy.removeAttribute("data-flip");
+  copy.classList.remove("ghost");
+  copy.classList.add(kind);
+  copy.querySelectorAll("[id]").forEach((child) => child.removeAttribute("id"));
+  copy.removeAttribute("id");
+  copy.removeAttribute("tabindex");
+  copy.inert = true;
+  copy.setAttribute("aria-hidden", "true");
+  return copy;
+}
+
 /**
  * Copies every [data-flip^="pr:"] under `root` that shows in the viewport into `layer`, on its rect, before the old view goes.
- * A copy is only a picture: no key, id, focus or animations of its own. Nothing is lifted under reduced motion.
+ * Nothing is lifted under reduced motion.
  */
 export function liftFlyers(root: HTMLElement, layer: HTMLElement): Flyer[] {
   if (reducedMotion()) return [];
@@ -351,21 +365,86 @@ export function liftFlyers(root: HTMLElement, layer: HTMLElement): Flyer[] {
   root.querySelectorAll<HTMLElement>(PR_FLIP).forEach((el) => {
     const from = el.getBoundingClientRect();
     if (!visibleIn(from, innerWidth, innerHeight)) return;
-    const copy = el.cloneNode(true) as HTMLElement;
-    copy.removeAttribute("data-flip");
-    copy.classList.remove("ghost");
-    copy.classList.add("flyer");
-    copy.querySelectorAll("[id]").forEach((child) => child.removeAttribute("id"));
-    copy.removeAttribute("id");
-    copy.removeAttribute("tabindex");
-    copy.inert = true;
-    copy.setAttribute("aria-hidden", "true");
+    const copy = picture(el, "flyer");
     // A row lays its cells on the table's subgrid, which the layer has not: it keeps the tracks it had.
     Object.assign(copy.style, box(from), { gridTemplateColumns: getComputedStyle(el).gridTemplateColumns });
     layer.appendChild(copy);
     flyers.push({ key: el.dataset.flip!, from, el: copy });
   });
   return flyers;
+}
+
+/** How much a dragged copy grows as it is picked up. */
+const LIFTED_SCALE = 1.05;
+
+/**
+ * A picture of `el` in `layer`, exactly on its rect, for dragging: it moves by its `transform`, which the caller sets, and
+ * rises a little with GLIDE (by `scale`, so the two do not fight); it does not rise under reduced motion.
+ */
+export function liftClone(el: HTMLElement, layer: HTMLElement): HTMLElement {
+  const copy = picture(el, "clone");
+  Object.assign(copy.style, box(el.getBoundingClientRect()));
+  layer.appendChild(copy);
+  if (!reducedMotion()) copy.animate([{ scale: "1" }, { scale: `${LIFTED_SCALE}` }], { duration: GLIDE.duration, easing: GLIDE.easing, fill: "forwards" });
+  return copy;
+}
+
+/** How far a dragged copy must move to sit on `to`, from where it was lifted (its box in the layer, which covers the viewport). */
+function moveOnto(copy: HTMLElement, to: DOMRectReadOnly): Delta {
+  return { dx: to.left - copy.offsetLeft, dy: to.top - copy.offsetTop };
+}
+
+/** Plays `keyframes` on a dragged copy, after whatever it ran, and removes it at the end; at once under reduced motion. */
+function settle(copy: HTMLElement, keyframes: Keyframe[], spring: Spring): Promise<void> {
+  if (reducedMotion()) {
+    copy.remove();
+    return Promise.resolve();
+  }
+  for (const animation of copy.getAnimations()) animation.cancel();
+  return copy.animate(keyframes, { duration: spring.duration, easing: spring.easing, fill: "forwards" }).finished.then(
+    () => copy.remove(),
+    () => copy.remove(),
+  );
+}
+
+/** How small a copy dropped into the zone gets as it goes in. */
+const SWALLOWED_SCALE = 0.12;
+
+/**
+ * A dragged copy, now at the transform `from`, goes into the middle of `target` with GLIDE: it turns by `spin` degrees, shrinks
+ * and fades, then it is removed. Holds the board's gate meanwhile, so a snapshot that arrives on the way renders after it.
+ */
+export function dropInto(copy: HTMLElement, from: string, target: DOMRectReadOnly, spin: number): Promise<void> {
+  const { dx, dy } = moveOnto(copy, target);
+  const x = dx + (target.width - copy.offsetWidth) / 2;
+  const y = dy + (target.height - copy.offsetHeight) / 2;
+  const done = settle(
+    copy,
+    [
+      { transform: from, scale: `${LIFTED_SCALE}`, opacity: 1 },
+      { transform: `translate(${x}px, ${y}px) rotate(${spin}deg)`, scale: `${SWALLOWED_SCALE}`, opacity: 0 },
+    ],
+    GLIDE,
+  );
+  holdWhile(done);
+  return done;
+}
+
+/**
+ * A dragged copy, now at the transform `from`, comes back down onto `to` with BOUNCE and is removed; with no `to` (what it
+ * was dragged from is gone) it fades where it is.
+ */
+export function returnTo(copy: HTMLElement, from: string, to: DOMRectReadOnly | null): Promise<void> {
+  if (!to) return settle(copy, [{ transform: from, scale: `${LIFTED_SCALE}`, opacity: 1 }, { transform: from, scale: `${LIFTED_SCALE}`, opacity: 0 }], GLIDE);
+  const { dx, dy } = moveOnto(copy, to);
+  return settle(
+    copy,
+    [
+      { transform: from, scale: `${LIFTED_SCALE}` },
+      { transform: `translate(${dx}px, ${dy}px)`, scale: "1" },
+    ],
+    BOUNCE,
+  );
 }
 
 /** Removes flyers lifted but never landed, e.g. by a switch that two key presses replaced before it rendered. */
