@@ -4,6 +4,7 @@
 import type { ClosedPullRequest, IssueBoardState } from "./api.js";
 import { prKey } from "./detail.js";
 import { type Pos, reducedMotion } from "./motion.js";
+import { sameRepo } from "../../src/domain/repos.js";
 
 /** The keys of the PRs merged since `before`: in `after` as merged and not in `before`; none for the first snapshot (`null`). */
 export function newlyMerged(before: ClosedPullRequest[] | null, after: ClosedPullRequest[]): string[] {
@@ -21,7 +22,7 @@ type ClosedIssues = Pick<IssueBoardState, "repo" | "fetchedAt" | "closed">;
  * tab or the dashboard never bursts for what closed while nobody looked.
  */
 export function newlyCompleted(before: ClosedIssues | null, after: ClosedIssues): string[] {
-  if (!before || before.fetchedAt === null || before.repo.toLowerCase() !== after.repo.toLowerCase()) return [];
+  if (!before || before.fetchedAt === null || !sameRepo(before.repo, after.repo)) return [];
   const known = new Set(before.closed.map(prKey));
   return after.closed.filter((issue) => issue.closedAs === "completed" && !known.has(prKey(issue))).map(prKey);
 }

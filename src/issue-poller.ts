@@ -2,6 +2,7 @@ import type { SnapshotStore } from "./db.js";
 import { answerIssueDemand, type IssueDemand, type IssuePollAnswer, nextIntervalPollAt } from "./domain/issue-poll.js";
 import { classifyPollError, type PollError } from "./domain/poll-error.js";
 import { fetchIssues } from "./github/issues.js";
+import { repoKey } from "./domain/repos.js";
 
 /** Polls the issues of one repo at a time, on demand of the pages that show it; apart from the PR poller and its health. */
 export type IssuePoller = {
@@ -46,7 +47,7 @@ export function createIssuePoller(options: {
 
   // GitHub ignores the case of a repo's name, and so do the pages' demands.
   const stateOf = (repo: string): RepoPoll => {
-    const key = repo.toLowerCase();
+    const key = repoKey(repo);
     let state = repos.get(key);
     if (!state) {
       state = { polling: false, lastPolledAt: store.loadIssues(repo)?.fetchedAt ?? null, error: null };
@@ -96,7 +97,7 @@ export function createIssuePoller(options: {
       if (answer === "poll" && withToken !== null) void poll(repo, state, withToken);
       return { answer, dueAt: nextIntervalPollAt({ lastPolledAt: state.lastPolledAt, error: rateLimit, intervalMs: interval, now: new Date() }) };
     },
-    polling: (repo) => repos.get(repo.toLowerCase())?.polling ?? false,
-    error: (repo) => repos.get(repo.toLowerCase())?.error ?? null,
+    polling: (repo) => repos.get(repoKey(repo))?.polling ?? false,
+    error: (repo) => repos.get(repoKey(repo))?.error ?? null,
   };
 }

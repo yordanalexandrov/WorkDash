@@ -15,6 +15,7 @@ import type { Poller } from "./poller.js";
 import type { Settings } from "./settings.js";
 import type { Missing } from "./domain/settings.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
+import { sameRepo } from "./domain/repos.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
 
@@ -97,8 +98,7 @@ export function issueBoardState(store: SnapshotStore, source: IssueSource, repo:
 
 /** Whether `repo` is one of the followed repos, whatever the case of its name. */
 function follows(source: IssueSource, repo: string): boolean {
-  const wanted = repo.toLowerCase();
-  return source.repos().some((followed) => followed.toLowerCase() === wanted);
+  return source.repos().some((followed) => sameRepo(followed, repo));
 }
 
 // Static files are kept in web/public; the bundle built from web/src lands in web/dist.

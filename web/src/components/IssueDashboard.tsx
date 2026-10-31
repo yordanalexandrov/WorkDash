@@ -24,6 +24,7 @@ import { CLOSED_ISSUES, ISSUE_DEFAULT_SORT, IssueTable } from "./IssueTable.js";
 import { IssueTabs } from "./IssueTabs.js";
 import { Sheet } from "./Sheet.js";
 import { Toolbar } from "./Toolbar.js";
+import { sameRepo } from "../../../src/domain/repos.js";
 
 /**
  * The issue whose detail sheet is open, the FLIP key of the card or row it opened from (a row of an issue in several groups
@@ -108,7 +109,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
-  const shown = issues && open && issues.repo.toLowerCase() === open.toLowerCase() ? issues : null;
+  const shown = issues && open && sameRepo(issues.repo, open) ? issues : null;
   // Every column the board has goes through the filter; the toolbar's "N от M" counts the open issues.
   const columns = useMemo(() => (shown ? filterIssueColumns(issueColumns(shown), filter, viewer) : []), [shown, filter, viewer]);
   const keptIssues = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer) : []), [shown, filter, viewer]);

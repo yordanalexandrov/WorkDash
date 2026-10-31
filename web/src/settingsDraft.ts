@@ -1,6 +1,7 @@
 // What the Settings screen edits, apart from how it shows it: the draft, its fields' issues, the quiet hours, the stages.
 
 import type { FieldIssue, IssueLabel, SettingsForm } from "./api.js";
+import { repoKey } from "../../src/domain/repos.js";
 
 /** Whether the draft differs from the settings it was opened with. */
 export function changed(draft: SettingsForm, saved: SettingsForm): boolean {
@@ -33,8 +34,8 @@ export function moved<T>(list: T[], from: number, to: number): T[] {
 
 /** The repos that take the common list of stages: those without a list of their own. */
 export function onCommonList(issues: SettingsForm["issues"], repos: string[]): string[] {
-  const own = new Set(Object.keys(issues.repos).map((repo) => repo.toLowerCase()));
-  return repos.filter((repo) => !own.has(repo.toLowerCase()));
+  const own = new Set(Object.keys(issues.repos).map(repoKey));
+  return repos.filter((repo) => !own.has(repoKey(repo)));
 }
 
 /** Each repo's labels on GitHub, or null for a repo GitHub did not answer about. */

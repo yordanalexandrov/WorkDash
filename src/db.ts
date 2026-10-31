@@ -4,6 +4,7 @@ import type { PrEvent } from "./domain/events.js";
 import type { IssueSnapshot } from "./domain/issues.js";
 import { POLL_MODES, type PollMode } from "./domain/poll-mode.js";
 import type { ClosedPullRequest, PullRequest, Snapshot } from "./domain/types.js";
+import { repoKey } from "./domain/repos.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
 
@@ -193,10 +194,10 @@ export function openStore(path: string): SnapshotStore {
       return selectIssueRepos.all().map((row) => row.repo);
     },
     saveIssues(snapshot, fetchedAt) {
-      upsertIssues.run(snapshot.repo.toLowerCase(), JSON.stringify(snapshot), fetchedAt.toISOString());
+      upsertIssues.run(repoKey(snapshot.repo), JSON.stringify(snapshot), fetchedAt.toISOString());
     },
     loadIssues(repo) {
-      const row = selectIssues.get(repo.toLowerCase());
+      const row = selectIssues.get(repoKey(repo));
       return row ? { ...(JSON.parse(row.data_json) as IssueSnapshot), fetchedAt: row.fetched_at } : null;
     },
     markSeen(repo, number, seenAt) {

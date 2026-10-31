@@ -2,6 +2,7 @@
 
 import type { PollError } from "./poll-error.js";
 import type { Comment } from "./types.js";
+import { sameRepo } from "./repos.js";
 
 /** The stage labels from config.yaml: the common list, and the repos that have a list of their own. */
 export type IssuesConfig = {
@@ -86,8 +87,7 @@ export type IssueBoardState = {
 
 /** The stage labels of `repo`: its own list when config.yaml gives it one, else the common list. */
 export function stagesFor(config: IssuesConfig, repo: string): string[] {
-  const wanted = repo.toLowerCase();
-  const own = Object.entries(config.repos).find(([name]) => name.toLowerCase() === wanted);
+  const own = Object.entries(config.repos).find(([name]) => sameRepo(name, repo));
   return own ? own[1].columns : config.columns;
 }
 

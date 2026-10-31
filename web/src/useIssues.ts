@@ -3,6 +3,7 @@ import { type IssueBoardState, loadIssues, requestIssuePoll } from "./api.js";
 import type { IssueDemand } from "../../src/domain/issue-poll.js";
 import { afterMotion } from "./motion.js";
 import { useServerEvent, useStreamStatus } from "./useServerEvents.js";
+import { sameRepo } from "../../src/domain/repos.js";
 
 /** What the Issue dashboard shows of its open repo, and its "Обнови". */
 export type IssuesView = {
@@ -18,8 +19,6 @@ const SAME_MOMENT_MS = 1_000;
 const DUE_MARGIN_MS = 250;
 /** How long the interval waits to ask again after an ask that failed (the server unreachable, say). */
 const RETRY_MS = 60_000;
-
-const sameRepo = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 function ask(repo: string, reason: IssueDemand): void {
   requestIssuePoll(repo, reason).catch((error: Error) => console.error(`issue poll request failed: ${error.message}`));

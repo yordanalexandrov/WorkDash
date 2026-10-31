@@ -3,6 +3,7 @@
 import { sameLogin } from "../../src/domain/activity.js";
 import type { Issue, LinkedPullRequest, LinkedPullRequestStatus, Milestone } from "../../src/domain/issues.js";
 import { shortRepo } from "./format.js";
+import { sameRepo } from "../../src/domain/repos.js";
 
 /** A Linked PR as a small chip: its number (with the repo when it is another), its status colour, a link to GitHub. */
 export type LinkedPrMark = { text: string; kind: "ok" | "muted" | "merged" | "bad"; title: string; url: string };
@@ -13,7 +14,7 @@ const WORDS: Record<LinkedPullRequestStatus, string> = { open: "отворен",
 
 /** The mark of a Linked PR on an issue of `issueRepo`. */
 export function linkedPrMark(pr: LinkedPullRequest, issueRepo: string): LinkedPrMark {
-  const own = pr.repo.toLowerCase() === issueRepo.toLowerCase();
+  const own = sameRepo(pr.repo, issueRepo);
   return {
     text: own ? `#${pr.number}` : `${shortRepo(pr.repo)}#${pr.number}`,
     kind: KINDS[pr.status],
