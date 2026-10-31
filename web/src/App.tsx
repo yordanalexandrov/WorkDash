@@ -14,7 +14,7 @@ import { NO_FILTER, repoChips } from "./filter.js";
 import type { DashboardPullRequest, Section } from "./api.js";
 import { findOpen, prKey } from "./detail.js";
 import { configErrorText, errorText, shortRepo, statusText } from "./format.js";
-import { type Flyer, finishLanding, land, liftFlyers, prFlipKey, useBooted } from "./motion.js";
+import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, prFlipKey, useBooted } from "./motion.js";
 import { repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
 import { DEFAULT_SORT, prItems } from "./prTable.js";
@@ -69,7 +69,7 @@ export function App() {
   const switchView = (next: View) => {
     if (next === view) return;
     finishLanding();
-    lifted.current?.forEach((flyer) => flyer.el.remove());
+    if (lifted.current) dropFlyers(lifted.current);
     lifted.current = viewRoot.current && fx.current ? liftFlyers(viewRoot.current, fx.current) : null;
     history.replaceState(history.state, "", writeView(location.href, next));
     setView(next);
