@@ -36,12 +36,13 @@ export function App() {
         <Board columns={columns} message={nothingOpen && state.fetchedAt ? "Няма PR-и, които да те засягат." : null}>
           {(column) =>
             column.id === "closed"
-              ? column.items.map((pr) => <ClosedCard key={`${pr.repo}#${pr.number}`} pr={pr} hue={repoHue(hues, pr.repo)} />)
-              : column.items.map((pr) => (
+              ? column.items.map((pr, index) => <ClosedCard key={`${pr.repo}#${pr.number}`} pr={pr} hue={repoHue(hues, pr.repo)} index={index} />)
+              : column.items.map((pr, index) => (
                   <PrCard
                     key={`${pr.repo}#${pr.number}`}
                     pr={pr}
                     hue={repoHue(hues, pr.repo)}
+                    index={index}
                     {...(column.id === "waiting_on_me" ? { onSeen: seen } : {})}
                   />
                 ))

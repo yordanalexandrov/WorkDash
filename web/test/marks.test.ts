@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pullRequest } from "../../test/fixtures.js";
-import { askedReviewers, checkRings, initials, mergeMark, reviewMarks, unreadCount } from "../src/marks.js";
+import { askedReviewers, checkRings, initials, mergeMark, reviewMarks, unreadCount, urgency } from "../src/marks.js";
 
 const pr = pullRequest;
 
@@ -84,5 +84,18 @@ describe("unreadCount", () => {
     expect(unreadCount({ ...pr(), unreadComments: 2 })).toBe(2);
     expect(unreadCount({ ...pr(), reason: "unread_comments", unreadComments: 2 })).toBe(0);
     expect(unreadCount(pr())).toBe(0);
+  });
+});
+
+describe("urgency", () => {
+  it("pulses hard for failures and for what asks me to act, softly for the other reasons", () => {
+    for (const reason of ["ci_failed", "sonar_failed", "review_requested", "changes_requested", "conflict", "mention"] as const) {
+      expect(urgency(reason), reason).toBe("u2");
+    }
+    for (const reason of ["unread_comments", "needs_rebase", "re_review"] as const) expect(urgency(reason), reason).toBe("u1");
+  });
+
+  it("does not pulse a PR that does not wait on me", () => {
+    expect(urgency(undefined)).toBeUndefined();
   });
 });

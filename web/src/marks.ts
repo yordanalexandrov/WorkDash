@@ -1,6 +1,7 @@
-// The small marks in a card's footer; the reason texts stay in badges.ts.
+// The small marks on a card: its footer and how hard it pulses; the reason texts stay in badges.ts.
 
 import { sameLogin } from "../../src/domain/activity.js";
+import type { Reason } from "../../src/domain/classify.js";
 import type { CiState, MergeStateStatus, ReviewState } from "../../src/domain/types.js";
 import type { ClassifiedPullRequest } from "./api.js";
 import type { Badge } from "./badges.js";
@@ -69,4 +70,12 @@ export function reviewMarks(pr: ClassifiedPullRequest): ReviewMark[] {
 /** How many comments are unread, or 0 when the reason label already says it. */
 export function unreadCount(pr: ClassifiedPullRequest): number {
   return pr.reason === "unread_comments" ? 0 : (pr.unreadComments ?? 0);
+}
+
+const URGENT = new Set<Reason>(["ci_failed", "sonar_failed", "review_requested", "changes_requested", "conflict", "mention"]);
+
+/** How hard a "Чака теб" card pulses: `u2` for failures and for what asks me to act, `u1` for the rest; nothing outside "Чака теб". */
+export function urgency(reason: Reason | undefined): "u1" | "u2" | undefined {
+  if (!reason) return undefined;
+  return URGENT.has(reason) ? "u2" : "u1";
 }

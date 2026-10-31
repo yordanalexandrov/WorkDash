@@ -1,6 +1,6 @@
 # Dashboard design
 
-The conventions every screen and feature of the dashboard follows. The target design is the **living board**: an animated kanban of PRs plus a table as a second view of the same PRs. Its reference implementation is the prototype `web/prototype/variants/H.tsx` on the `prototype/dashboard-layouts` branch (`git show prototype/dashboard-layouts:web/prototype/variants/H.tsx`); run it with `npm run prototype` there. The board (without motion yet) lives in `web/src`: `board.ts`, `palette.ts`, `marks.ts` and the components in `web/src/components`; the tokens are in `web/public/style.css`.
+The conventions every screen and feature of the dashboard follows. The target design is the **living board**: an animated kanban of PRs plus a table as a second view of the same PRs. Its reference implementation is the prototype `web/prototype/variants/H.tsx` on the `prototype/dashboard-layouts` branch (`git show prototype/dashboard-layouts:web/prototype/variants/H.tsx`); run it with `npm run prototype` there. The board lives in `web/src`: `board.ts`, `palette.ts`, `marks.ts` and the components in `web/src/components`; the tokens and keyframes are in `web/public/style.css`, and the motion layer (springs, FLIP, the reduced-motion flag, the gate that holds snapshots while a card leaves) in `web/src/motion.ts`.
 
 Once the implementation exists, the code holds the values (tokens, palette, springs) and this document keeps only the rules and the reasons. Update both together.
 
@@ -54,7 +54,8 @@ Surfaces: a slow gradient-mesh background with a faint dot grid; columns and the
 Motion explains change: where something came from, where it went, what needs attention. It is *alive but calm*: the board breathes, it never shouts.
 
 - Animate only `transform` and `opacity` so it stays at 60fps.
-- Two springs, sampled into CSS `linear()` easings: **glide** (stiffness 260, damping 24) for things moving to a new place, **bounce** (320, 16) for things arriving or being dropped. Reuse them; a new animation picks one of the two instead of inventing a curve.
+- Two springs, sampled into CSS `linear()` easings: **glide** (stiffness 260, damping 24) for things moving to a new place, **bounce** (320, 16) for things arriving or being dropped. Reuse them; a new animation picks one of the two instead of inventing a curve: `GLIDE`/`BOUNCE` from `motion.ts` in script, `var(--glide)`/`var(--bounce)` with `--glide-ms`/`--bounce-ms` in CSS. Only endless keyframes (pulse, halo, drift, spinners) use a plain curve.
+- FLIP keys: `data-flip="pr:<repo>#<number>"` for a card (and later its row), `col:<id>` for a column; the same PR has the same key in every view. `useFlip` runs on the element with `data-flip-root`.
 - **FLIP** every reorder: when filtering, sorting, grouping, folding a column or removing a PR, the remaining items glide from their old position to the new one. Nothing jumps.
 - Entrances cascade: columns, then cards (or rows) with a short stagger.
 - Pulse and glow mean *urgent*: only "Чака теб" items pulse, harder for CI/Sonar failed, review requested, changes requested, conflict and mention. Decoration never pulses.

@@ -97,7 +97,7 @@ button {
   outline-offset: 2px;
 }
 
-/* Gradient mesh and dot grid behind everything; still for now, the slow drift comes with the motion module. */
+/* Gradient mesh and dot grid behind everything; the blobs drift slowly. */
 .bg {
   position: fixed;
   inset: 0;
@@ -112,28 +112,37 @@ button {
   height: 70vmax;
   border-radius: 50%;
   background: radial-gradient(circle at center, hsl(var(--h) 90% 62% / var(--blob-a)), transparent 62%);
+  will-change: transform;
+  animation: drift var(--d) ease-in-out infinite alternate;
 }
 
 .bg i:nth-child(1) {
   --h: 228;
+  --d: 38s;
   left: -20vmax;
   top: -25vmax;
 }
 
 .bg i:nth-child(2) {
   --h: 330;
+  --d: 46s;
+  animation-delay: -12s;
   right: -25vmax;
   top: -10vmax;
 }
 
 .bg i:nth-child(3) {
   --h: 165;
+  --d: 52s;
+  animation-delay: -25s;
   left: 10vmax;
   bottom: -35vmax;
 }
 
 .bg i:nth-child(4) {
   --h: 270;
+  --d: 60s;
+  animation-delay: -6s;
   right: 0;
   bottom: -30vmax;
 }
@@ -168,6 +177,7 @@ h1 {
 }
 
 h1 .live {
+  position: relative;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -176,6 +186,16 @@ h1 .live {
 
 h1 .live.ok {
   background: var(--ok);
+}
+
+/* The dot pings while the server connection is open. */
+h1 .live.ok::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 .status {
@@ -312,6 +332,7 @@ h1 .live.ok {
 }
 
 .col {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 0 240px;
@@ -361,6 +382,7 @@ h1 .live.ok {
 }
 
 .cards {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -416,6 +438,7 @@ h1 .live.ok {
 /* Cards: solid, with the project stripe and tint. */
 .card {
   --tint: color-mix(in srgb, hsl(var(--rh) 85% var(--tint-l)) var(--tint-mix), var(--card));
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -425,11 +448,14 @@ h1 .live.ok {
   background: var(--tint);
   box-shadow: var(--shadow);
   outline: none;
-  transition: box-shadow 0.25s ease-out;
+  transition:
+    transform var(--glide-ms) var(--glide),
+    box-shadow 0.25s ease-out;
 }
 
 .card:hover,
 .card:focus-visible {
+  transform: translateY(-3px);
   box-shadow: var(--lifted);
 }
 
@@ -593,9 +619,13 @@ h1 .live.ok {
   stroke: var(--c);
 }
 
-/* A partial arc while the check runs; it spins with the motion module. */
+/* A partial arc that spins while the check runs. */
 .chk.pending .arc {
   stroke-dasharray: 11 26.7;
+}
+
+.chk.pending svg {
+  animation: spin 1.1s linear infinite;
 }
 
 .ic {
@@ -666,4 +696,172 @@ h1 .live.ok {
 
 .closed-st.bad {
   color: var(--bad);
+}
+
+/* Motion: the springs come from web/src/motion.ts as --glide / --bounce (and their -ms durations); see "Motion" in docs/design.md.
+   Only transform and opacity animate. */
+
+/* Entrance cascade: the columns one after another, then the cards in them. Once it has run, cards that come later enter at once. */
+.col {
+  animation: col-enter var(--bounce-ms, 700ms) var(--bounce, ease-out) both;
+  animation-delay: calc(var(--ci, 0) * 80ms);
+}
+
+.slot {
+  animation: enter var(--bounce-ms, 650ms) var(--bounce, ease-out) both;
+  animation-delay: calc(240ms + var(--ci, 0) * 80ms + min(var(--ti, 0), 12) * 60ms);
+}
+
+.board.booted .col,
+.board.booted .slot {
+  animation-delay: 0s;
+}
+
+@keyframes col-enter {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.94);
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.9) rotate(-1.5deg);
+  }
+}
+
+/* "Чака теб": a breathing halo and a slowly turning gradient border; the border turns on its own layer. */
+.col.hot {
+  background: transparent;
+  box-shadow: none;
+}
+
+.col > :not(.ring, .halo) {
+  position: relative;
+  z-index: 1;
+}
+
+.col > .ring,
+.col > .halo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.col > .ring {
+  overflow: hidden;
+}
+
+.ring::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1800px;
+  height: 1800px;
+  margin: -900px 0 0 -900px;
+  background: conic-gradient(from 0deg, var(--bad), var(--pending), var(--merged), var(--blue), var(--bad));
+  will-change: transform;
+  animation: spin 7s linear infinite;
+}
+
+.ring::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 12px;
+  background: var(--col-solid);
+}
+
+.col > .halo {
+  inset: -4px;
+  border-radius: 18px;
+  box-shadow: 0 0 28px 2px color-mix(in srgb, var(--bad) 45%, transparent);
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Only "Чака теб" cards pulse: harder and faster for the urgent reasons (u2), softly for the rest (u1). */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 0 0 1.5px var(--urg), 0 0 18px -2px var(--urg);
+}
+
+.slot.u1 .card::after {
+  --urg: var(--pending);
+  --peak: 0.45;
+  animation: pulse 3.2s ease-in-out infinite;
+}
+
+.slot.u2 .card::after {
+  --urg: var(--bad);
+  --peak: 0.95;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: var(--peak);
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes ping {
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(8vmax, 6vmax) scale(1.15);
+  }
+  100% {
+    transform: translate(-6vmax, 10vmax) scale(0.92);
+  }
+}
+
+/* A hidden page does not keep the endless animations running. */
+.paused *,
+.paused *::before,
+.paused *::after {
+  animation-play-state: paused !important;
+}
+
+/* Reduced motion: only instant changes of state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .card:hover,
+  .card:focus-visible {
+    transform: none;
+  }
 }
