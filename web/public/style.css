@@ -233,12 +233,12 @@ h1 .live.ok::after {
   transform: translateX(100%);
 }
 
-.chip.refresh .icon {
+.chip.poll-now .icon {
   display: inline-block;
 }
 
 /* Spins while a poll is under way, in any open page. */
-.chip.refresh.busy .icon {
+.chip.poll-now.busy .icon {
   animation: spin 0.9s linear infinite;
 }
 

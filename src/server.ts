@@ -7,7 +7,7 @@ import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import type { PollHealth } from "./domain/poll-error.js";
-import { POLL_MODES } from "./domain/poll-mode.js";
+import { DEMANDS, POLL_MODES } from "./domain/poll-mode.js";
 import type { Poller } from "./poller.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
 
@@ -21,7 +21,7 @@ const SeenRequest = z.object({
 
 const AckRequest = z.object({ ids: z.array(z.string()) });
 
-const PollRequest = z.object({ demand: z.enum(["focus", "button"]) });
+const PollRequest = z.object({ demand: z.enum(DEMANDS) });
 
 const PollModeRequest = z.object({ mode: z.enum(POLL_MODES) });
 
@@ -43,6 +43,7 @@ export type DashboardSource = {
   /** How long a merged or closed PR stays listed. */
   recentlyClosedWindowMs: () => number;
   pollHealth: () => PollHealth;
+  /** The poll mode and demands; a dashboard without one is Periodic and ignores demands. */
   poller?: PollControl;
   /** Why the config.yaml on disk is not in effect; null when it is. */
   configError: () => string | null;
@@ -96,6 +97,7 @@ export function buildServer(
   },
 ): FastifyInstance {
   const { events = createEventHub(), pendingNotifications = () => [], acknowledgeNotifications = () => {}, logger = false } = options;
+  const poller = options.poller ?? NO_POLLER;
   const server = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
   server.register(fastifyStatic, { root: WEB_ROOTS });
@@ -126,13 +128,13 @@ export function buildServer(
   server.post("/api/poll", async (request, reply) => {
     const parsed = PollRequest.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
-    return { answer: (options.poller ?? NO_POLLER).demand(parsed.data.demand) };
+    return { answer: poller.demand(parsed.data.demand) };
   });
 
   server.put("/api/poll-mode", async (request, reply) => {
     const parsed = PollModeRequest.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
-    (options.poller ?? NO_POLLER).setMode(parsed.data.mode);
+    poller.setMode(parsed.data.mode);
     events.broadcast("dashboard", dashboardState(options));
     return reply.code(204).send();
   });

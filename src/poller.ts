@@ -17,6 +17,7 @@ export type Poller = {
   health(): PollHealth;
   /** Whether a poll is under way. */
   polling(): boolean;
+  /** The poll mode in effect. */
   mode(): PollMode;
   /** Switches the poll mode and saves it: Periodic picks the interval up from the last poll, On-demand stops polling on its own. */
   setMode(mode: PollMode): void;
@@ -53,9 +54,8 @@ export function startPoller(
   let polling = false;
   let pollAgain = false;
   let mode = store.loadPollMode();
-  /** When the last successful poll fetched its snapshot, and when the last poll of either outcome ended. */
+  /** When the last successful poll fetched its snapshot. */
   let lastSuccessAt = store.loadSnapshot()?.fetchedAt ?? null;
-  let lastPollAt = lastSuccessAt;
 
   async function poll() {
     polling = true;
@@ -102,7 +102,6 @@ export function startPoller(
       log.error(`poll failed (${health.error!.kind}): ${health.error!.message}`);
     }
     polling = false;
-    lastPollAt = new Date().toISOString();
     if (stopped) return;
     try {
       onPoll();
@@ -126,7 +125,7 @@ export function startPoller(
       // A poll under way schedules the next one by the new mode when it ends.
       if (stopped || polling) return;
       clearTimeout(timer);
-      if (mode === "periodic") timer = setTimeout(poll, delayAfterSwitch({ lastPollAt, intervalMs, error: health.error, now: new Date() }));
+      if (mode === "periodic") timer = setTimeout(poll, delayAfterSwitch({ lastSuccessAt, intervalMs, error: health.error, now: new Date() }));
     },
     demand(demand) {
       const answer = stopped ? "skip" : answerDemand({ demand, polling, lastSuccessAt, error: health.error, now: new Date() });

@@ -3,17 +3,18 @@ import type { PollMode } from "../api.js";
 type PollControlsProps = {
   mode: PollMode;
   /** The poll interval as the toggle names it, e.g. "60s". */
-  every: string;
-  polling: boolean;
-  button: { label: string; disabled: boolean };
+  interval: string;
+  /** Whether a poll is under way. */
+  busy: boolean;
+  pollNowButton: { label: string; disabled: boolean };
   onMode(mode: PollMode): void;
-  onRefresh(): void;
+  onPollNow(): void;
 };
 
 /** "⟳ На всеки 60s / ✋ При поискване", a segmented control like the view toggle, and "Обнови" (key `r`), which spins while a poll is under way. */
-export function PollControls({ mode, every, polling, button, onMode, onRefresh }: PollControlsProps) {
+export function PollControls({ mode, interval, busy, pollNowButton, onMode, onPollNow }: PollControlsProps) {
   const modes: [PollMode, string, string][] = [
-    ["periodic", `⟳ На всеки ${every}`, "Пита GitHub на всеки интервал"],
+    ["periodic", `⟳ На всеки ${interval}`, "Пита GitHub на всеки интервал"],
     ["on_demand", "✋ При поискване", "Пита GitHub, когато се върнеш на таблото или натиснеш „Обнови“"],
   ];
   return (
@@ -26,11 +27,18 @@ export function PollControls({ mode, every, polling, button, onMode, onRefresh }
           </button>
         ))}
       </div>
-      <button type="button" class={`chip refresh${polling ? " busy" : ""}`} disabled={button.disabled} aria-busy={polling} title="Пита GitHub сега (r)" onClick={onRefresh}>
+      <button
+        type="button"
+        class={`chip poll-now${busy ? " busy" : ""}`}
+        disabled={pollNowButton.disabled}
+        aria-busy={busy}
+        title="Пита GitHub сега (r)"
+        onClick={onPollNow}
+      >
         <span class="icon" aria-hidden="true">
           ⟳
         </span>
-        {button.label}
+        {pollNowButton.label}
       </button>
     </div>
   );

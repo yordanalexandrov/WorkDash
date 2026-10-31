@@ -1,4 +1,5 @@
 import type { DashboardState, PollError, PollMode, Section } from "./api.js";
+import { rateLimitLiftsAt } from "../../src/domain/poll-mode.js";
 import type { StreamStatus } from "./events.js";
 
 const SECTION_TITLES: Record<Section, string> = {
@@ -55,8 +56,8 @@ function agoText(ms: number): string {
 
 /** "Обнови", held back while a rate limit lasts: no poll can start before it lifts. */
 export function pollButton(state: DashboardState | null, now: Date): { label: string; disabled: boolean } {
-  const resetAt = state?.error?.kind === "rate_limit" ? state.error.resetAt : null;
-  if (!resetAt || Date.parse(resetAt) <= now.getTime()) return { label: "Обнови", disabled: false };
+  const resetAt = rateLimitLiftsAt(state?.error ?? null, now);
+  if (!resetAt) return { label: "Обнови", disabled: false };
   return { label: `Обнови (след ${new Date(resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`, disabled: true };
 }
 

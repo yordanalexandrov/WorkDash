@@ -42,21 +42,25 @@ describe("answerDemand", () => {
 describe("delayAfterSwitch", () => {
   const intervalMs = 60_000;
 
-  it("waits out the rest of the interval since the last poll", () => {
-    expect(delayAfterSwitch({ lastPollAt: "2026-10-31T11:59:40Z", intervalMs, error: null, now })).toBe(40_000);
+  it("waits out the rest of the interval since the data was fetched", () => {
+    expect(delayAfterSwitch({ lastSuccessAt: "2026-10-31T11:59:40Z", intervalMs, error: null, now })).toBe(40_000);
   });
 
   it("polls right away when the data is already older than the interval", () => {
-    expect(delayAfterSwitch({ lastPollAt: "2026-10-31T11:30:00Z", intervalMs, error: null, now })).toBe(0);
+    expect(delayAfterSwitch({ lastSuccessAt: "2026-10-31T11:30:00Z", intervalMs, error: null, now })).toBe(0);
   });
 
   it("polls right away when there has been no poll", () => {
-    expect(delayAfterSwitch({ lastPollAt: null, intervalMs, error: null, now })).toBe(0);
+    expect(delayAfterSwitch({ lastSuccessAt: null, intervalMs, error: null, now })).toBe(0);
+  });
+
+  it("counts from when the data was fetched, so a failed poll since does not hold it back", () => {
+    expect(delayAfterSwitch({ lastSuccessAt: "2026-10-31T09:00:00Z", intervalMs, error: { kind: "unreachable", message: "fetch failed", resetAt: null }, now })).toBe(0);
   });
 
   it("waits for a rate limit to lift", () => {
     const error = { kind: "rate_limit" as const, message: "API rate limit exceeded", resetAt: "2026-10-31T12:20:00Z" };
 
-    expect(delayAfterSwitch({ lastPollAt: "2026-10-31T11:30:00Z", intervalMs, error, now })).toBe(20 * 60_000);
+    expect(delayAfterSwitch({ lastSuccessAt: "2026-10-31T11:30:00Z", intervalMs, error, now })).toBe(20 * 60_000);
   });
 });

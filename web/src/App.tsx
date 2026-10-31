@@ -99,8 +99,8 @@ export function App() {
   const { state, stream, seen } = useDashboard();
   const notifications = useNotifications();
   const polling = usePolling(state, stream);
-  const refreshButton = pollButton(state, polling.now);
-  const refresh = () => !refreshButton.disabled && polling.refresh();
+  const pollNowButton = pollButton(state, polling.now);
+  const pollNow = () => !pollNowButton.disabled && polling.pollNow();
   const booted = useBooted();
   // The filter is not kept between visits, so the board never opens hiding something that waits on me.
   const [filter, setFilter] = useState(NO_FILTER);
@@ -157,7 +157,7 @@ export function App() {
           { matches: SLASH, run: () => filterInput.current?.focus() },
           { matches: ESCAPE, run: () => setFilter((current) => ({ ...current, query: "" })) },
           { matches: T, run: () => switchView(view === "board" ? "table" : "board") },
-          { matches: R, run: refresh },
+          { matches: R, run: pollNow },
         ],
   );
   const openKey = sheet ? prKey(sheet.pr) : null;
@@ -231,15 +231,15 @@ export function App() {
         stream={stream}
         notifications={notifications}
         toggle={<ViewToggle view={view} onChange={switchView} />}
-        polling={
+        pollControls={
           state && (
             <PollControls
               mode={state.pollMode}
-              every={intervalText(state.pollIntervalMs)}
-              polling={state.polling}
-              button={refreshButton}
+              interval={intervalText(state.pollIntervalMs)}
+              busy={state.polling}
+              pollNowButton={pollNowButton}
               onMode={polling.setMode}
-              onRefresh={refresh}
+              onPollNow={pollNow}
             />
           )
         }

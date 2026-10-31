@@ -25,6 +25,7 @@ export type SnapshotStore = {
   markDelivered(ids: string[]): void;
   /** The poll mode last chosen; periodic until one is. */
   loadPollMode(): PollMode;
+  /** Keeps the poll mode across restarts, and snapshot format changes. */
   savePollMode(mode: PollMode): void;
   close(): void;
 };

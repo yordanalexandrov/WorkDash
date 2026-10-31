@@ -11,7 +11,7 @@ type TopBarProps = {
   /** The view toggle, next to the name. */
   toggle?: ComponentChildren;
   /** The poll mode toggle and "Обнови", after how fresh the board is. */
-  polling?: ComponentChildren;
+  pollControls?: ComponentChildren;
   children?: ComponentChildren;
 };
 
@@ -19,7 +19,7 @@ type TopBarProps = {
  * The sticky bar: the name with a dot for the server connection, the view toggle, how fresh the board is, the poll mode
  * and "Обнови", the notification permission; the toolbar below.
  */
-export function TopBar({ status, stream, notifications, toggle, polling, children }: TopBarProps) {
+export function TopBar({ status, stream, notifications, toggle, pollControls, children }: TopBarProps) {
   return (
     <header class="top">
       <h1>
@@ -28,7 +28,7 @@ export function TopBar({ status, stream, notifications, toggle, polling, childre
       </h1>
       {toggle}
       <p class={`status${status.stale ? " stale" : ""}`}>{status.text}</p>
-      {polling}
+      {pollControls}
       <NotificationPermissionView {...notifications} />
       {children}
     </header>

@@ -4,8 +4,9 @@ import { nextPollDelay, type PollError } from "./poll-error.js";
 export const POLL_MODES = ["periodic", "on_demand"] as const;
 export type PollMode = (typeof POLL_MODES)[number];
 
-/** What asked for a poll: the dashboard coming back into view, or "Обнови". */
-export type Demand = "focus" | "button";
+/** What asks for a poll: the dashboard coming into view, or "Обнови". */
+export const DEMANDS = ["focus", "button"] as const;
+export type Demand = (typeof DEMANDS)[number];
 
 /** What a demand does: start a poll, wait for the one under way, or nothing. */
 export type DemandAnswer = "poll" | "join" | "skip";
@@ -28,23 +29,23 @@ export function answerDemand(options: {
 }): DemandAnswer {
   const { demand, polling, lastSuccessAt, error, now } = options;
   if (polling) return "join";
-  if (rateLimitedAt(error, now)) return "skip";
+  if (rateLimitLiftsAt(error, now)) return "skip";
   if (demand === "focus" && lastSuccessAt && now.getTime() - Date.parse(lastSuccessAt) < FOCUS_GAP_MS) return "skip";
   return "poll";
 }
 
-/** Whether `error` is a rate limit that has not lifted by `now`; one without a known reset time counts as lifted. */
-function rateLimitedAt(error: PollError | null, now: Date): boolean {
-  return error?.kind === "rate_limit" && error.resetAt !== null && Date.parse(error.resetAt) > now.getTime();
+/** When the rate limit `error` lifts, if it has not by `now`; null otherwise, a rate limit without a known reset time included. */
+export function rateLimitLiftsAt(error: PollError | null, now: Date): string | null {
+  return error?.kind === "rate_limit" && error.resetAt !== null && Date.parse(error.resetAt) > now.getTime() ? error.resetAt : null;
 }
 
 /**
- * How long a poller switched to Periodic waits before its next poll: what is left of the interval since the
- * last poll ended (longer while a rate limit lasts), or nothing when that has run out or there was no poll.
+ * How long a poller switched to Periodic waits before its next poll: what is left of the interval since the data was
+ * fetched (longer while a rate limit lasts), or nothing when the data is older than that or there is none.
  */
-export function delayAfterSwitch(options: { lastPollAt: string | null; intervalMs: number; error: PollError | null; now: Date }): number {
-  const { lastPollAt, intervalMs, error, now } = options;
-  if (!lastPollAt) return 0;
-  const last = new Date(lastPollAt);
+export function delayAfterSwitch(options: { lastSuccessAt: string | null; intervalMs: number; error: PollError | null; now: Date }): number {
+  const { lastSuccessAt, intervalMs, error, now } = options;
+  if (!lastSuccessAt) return 0;
+  const last = new Date(lastSuccessAt);
   return Math.max(0, last.getTime() + nextPollDelay(error, intervalMs, last) - now.getTime());
 }
