@@ -1,6 +1,7 @@
 // Which dashboard the page shows lives in the URL: `?dashboard=issues` (with `&repo=owner/name`, the tab open) for the
 // Issue dashboard, no parameter for the PR dashboard. The view (`?view=table`) is apart and kept across a switch.
 
+import { sameRepo } from "../../src/domain/repos.js";
 import { shortRepo } from "./format.js";
 
 export type Dashboard = "prs" | "issues";
@@ -32,7 +33,17 @@ export function issueTabs(issueRepos: string[]): string[] {
   return [...issueRepos].sort((a, b) => shortRepo(a).localeCompare(shortRepo(b)) || a.localeCompare(b));
 }
 
-/** The tab to open: the repo asked for if it has one, else the first; none without tabs. */
+/** The tab to open: the repo asked for if it has one (whatever the case of its name), else the first; none without tabs. */
 export function pickRepo(tabs: string[], wanted: string | null): string | null {
-  return wanted !== null && tabs.includes(wanted) ? wanted : (tabs[0] ?? null);
+  return (wanted !== null ? tabs.find((tab) => sameRepo(tab, wanted)) : undefined) ?? tabs[0] ?? null;
+}
+
+/**
+ * Where the URL should say the page is, once the Issue dashboard has opened a tab other than the repo asked for (none, one
+ * without a tab, or one in another case): there, by the tab's name. Null when the URL says it already, or nothing opened.
+ */
+export function settledPlace(place: DashboardPlace, tabs: string[]): DashboardPlace | null {
+  if (place.dashboard !== "issues") return null;
+  const open = pickRepo(tabs, place.repo);
+  return open !== null && open !== place.repo ? { dashboard: "issues", repo: open } : null;
 }

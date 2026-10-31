@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Banners } from "./components/Banners.js";
 import { DashboardToggle } from "./components/DashboardToggle.js";
 import { IssueDashboard } from "./components/IssueDashboard.js";
@@ -8,7 +8,7 @@ import { Settings } from "./components/Settings.js";
 import { TopBar } from "./components/TopBar.js";
 import { ViewToggle } from "./components/ViewToggle.js";
 import type { DashboardState } from "./api.js";
-import { type Dashboard, type DashboardPlace, issueTabs, pickRepo, readDashboard, writeDashboard } from "./dashboard.js";
+import { type Dashboard, type DashboardPlace, issueTabs, pickRepo, readDashboard, settledPlace, writeDashboard } from "./dashboard.js";
 import { NO_FILTER } from "./filter.js";
 import { configErrorText, errorText, intervalText, issueErrorText, issueStatusText, missingText, needsNewToken, pollButton, statusText } from "./format.js";
 import { dropFlyers, type Flyer, finishLanding, land, liftFlyers, useBooted } from "./motion.js";
@@ -44,7 +44,8 @@ export function App() {
   const [place, setPlace] = useState<DashboardPlace>(() => readDashboard(location.search));
   // The Issue dashboard's open repo, while it shows: only then are its issues loaded and polled.
   const onIssues = state !== null && !settings.open && place.dashboard === "issues";
-  const issueRepo = useMemo(() => (onIssues ? pickRepo(issueTabs(state.issueRepos), place.repo) : null), [onIssues, state?.issueRepos, place.repo]);
+  const tabs = useMemo(() => (state ? issueTabs(state.issueRepos) : []), [state?.issueRepos]);
+  const issueRepo = onIssues ? pickRepo(tabs, place.repo) : null;
   const issues = useIssues(issueRepo, state?.pollMode === "periodic");
   // The status line, the error banner and "Обнови" (and `r`) are of the dashboard shown: the PRs, or the open repo's issues.
   const pollNowButton = pollButton(onIssues ? issues.state : state, polling.now);
@@ -78,6 +79,12 @@ export function App() {
     history.replaceState(history.state, "", writeDashboard(location.href, next));
     setPlace(next);
   };
+  // The URL names the tab that opened, when it named none, one without a tab or one in another case; so a reload or a link
+  // copied from the address bar opens the same tab.
+  useEffect(() => {
+    const settled = onIssues ? settledPlace(place, tabs) : null;
+    if (settled) goTo(settled);
+  }, [onIssues, tabs, place]);
   const switchDashboard = (dashboard: Dashboard) => {
     if (dashboard !== place.dashboard) goTo({ ...place, dashboard });
   };

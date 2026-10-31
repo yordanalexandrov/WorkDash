@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issueTabs, pickRepo, readDashboard, writeDashboard } from "../src/dashboard.js";
+import { issueTabs, pickRepo, readDashboard, settledPlace, writeDashboard } from "../src/dashboard.js";
 
 describe("readDashboard", () => {
   it("opens the Issue dashboard for ?dashboard=issues, with the repo it names, and the PR dashboard otherwise", () => {
@@ -55,7 +55,27 @@ describe("pickRepo", () => {
     expect(pickRepo(tabs, "my-org/issues-off")).toBe("my-org/repo-a");
   });
 
+  it("opens the repo asked for in another case, by the name of its tab", () => {
+    expect(pickRepo(tabs, "My-Org/Repo-B")).toBe("my-org/repo-b");
+  });
+
   it("opens nothing when no repo has a tab", () => {
     expect(pickRepo([], "my-org/repo-a")).toBeNull();
+  });
+});
+
+describe("settledPlace", () => {
+  const tabs = ["my-org/repo-a", "my-org/repo-b"];
+
+  it("puts the tab opened in place of the repo asked for, when it is not the one asked for", () => {
+    expect(settledPlace({ dashboard: "issues", repo: null }, tabs)).toEqual({ dashboard: "issues", repo: "my-org/repo-a" });
+    expect(settledPlace({ dashboard: "issues", repo: "my-org/issues-off" }, tabs)).toEqual({ dashboard: "issues", repo: "my-org/repo-a" });
+    expect(settledPlace({ dashboard: "issues", repo: "MY-ORG/repo-b" }, tabs)).toEqual({ dashboard: "issues", repo: "my-org/repo-b" });
+  });
+
+  it("is nothing to change when the repo asked for opens as it is, or there is no tab to open", () => {
+    expect(settledPlace({ dashboard: "issues", repo: "my-org/repo-b" }, tabs)).toBeNull();
+    expect(settledPlace({ dashboard: "issues", repo: "my-org/repo-b" }, [])).toBeNull();
+    expect(settledPlace({ dashboard: "prs", repo: null }, tabs)).toBeNull();
   });
 });
