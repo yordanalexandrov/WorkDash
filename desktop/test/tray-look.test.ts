@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { trayTooltip, withDot } from "../src/tray-look.js";
 
@@ -31,6 +32,12 @@ describe("the tray icon with a dot", () => {
 
     // #ff6f63, the dashboard's --bad, in BGRA.
     expect(pixel(dotted, size, 24, 8)).toEqual([0x63, 0x6f, 0xff, 0xff]);
+  });
+
+  it("uses the colour of the dashboard's dark-theme --bad", () => {
+    const style = readFileSync(new URL("../../web/public/style.css", import.meta.url), "utf8");
+    const dark = style.slice(style.indexOf("@media (prefers-color-scheme: dark)"));
+    expect(dark.match(/--bad:\s*(#[0-9a-f]{6})/i)?.[1]).toBe("#ff6f63");
   });
 
   it("leaves the rest of the icon as it was", () => {

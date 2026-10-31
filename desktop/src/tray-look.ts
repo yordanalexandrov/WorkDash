@@ -6,7 +6,10 @@ export function trayTooltip(count: number, paused = false): string {
   return `Чака теб: ${count}${paused ? "\nНотификациите са на пауза" : ""}`;
 }
 
-/** The dashboard's --bad in the dark theme, as blue, green, red. */
+/**
+ * The dashboard's `--bad` in the dark theme (#ff6f63, docs/design.md and web/public/style.css), as blue, green, red.
+ * Keep it in step with the token: desktop/test/tray-look.test.ts fails when the stylesheet's value moves.
+ */
 const DOT = [0x63, 0x6f, 0xff] as const;
 
 /**
