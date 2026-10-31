@@ -22,6 +22,10 @@ export type Notifier = {
   flushMissed(): void;
   /** Marks the events a browser showed delivered. */
   acknowledge(ids: string[]): void;
+  /** Whether the notification pause is on. */
+  paused(): boolean;
+  /** Turns the notification pause on or off: while on, nothing is pushed, as in quiet hours. */
+  setPaused(paused: boolean): void;
 };
 
 /** Turns the difference between two polls into notifications; an event stays undelivered until a browser shows it. */
@@ -38,6 +42,10 @@ export function createNotifier(options: {
   const { store, events, rules, notifications, pollMode = () => "periodic", timeZone, now = () => new Date() } = options;
   /** Events pushed but not acknowledged yet, with when they were pushed. */
   const awaitingAck = new Map<string, number>();
+  /** The notification pause: on until switched off, and off again after a restart. */
+  let paused = false;
+  /** Whether notifications are held back at `at`: in quiet hours or while paused. */
+  const silentAt = (at: Date) => paused || isQuietAt(notifications().quietHours, at, timeZone);
 
   /** The summary of the missed events, now marked delivered; null when there is none. */
   function takeMissed(): ServerEvent | null {
@@ -50,11 +58,11 @@ export function createNotifier(options: {
     const ids = undelivered.map((event) => event.id);
     store.markDelivered(ids);
     for (const id of ids) awaitingAck.delete(id);
-    return missed && { type: "missed" as const, data: { ...missed, quiet: isQuietAt(current.quietHours, at, timeZone) } };
+    return missed && { type: "missed" as const, data: { ...missed, quiet: silentAt(at) } };
   }
 
   function flushMissed() {
-    if (events.clientCount() === 0 || isQuietAt(notifications().quietHours, now(), timeZone)) return;
+    if (events.clientCount() === 0 || silentAt(now())) return;
     const missed = takeMissed();
     if (missed) events.broadcast(missed.type, missed.data);
   }
@@ -62,13 +70,13 @@ export function createNotifier(options: {
   return {
     afterSnapshot(previous, current) {
       const at = now();
-      const { enabled, quietHours } = notifications();
+      const { enabled } = notifications();
       const found = diffSnapshots(previous, current, rules(), store.loadSeen());
       // Before recording, so the summary holds only what was missed before this poll.
       flushMissed();
       const fresh = store.recordEvents(found, at);
       store.markDelivered(fresh.filter((event) => !enabled[event.type]).map((event) => event.id));
-      if (events.clientCount() === 0 || isQuietAt(quietHours, at, timeZone)) return;
+      if (events.clientCount() === 0 || silentAt(at)) return;
       const notify = fresh.filter((event) => enabled[event.type]);
       // A poll in On-demand can bring in all that happened since I last looked: a burst that reads better summed up.
       if (pollMode() === "on_demand" && notify.length > BURST_LIMIT) {
@@ -90,6 +98,12 @@ export function createNotifier(options: {
     acknowledge(ids) {
       store.markDelivered(ids);
       for (const id of ids) awaitingAck.delete(id);
+    },
+    paused: () => paused,
+    setPaused(next) {
+      paused = next;
+      // What was held back comes as one summary right away, not at the next poll.
+      flushMissed();
     },
   };
 }

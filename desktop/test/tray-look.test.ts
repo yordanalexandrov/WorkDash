@@ -15,6 +15,11 @@ describe("the tray's tooltip", () => {
     expect(trayTooltip(3)).toBe("Чака теб: 3");
     expect(trayTooltip(0)).toBe("Чака теб: 0");
   });
+
+  it("says when the notifications are paused", () => {
+    expect(trayTooltip(2, true)).toBe("Чака теб: 2\nНотификациите са на пауза");
+    expect(trayTooltip(2, false)).toBe("Чака теб: 2");
+  });
 });
 
 describe("the tray icon with a dot", () => {
