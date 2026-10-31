@@ -10,6 +10,7 @@ import type { PollHealth } from "./domain/poll-error.js";
 import { DEMANDS, POLL_MODES } from "./domain/poll-mode.js";
 import type { Poller } from "./poller.js";
 import type { Settings } from "./settings.js";
+import type { Missing } from "./domain/settings.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
@@ -31,9 +32,6 @@ const SaveSettingsRequest = z.object({ settings: z.unknown(), hash: z.string() }
 const TokenRequest = z.object({ token: z.string().trim().min(1) });
 
 const CheckNamesRequest = z.object({ repos: z.array(z.string()).max(100), team: z.array(z.string()).max(100) });
-
-/** What the dashboard cannot do without, and the Settings screen asks for. */
-export type Missing = "token" | "repos";
 
 /** The names this machine answers to; a request under any other host name reached it by DNS rebinding. */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -130,6 +128,7 @@ export function buildServer(
   // The API answers only this machine's own pages. A page on another site can still make the browser send requests
   // here: under its own host name after DNS rebinding (refused by the Host check), or as a form-like write with no
   // CORS preflight (refused by the Origin check and by taking JSON only, which a page elsewhere cannot send unasked).
+  // A request with no Origin is not a browser's cross-site one (browsers send it on every POST and PUT), so it passes.
   server.addHook("onRequest", async (request, reply) => {
     if (!request.url.startsWith("/api/")) return;
     const host = request.headers.host ?? "";
@@ -137,8 +136,7 @@ export function buildServer(
     if (request.method === "GET" || request.method === "HEAD") return;
     const origin = request.headers.origin;
     if (origin !== undefined && origin !== `http://${host}` && origin !== `https://${host}`) return reply.code(403).send({ error: "cross-origin request" });
-    const type = request.headers["content-type"];
-    if (type !== undefined && !/^application\/json\s*(;|$)/i.test(type)) return reply.code(415).send({ error: "expected application/json" });
+    if (!/^application\/json\s*(;|$)/i.test(request.headers["content-type"] ?? "")) return reply.code(403).send({ error: "expected application/json" });
   });
 
   server.get("/api/prs", async () => dashboardState(options));

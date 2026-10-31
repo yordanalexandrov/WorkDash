@@ -31,7 +31,8 @@ export type Poller = {
 
 /**
  * Polls GitHub, saving each snapshot. In the poll mode the store holds: Periodic polls right away and then every
- * `intervalMs` (longer while a rate limit lasts); On-demand polls only on a demand or a reconfigure.
+ * `intervalMs` (longer while a rate limit lasts); On-demand polls only on a demand or a reconfigure. Without a token or
+ * repos it does not poll; once GitHub refuses the token, it stops until a reconfigure brings another one.
  * A failed poll, a failed closed-PR lookup included, saves nothing, so the next poll looks again.
  */
 export function startPoller(
@@ -133,7 +134,8 @@ export function startPoller(
       if (keepsPolling()) timer = setTimeout(poll, delayAfterSwitch({ lastSuccessAt, intervalMs, error: health.error, now: new Date() }));
     },
     demand(demand) {
-      const answer = stopped || !ready() ? "skip" : answerDemand({ demand, polling, lastSuccessAt, error: health.error, now: new Date() });
+      // A refused token is not tried again until a new one comes.
+      const answer = stopped || !ready() || health.error?.kind === "auth" ? "skip" : answerDemand({ demand, polling, lastSuccessAt, error: health.error, now: new Date() });
       if (answer === "poll") {
         clearTimeout(timer);
         void poll();
@@ -141,8 +143,10 @@ export function startPoller(
       return answer;
     },
     reconfigure(settings) {
+      const sameToken = settings.token === token;
       ({ repos, token, intervalMs, recentlyClosedWindowMs } = settings);
-      if (stopped) return;
+      // New settings with the token GitHub refused would only be refused again.
+      if (stopped || (sameToken && health.error?.kind === "auth")) return;
       if (polling) {
         pollAgain = true;
       } else if (!ready()) {

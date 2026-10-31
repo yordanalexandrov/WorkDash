@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { writeFileAtomically } from "./atomic-write.js";
 import { applySettings, type Config, ConfigError, formFromConfig, settingsForm } from "./config.js";
-import { type FieldIssue, type SettingsForm, validateSettings } from "./domain/settings.js";
-import { accessibleRepos, checkRepo, checkToken, checkUser, type NameCheck, type TokenCheck, type UserCheck } from "./github/rest.js";
+import { type SaveResult, type SettingsForm, type TokenStatus, validateSettings } from "./domain/settings.js";
+import { accessibleRepos, checkRepo, checkToken, checkUser, type NamesCheck, type TokenCheck } from "./github/rest.js";
 import type { TokenStore } from "./token-store.js";
 
 /** The settings as the Settings screen opens them, and the hash of the file they were read from. */
@@ -14,12 +14,6 @@ export type SettingsRead = {
   invalid: string | null;
 };
 
-export type SaveResult = { ok: true; hash: string } | { ok: false; reason: "conflict" } | { ok: false; reason: "invalid"; issues: FieldIssue[] };
-
-/** Whether a token is saved, and how the screen shows it. The token itself never leaves the server. */
-export type TokenStatus = { set: boolean; masked: string | null };
-
-export type NamesCheck = { repos: Record<string, NameCheck>; team: Record<string, UserCheck> };
 
 export type Settings = {
   read(): SettingsRead;

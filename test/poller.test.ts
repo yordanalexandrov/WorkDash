@@ -307,6 +307,12 @@ describe("startPoller health", () => {
     expect(kinds).toEqual([null, "auth"]);
     expect(store.loadSnapshot()?.viewer).toBe("me");
 
+    // Neither a demand nor a reload of the settings tries the refused token again.
+    expect(poller.demand("button")).toBe("skip");
+    poller.reconfigure({ repos: ["my-org/repo-a", "my-org/repo-b"], token: "t", intervalMs: 1, recentlyClosedWindowMs: 3_600_000 });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(kinds).toEqual([null, "auth"]);
+
     poller.reconfigure({ repos: ["my-org/repo-a"], token: "t2", intervalMs: 3_600_000, recentlyClosedWindowMs: 3_600_000 });
     await waitFor(() => kinds.length === 3);
     poller.stop();

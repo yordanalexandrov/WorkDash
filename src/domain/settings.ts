@@ -39,7 +39,9 @@ const notifications = z
   .prefault({});
 
 /** config.yaml as written, with the defaults filled in: what the Settings screen edits. */
-export const settingsSchema = z.strictObject({
+// Strict only where a stray key is a likely mistake (github, notifications) or a key the dashboard no longer
+// takes (github.token_env); elsewhere an unknown key passes, as it always has.
+export const settingsSchema = z.object({
   github: z
     .strictObject({
       poll_interval: duration.default("60s"),
@@ -48,13 +50,13 @@ export const settingsSchema = z.strictObject({
   repos: z.array(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'expected "owner/name"')).default([]),
   team: z.array(z.string().min(1)).default([]),
   review: z
-    .strictObject({
+    .object({
       required_approvals: z.number().int().min(1).default(1),
       recently_closed_window: duration.default("24h"),
     })
     .prefault({}),
   jira: z
-    .strictObject({
+    .object({
       base_url: z.url().nullable().default(null),
       project_keys: z.array(z.string().regex(/^[A-Z][A-Z0-9]+$/, 'expected a project key such as "ABC"')).default([]),
     })
@@ -82,3 +84,11 @@ export function validateSettings(form: unknown): { ok: true; form: SettingsForm 
   return { ok: false, issues: result.error.issues.map((issue) => ({ path: formatPath(issue.path) || "(root)", message: issue.message })) };
 }
 
+
+export type SaveResult = { ok: true; hash: string } | { ok: false; reason: "conflict" } | { ok: false; reason: "invalid"; issues: FieldIssue[] };
+
+/** Whether a token is saved, and how the screen shows it. The token itself never leaves the server. */
+export type TokenStatus = { set: boolean; masked: string | null };
+
+/** What the dashboard cannot do without, and the Settings screen asks for. */
+export type Missing = "token" | "repos";

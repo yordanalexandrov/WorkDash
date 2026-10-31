@@ -3,7 +3,8 @@ import { openDataDir } from "./data-dir.js";
 import { openStore } from "./db.js";
 import { createNotifier } from "./notifier.js";
 import { type PollerSettings, startPoller } from "./poller.js";
-import { buildServer, type DashboardSource, dashboardState, type Missing } from "./server.js";
+import type { Missing } from "./domain/settings.js";
+import { buildServer, type DashboardSource, dashboardState } from "./server.js";
 import { createSettings } from "./settings.js";
 import { createEventHub } from "./sse.js";
 

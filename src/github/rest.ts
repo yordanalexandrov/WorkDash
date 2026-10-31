@@ -21,6 +21,9 @@ export type NameCheck = { ok: true } | { ok: false; message: string };
 
 export type UserCheck = { ok: true; avatarUrl: string } | { ok: false; message: string };
 
+/** What GitHub says about each repo and login, by name. */
+export type NamesCheck = { repos: Record<string, NameCheck>; team: Record<string, UserCheck> };
+
 type Fetch = typeof globalThis.fetch;
 
 /** A GET of `path` with the token; a TypeError or a timeout when GitHub cannot be reached. */

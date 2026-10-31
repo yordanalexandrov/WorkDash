@@ -84,6 +84,10 @@ describe("parseConfig", () => {
     expect(config.github.pollIntervalMs).toBe(60_000);
   });
 
+  it("lets a key it does not know pass outside github and notifications, as before", () => {
+    expect(parseConfig(`extra: 1\nreview: { extra: 1 }\njira: { extra: 1 }\n${minimal}`).repos).toEqual(["my-org/repo-a"]);
+  });
+
   it("rejects github.token_env: the token is kept apart from the settings", () => {
     expect(() => parseConfig(`github: { token_env: GITHUB_TOKEN }\n${minimal}`)).toThrow(/github.*token_env/);
   });

@@ -6,21 +6,18 @@ import {
   checkToken,
   type FieldIssue,
   loadSettings,
-  type NameCheck,
+  type NamesCheck,
   repoSuggestions,
   saveSettings,
   saveToken,
   type SettingsForm,
   type SettingsRead,
   type TokenCheck,
-  type UserCheck,
 } from "../api.js";
 import { eventLabel } from "../notifications.js";
 import { changed, issueAt, readQuiet, strayIssues, withItem, writeQuiet } from "../settingsDraft.js";
 import { ESCAPE, useShortcuts } from "../useShortcuts.js";
 import { Avatar } from "./Avatar.js";
-
-type Checks = { repos: Record<string, NameCheck>; team: Record<string, UserCheck> };
 
 /** The paths of the fields the screen shows an issue next to; any other issue is listed on top. */
 const FIELD_PATHS = [
@@ -43,7 +40,7 @@ export function Settings({ onClose }: { onClose(): void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const [checks, setChecks] = useState<Checks>({ repos: {}, team: {} });
+  const [checks, setChecks] = useState<NamesCheck>({ repos: {}, team: {} });
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [tokenCheck, setTokenCheck] = useState<TokenCheck | "checking" | null>(null);
 

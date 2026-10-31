@@ -569,7 +569,15 @@ describe("requests from other sites", () => {
 
     const response = await server.inject({ method: "PUT", url: "/api/token", headers: { "content-type": "text/plain" }, payload: '{"token":"ghp_theirs"}' });
 
-    expect(response.statusCode).toBe(415);
+    expect(response.statusCode).toBe(403);
     expect(tokens).toEqual([]);
+  });
+
+  it("refuses a write with no content type at all", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    const response = await server.inject({ method: "POST", url: "/api/token/check" });
+
+    expect(response.statusCode).toBe(403);
   });
 });
