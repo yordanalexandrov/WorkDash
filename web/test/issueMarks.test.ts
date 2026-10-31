@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignedToMe, blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../src/issueMarks.js";
+import { assignedToMe, blockedCountMark, blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../src/issueMarks.js";
 
 const linked = (status: "open" | "draft" | "merged" | "closed", repo = "my-org/repo-a", number = 12) => ({
   repo,
@@ -91,5 +91,18 @@ describe("blockedMark", () => {
   it("is nothing when all its blockers are closed, or it has none", () => {
     expect(blockedMark(deps(0, 2))).toBeNull();
     expect(blockedMark(deps(0))).toBeNull();
+  });
+});
+
+describe("blockedCountMark", () => {
+  const deps = (blockedBy: number, totalBlockedBy = blockedBy) => ({ blockedBy, totalBlockedBy, blocking: 0, totalBlocking: 0 });
+
+  it("counts the open blockers, for the table's „блокиран от“, saying so on hover", () => {
+    expect(blockedCountMark(deps(1))).toEqual({ text: "1", title: "блокиран от 1 отворен issue" });
+    expect(blockedCountMark(deps(3, 5))).toEqual({ text: "3", title: "блокиран от 3 отворени issues" });
+  });
+
+  it("is nothing when no blocker is open", () => {
+    expect(blockedCountMark(deps(0, 2))).toBeNull();
   });
 });

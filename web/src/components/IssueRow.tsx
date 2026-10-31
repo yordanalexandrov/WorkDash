@@ -6,7 +6,7 @@ import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { issueFlipKey } from "../motion.js";
 import { Avatar } from "./Avatar.js";
-import { BlockedChip, ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill, SubIssuesChip } from "./IssueMarks.js";
+import { BlockedCount, ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill, SubIssuesChip } from "./IssueMarks.js";
 
 const none = <span class="dim">·</span>;
 
@@ -78,7 +78,9 @@ export function IssueRow({ issue, flip, hue, index, mine, onOpen, ghost }: Issue
       <span class="tc">{issue.milestone ? <MilestoneChip issue={issue} /> : none}</span>
       <span class="tc">{issue.linkedPullRequests.length ? <LinkedPrs issue={issue} /> : none}</span>
       <span class="tc">{issue.subIssues.total ? <SubIssuesChip issue={issue} /> : none}</span>
-      <span class="tc c">{issue.dependencies.blockedBy ? <BlockedChip issue={issue} /> : none}</span>
+      <span class="tc c">
+        <BlockedCount issue={issue} />
+      </span>
       <span class="tc r">
         <span class="age" title={`отворен ${new Date(issue.createdAt).toLocaleString()}`}>
           {age(issue.createdAt)}

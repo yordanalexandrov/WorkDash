@@ -1,5 +1,5 @@
 import type { ClosedAs, Issue, IssueLabel } from "../../../src/domain/issues.js";
-import { blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../issueMarks.js";
+import { blockedCountMark, blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../issueMarks.js";
 import { labelChip } from "../labels.js";
 import { SectionPill } from "./SectionPill.js";
 
@@ -37,7 +37,7 @@ export function ClosedAsMark({ closedAs }: { closedAs: ClosedAs }) {
   return <span class={`closed-st ${kind}`}>{text}</span>;
 }
 
-/** How far the issue's sub-issues are, "3/9", in `--merged` once all are done (`subIssuesMark`); nothing without sub-issues. */
+/** How far the issue's sub-issues are, "☑ 3/9" (the ☑ from `.subs::before`), in `--merged` once all are done (`subIssuesMark`); nothing without sub-issues. */
 export function SubIssuesChip({ issue }: { issue: Pick<Issue, "subIssues"> }) {
   const mark = subIssuesMark(issue.subIssues);
   if (!mark) return null;
@@ -54,6 +54,17 @@ export function BlockedChip({ issue }: { issue: Pick<Issue, "dependencies"> }) {
   if (!mark) return null;
   return (
     <span class="blocked" title={mark.title}>
+      {mark.text}
+    </span>
+  );
+}
+
+/** How many open blockers the issue has, the table's "блокиран от", in `--pending` (`blockedCountMark`); nothing without one. */
+export function BlockedCount({ issue }: { issue: Pick<Issue, "dependencies"> }) {
+  const mark = blockedCountMark(issue.dependencies);
+  if (!mark) return null;
+  return (
+    <span class="blocked-n" title={mark.title}>
       {mark.text}
     </span>
   );

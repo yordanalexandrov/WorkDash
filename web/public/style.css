@@ -1199,7 +1199,14 @@ kbd {
   white-space: nowrap;
 }
 
-/* The progress of an issue's sub-issues, "3/9": muted, --merged once all are completed. */
+/* The table's "блокиран от": the number of open blockers, in the status colour --pending. */
+.blocked-n {
+  color: var(--pending);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The progress of an issue's sub-issues, "☑ 3/9" (the text "3/9", the ☑ drawn here): muted, --merged once all are completed. */
 .subs {
   padding: 0 5px;
   border: 1px solid var(--line);
