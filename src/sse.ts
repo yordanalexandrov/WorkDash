@@ -1,4 +1,5 @@
 import type { PrEvent } from "./domain/events.js";
+import type { IssueBoardState } from "./domain/issues.js";
 import type { MissedNotice } from "./domain/notify.js";
 import type { DashboardState } from "./server.js";
 
@@ -7,6 +8,8 @@ export type ServerEvents = {
   dashboard: DashboardState;
   notification: PrEvent;
   missed: MissedNotice;
+  /** One repo's issues, when a poll of it starts and ends and when the stages change; every page on that repo takes it. */
+  issues: IssueBoardState;
 };
 
 /** Where the hub writes: an HTTP response, or any stream in tests. */

@@ -48,19 +48,20 @@ export type Group<T> = { id: string; key: string; items: T[] };
 
 /**
  * The items in groups by `keyOf`, each keeping the items' order; the groups in `order` of their keys (by name unless
- * said otherwise), and only those with items. Grouping by "none" gives one group of everything.
+ * said otherwise), and only those with items. An item with several keys (an issue's assignees) is in the group of each.
+ * Grouping by "none" gives one group of everything.
  */
 export function groupItems<T>(
   items: T[],
   by: GroupBy,
-  keyOf: (item: T, by: GroupBy) => string,
+  keyOf: (item: T, by: GroupBy) => string | string[],
   order: (a: string, b: string) => number = (a, b) => a.localeCompare(b),
 ): Group<T>[] {
   if (by === "none") return [{ id: "none:", key: "", items }];
   const groups = new Map<string, T[]>();
   for (const item of items) {
-    const key = keyOf(item, by);
-    groups.set(key, [...(groups.get(key) ?? []), item]);
+    const keys = keyOf(item, by);
+    for (const key of typeof keys === "string" ? [keys] : keys) groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   return [...groups.keys()].sort(order).map((key) => ({ id: `${by}:${key}`, key, items: groups.get(key)! }));
 }

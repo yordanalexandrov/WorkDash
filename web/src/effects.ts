@@ -1,15 +1,44 @@
 // Delight: confetti on merged and sparks on "видях", particles in the effects layer (`.fx`). They know a point, a count, colours
-// and a label, nothing of PRs but `newlyMerged`; see "Motion" in docs/design.md, where particles are the exception to the springs.
+// and a label, nothing of PRs and issues but `newlyMerged` and `watchCompleted`; see "Motion" in docs/design.md, where particles are the exception to the springs.
 
-import type { ClosedPullRequest } from "./api.js";
+import type { ClosedPullRequest, IssueBoardState } from "./api.js";
 import { prKey } from "./detail.js";
+import { issueKey } from "./issueDetail.js";
 import { type Pos, reducedMotion } from "./motion.js";
+import { sameRepo } from "../../src/domain/repos.js";
 
 /** The keys of the PRs merged since `before`: in `after` as merged and not in `before`; none for the first snapshot (`null`). */
 export function newlyMerged(before: ClosedPullRequest[] | null, after: ClosedPullRequest[]): string[] {
   if (!before) return [];
   const known = new Set(before.map(prKey));
   return after.filter((pr) => pr.state === "MERGED" && !known.has(prKey(pr))).map(prKey);
+}
+
+/** What `watchCompleted` compares: what the Issue dashboard shows of its open repo. */
+type ClosedIssues = Pick<IssueBoardState, "repo" | "fetchedAt" | "closed">;
+
+/**
+ * What the Issue dashboard keeps between two states of its open repo, to tell an issue completed while it watched: the
+ * state it showed last, and the last poll answer that came in while it showed the repo (a state fetched later than the one
+ * before it), if one did.
+ */
+export type CompletedWatch = { shown: ClosedIssues | null; answer: ClosedIssues | null };
+
+export const NO_WATCH: CompletedWatch = { shown: null, answer: null };
+
+/**
+ * The watch after the dashboard shows `next` (null while it shows no repo's issues), and the keys of the issues completed
+ * since the last poll answer: those in `next` as completed and not in that answer. Only a poll answer that follows another
+ * one seen for the same repo counts, so neither the saved issues (perhaps hours old), nor the start of a poll (which carries
+ * them as saved), nor opening a tab or the dashboard ever bursts for what closed while nobody looked.
+ */
+export function watchCompleted(watch: CompletedWatch, next: ClosedIssues | null): { watch: CompletedWatch; completed: string[] } {
+  const { shown, answer } = watch;
+  if (!next || !shown || !sameRepo(shown.repo, next.repo)) return { watch: { shown: next, answer: null }, completed: [] };
+  if (next.fetchedAt === null || next.fetchedAt === shown.fetchedAt) return { watch: { shown: next, answer }, completed: [] };
+  const known = new Set(answer?.closed.map(issueKey));
+  const completed = answer ? next.closed.filter((issue) => issue.closedAs === "completed" && !known.has(issueKey(issue))).map(issueKey) : [];
+  return { watch: { shown: next, answer: next }, completed };
 }
 
 /** A number in [min, max) from a generator of [0, 1). */

@@ -30,3 +30,9 @@ notifications:                 # false изключва типа; събитие
   re_review_needed: true
   team_pr_opened: true
   quiet_hours: "19:00-09:00"   # без нотификации; часът е в зоната от TZ (в .env). Пропуснатото идва обобщено после
+
+issues:                        # етапите на Issue таблото: колоните след „Без етап“, по реда тук
+  columns: [needs-triage, ready-for-agent, ready-for-human, in-progress]
+  repos:                       # по желание: repo със собствен списък вместо общия
+    my-org/repo-b:
+      columns: [todo, doing]

@@ -1,4 +1,6 @@
 import type { ClassifiedPullRequest, Section } from "../../src/domain/classify.js";
+import type { IssueDemand, IssuePollAnswer } from "../../src/domain/issue-poll.js";
+import type { ClosedIssue, IssueBoardState, IssueLabel, StagedIssue } from "../../src/domain/issues.js";
 import type { JiraLink } from "../../src/domain/jira.js";
 import type { PollError } from "../../src/domain/poll-error.js";
 import type { Demand, DemandAnswer, PollMode } from "../../src/domain/poll-mode.js";
@@ -6,7 +8,7 @@ import type { FieldIssue, Missing, SaveResult, SettingsForm, TokenStatus } from 
 import type { ClosedPullRequest } from "../../src/domain/types.js";
 import type { NamesCheck, TokenCheck } from "../../src/github/rest.js";
 
-export type { ClassifiedPullRequest, ClosedPullRequest, Demand, FieldIssue, JiraLink, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
+export type { ClassifiedPullRequest, ClosedIssue, ClosedPullRequest, Demand, FieldIssue, IssueBoardState, IssueLabel, JiraLink, StagedIssue, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
 
 /** A PR as /api/prs serves it: classified, with links to the Jira tickets it names. */
 export type DashboardPullRequest = ClassifiedPullRequest & { jira: JiraLink[] };
@@ -33,6 +35,8 @@ export type DashboardState = {
   sections: SectionOfPullRequests[];
   /** Merged or closed PRs within the configured window, most recently closed first; never part of `sections`. */
   recentlyClosed: ClosedPullRequest[];
+  /** The followed repos whose issues are on in GitHub, as the last poll read them: the Issue dashboard's tabs. */
+  issueRepos: string[];
 };
 
 /** Marks a PR seen as of `fetchedAt`, the snapshot the page showed when I clicked "видях". */
@@ -66,6 +70,24 @@ export async function requestPoll(demand: Demand): Promise<DemandAnswer> {
   return ((await response.json()) as { answer: DemandAnswer }).answer;
 }
 
+/** A repo's issues as last saved, each in its stage, and how its poll goes. */
+export async function loadIssues(repo: string): Promise<IssueBoardState> {
+  const response = await fetch(`/api/issues?repo=${encodeURIComponent(repo)}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as IssueBoardState;
+}
+
+/** Asks the server for a poll of a repo's issues; its start and end come back over the event stream as `issues` events. */
+export async function requestIssuePoll(repo: string, demand: IssueDemand): Promise<IssuePollAnswer> {
+  const response = await fetch("/api/issues/poll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo, reason: demand }),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return (await response.json()) as IssuePollAnswer;
+}
+
 /** Switches the poll mode of the server, and so of every open dashboard. */
 export async function setPollMode(mode: PollMode): Promise<void> {
   const response = await fetch("/api/poll-mode", {
@@ -74,6 +96,11 @@ export async function setPollMode(mode: PollMode): Promise<void> {
     body: JSON.stringify({ mode }),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+/** Each repo's labels on GitHub, as hints for its stage labels; null for a repo GitHub did not answer about. */
+export async function repoLabels(repos: string[]): Promise<Record<string, IssueLabel[] | null>> {
+  return json(await send("POST", "/api/config/labels", { repos }));
 }
 
 /** The body of GET /api/config. */

@@ -106,6 +106,28 @@ describe("startWorkDash", () => {
     }
   });
 
+  it("serves the issues of a followed repo, and closes cleanly after a demand to poll them", async () => {
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(join(dataDir, "config.yaml"), "repos:\n  - my-org/repo-a\n");
+    const timers = watchTimers();
+    const workdash = await startWorkDash({ dataDir, tokens: memoryTokens(), host: "127.0.0.1", port: 0, webRoot, logger: false });
+
+    const board = await fetch(`${workdash.url}/api/issues?repo=my-org/repo-a`);
+    expect(board.status).toBe(200);
+    expect(await board.json()).toMatchObject({ repo: "my-org/repo-a", issues: [], polling: false });
+    const demand = await fetch(`${workdash.url}/api/issues/poll`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo: "my-org/repo-a", reason: "open" }),
+    });
+    expect(await demand.json()).toMatchObject({ answer: "skip" });
+
+    await workdash.close();
+
+    expect(await timers.pending()).toEqual([]);
+    expect(openFilesUnder(dataDir)).toEqual([]);
+  });
+
   it("tells how many PRs wait on me, and again once one of them is seen", async () => {
     mkdirSync(dataDir, { recursive: true });
     const seeded = openStore(join(dataDir, "workdash.db"));

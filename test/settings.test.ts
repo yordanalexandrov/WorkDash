@@ -14,6 +14,7 @@ const github = (async (input: string | URL | Request, init?: RequestInit) => {
   if (auth !== "Bearer ghp_good1234") return Response.json({ message: "Bad credentials" }, { status: 401 });
   if (String(input).endsWith("/user")) return Response.json({ login: "me" }, { headers: { ...RATE, "x-oauth-scopes": "repo" } });
   if (String(input).endsWith("/repos/my-org/repo-a")) return Response.json({});
+  if (String(input).endsWith("/repos/my-org/repo-a/labels?per_page=100")) return Response.json([{ name: "todo", color: "ededed" }]);
   if (String(input).endsWith("/users/colleague1")) return Response.json({ avatar_url: "https://avatars.example/u/1" });
   return new Response(null, { status: 404 });
 }) as typeof globalThis.fetch;
@@ -145,5 +146,14 @@ describe("settings", () => {
       repos: { "my-org/repo-a": { ok: true }, "my-org/nope": { ok: false, message: "Не съществува или токенът не го вижда" } },
       team: { colleague1: { ok: true, avatarUrl: "https://avatars.example/u/1" } },
     });
+  });
+
+  it("lists each repo's labels as hints for its stages, none for a repo GitHub does not answer about", async () => {
+    const settings = open();
+    expect(await settings.labels(["my-org/repo-a"])).toEqual({ "my-org/repo-a": null });
+
+    await settings.saveToken("ghp_good1234");
+
+    expect(await settings.labels(["my-org/repo-a", "my-org/nope"])).toEqual({ "my-org/repo-a": [{ name: "todo", color: "ededed" }], "my-org/nope": null });
   });
 });

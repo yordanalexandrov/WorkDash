@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessibleRepos, checkRepo, checkToken, checkUser } from "../src/github/rest.js";
+import { accessibleRepos, checkRepo, checkToken, checkUser, repoLabels } from "../src/github/rest.js";
 
 type Route = (url: URL, headers: Record<string, string>) => Response;
 
@@ -95,5 +95,23 @@ describe("accessibleRepos", () => {
     const github = fakeGitHub(() => new Response(null, { status: 401 }));
 
     expect(await accessibleRepos("ghp_x", github.fetch)).toEqual([]);
+  });
+});
+
+describe("repoLabels", () => {
+  it("lists the repo's labels with their colours", async () => {
+    const github = fakeGitHub(() => Response.json([{ name: "todo", color: "ededed", id: 1 }, { name: "in-progress", color: "0e8a16" }]));
+
+    expect(await repoLabels("my-org/repo-a", "ghp_x", github.fetch)).toEqual([
+      { name: "todo", color: "ededed" },
+      { name: "in-progress", color: "0e8a16" },
+    ]);
+    expect(github.calls[0]?.url).toBe("https://api.github.com/repos/my-org/repo-a/labels?per_page=100");
+  });
+
+  it("knows none when GitHub does not answer, so no label gets a warning", async () => {
+    const github = fakeGitHub(() => new Response(null, { status: 404 }));
+
+    expect(await repoLabels("my-org/repo-a", "ghp_x", github.fetch)).toBeNull();
   });
 });

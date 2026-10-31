@@ -1,4 +1,4 @@
-import type { DashboardState, PollError, PollMode, Section } from "./api.js";
+import type { DashboardState, IssueBoardState, PollError, PollMode, Section } from "./api.js";
 import { rateLimitLiftsAt } from "../../src/domain/poll-mode.js";
 import type { StreamStatus } from "./events.js";
 
@@ -45,6 +45,17 @@ export function statusText(state: DashboardState | null, now: Date): Status {
   return { text: `${state.viewer} · последен poll ${agoText(ago)}`, stale: ago >= STALE_MS };
 }
 
+/**
+ * The header line on the Issue dashboard: the open repo and how old its snapshot is, in either mode, as each repo is polled
+ * only while it shows; stale after an hour. `issues` is null before the server answers for the repo.
+ */
+export function issueStatusText(issues: IssueBoardState | null, now: Date): Status {
+  if (!issues) return { text: "Зареждане…", stale: false };
+  if (!issues.fetchedAt) return { text: "Чака първия poll…", stale: false };
+  const ago = now.getTime() - Date.parse(issues.fetchedAt);
+  return { text: `${shortRepo(issues.repo)} · последен poll ${agoText(ago)}`, stale: ago >= STALE_MS };
+}
+
 /** "току-що" under a minute, then whole minutes, hours, days. */
 function agoText(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
@@ -54,8 +65,8 @@ function agoText(ms: number): string {
   return hours < 24 ? `преди ${hours} ч` : `преди ${Math.floor(hours / 24)} д`;
 }
 
-/** "Обнови", held back while a rate limit lasts: no poll can start before it lifts. */
-export function pollButton(state: DashboardState | null, now: Date): { label: string; disabled: boolean } {
+/** "Обнови" of either dashboard, held back while a rate limit lasts: no poll can start before it lifts. */
+export function pollButton(state: Pick<DashboardState, "error"> | null, now: Date): { label: string; disabled: boolean } {
   const resetAt = rateLimitLiftsAt(state?.error ?? null, now);
   if (!resetAt) return { label: "Обнови", disabled: false };
   return { label: `Обнови (след ${new Date(resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})`, disabled: true };
@@ -66,6 +77,15 @@ export function errorText(state: DashboardState | null, stream: StreamStatus): s
   if (stream === "reconnecting") return "Няма връзка със сървъра, свързване отново…";
   if (state?.error) return pollErrorText(state.error, state.pollMode);
   return state?.problems.length ? `Последният poll е непълен: ${state.problems.join("; ")}` : null;
+}
+
+/**
+ * The error banner on the Issue dashboard: why the open repo's last poll failed (its saved issues still show), or null. The
+ * PR poll's errors are not told here, nor are these on the PR dashboard.
+ */
+export function issueErrorText(issues: IssueBoardState | null, mode: PollMode, stream: StreamStatus): string | null {
+  if (stream === "reconnecting") return "Няма връзка със сървъра, свързване отново…";
+  return issues?.error ? pollErrorText(issues.error, mode) : null;
 }
 
 function pollErrorText({ kind, message, resetAt }: PollError, mode: PollMode): string {
@@ -94,7 +114,7 @@ export function missingText(state: DashboardState | null): string | null {
 }
 
 /** Whether the poll error is one only Settings mends: GitHub refuses the token. */
-export function needsNewToken(state: DashboardState | null): boolean {
+export function needsNewToken(state: Pick<DashboardState, "error"> | null): boolean {
   return state?.error?.kind === "auth";
 }
 

@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { isMap, isNode, isSeq, parse as parseYaml, parseDocument } from "yaml";
 import { EVENT_TYPES, type EventType } from "./domain/events.js";
+import type { IssuesConfig } from "./domain/issues.js";
 import type { JiraConfig } from "./domain/jira.js";
 import { type NotificationRules, parseQuietHours, type QuietHours } from "./domain/notify.js";
 import { durationMs, formatClock, formatDuration, type SettingsForm, settingsSchema, validateSettings } from "./domain/settings.js";
@@ -12,6 +13,7 @@ export type Config = {
   review: { requiredApprovals: number; recentlyClosedWindowMs: number };
   jira: JiraConfig;
   notifications: NotificationRules;
+  issues: IssuesConfig;
 };
 
 export class ConfigError extends Error {
@@ -32,6 +34,7 @@ function toConfig(raw: SettingsForm): Config {
       enabled: Object.fromEntries(EVENT_TYPES.map((type) => [type, raw.notifications[type]])) as Record<EventType, boolean>,
       quietHours: raw.notifications.quiet_hours === null ? null : (parseQuietHours(raw.notifications.quiet_hours) as QuietHours),
     },
+    issues: raw.issues,
   };
 }
 
@@ -64,8 +67,12 @@ export function formFromConfig(config: Config): SettingsForm {
       ...config.notifications.enabled,
       quiet_hours: quietHours ? `${formatClock(quietHours.start)}-${formatClock(quietHours.end)}` : null,
     },
+    issues: config.issues,
   };
 }
+
+/** The maps of config.yaml keyed by a name (a repo) rather than by fixed keys: a name the form leaves out is deleted. */
+const KEYED_BY_NAME = new Set(["issues.repos"]);
 
 /**
  * Writes `form` into config.yaml content: only the values that differ are set, so comments, order and the way
@@ -81,6 +88,18 @@ export function applySettings(text: string, form: SettingsForm): string {
   let changed = false;
   const visit = (path: string[], value: unknown) => {
     if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      const node = doc.getIn(path, true);
+      if (isMap(node) && KEYED_BY_NAME.has(path.join("."))) {
+        // A repo the form no longer has a list for is gone from the file too; the others keep their comments.
+        const gone = node.items.map((pair) => (isNode(pair.key) ? pair.key.toJSON() : pair.key)).filter((key) => !Object.hasOwn(value, String(key)));
+        for (const key of gone) node.delete(key);
+        if (gone.length) changed = true;
+        // With no repo left, the key goes too, as if it had never been written.
+        if (gone.length && node.items.length === 0) {
+          doc.deleteIn(path);
+          return;
+        }
+      }
       for (const [key, inner] of Object.entries(value)) visit([...path, key], inner);
       return;
     }

@@ -1,10 +1,15 @@
 import Database from "better-sqlite3";
 import type { SeenAt } from "./domain/classify.js";
 import type { PrEvent } from "./domain/events.js";
+import type { IssueSnapshot } from "./domain/issues.js";
 import { POLL_MODES, type PollMode } from "./domain/poll-mode.js";
 import type { ClosedPullRequest, PullRequest, Snapshot } from "./domain/types.js";
+import { repoKey } from "./domain/repos.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
+
+/** The issues of one repo as the last successful poll of it saved them, and when it fetched them. */
+export type StoredIssueSnapshot = IssueSnapshot & { fetchedAt: string };
 
 export type SnapshotStore = {
   saveSnapshot(snapshot: Snapshot, fetchedAt: Date): void;
@@ -12,6 +17,14 @@ export type SnapshotStore = {
   /** Replaces the list of recently merged or closed PRs, which is kept apart from the open ones. */
   saveRecentlyClosed(pullRequests: ClosedPullRequest[]): void;
   loadRecentlyClosed(): ClosedPullRequest[];
+  /** Replaces the list of repos whose issues are on in GitHub, as the last poll read them; only they get an Issue dashboard tab. */
+  saveIssueRepos(repos: string[]): void;
+  /** The repos whose issues are on, in the order saved; none before the first poll. */
+  loadIssueRepos(): string[];
+  /** Replaces the issues of the snapshot's repo; every repo's issues are kept apart from the others' and from the PRs. */
+  saveIssues(snapshot: IssueSnapshot, fetchedAt: Date): void;
+  /** The issues of `repo` (in any case) as last saved; null before its first poll. */
+  loadIssues(repo: string): StoredIssueSnapshot | null;
   /** Records that I have seen a PR as it was at `seenAt`; a later mark wins over an earlier one. */
   markSeen(repo: string, number: number, seenAt: Date): void;
   /** Marks PRs without a seen mark as seen at `at`, when first observed, so only later comments are unread. */
@@ -44,6 +57,15 @@ const SCHEMA = `
     data_json TEXT    NOT NULL,
     PRIMARY KEY (repo, number)
   );
+  CREATE TABLE IF NOT EXISTS issue_repo (
+    repo TEXT PRIMARY KEY
+  );
+  -- One row per repo: the whole issue snapshot of its last successful poll.
+  CREATE TABLE IF NOT EXISTS issue_snapshot (
+    repo       TEXT PRIMARY KEY,
+    data_json  TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS poll (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     viewer     TEXT NOT NULL,
@@ -74,10 +96,10 @@ const SCHEMA = `
 `;
 
 /**
- * Bumped whenever the stored PullRequest shape changes. A snapshot in an older format is
+ * Bumped whenever the stored PullRequest or Issue shape changes. A snapshot in an older format is
  * dropped on open: it is only a cache, and the poller refetches it right away.
  */
-const SNAPSHOT_FORMAT = 7;
+const SNAPSHOT_FORMAT = 11;
 
 /** Opens (and creates if needed) the SQLite file that holds the latest snapshot. */
 export function openStore(path: string): SnapshotStore {
@@ -85,7 +107,7 @@ export function openStore(path: string): SnapshotStore {
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   if (db.pragma("user_version", { simple: true }) !== SNAPSHOT_FORMAT) {
-    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM poll;");
+    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM issue_repo; DELETE FROM issue_snapshot; DELETE FROM poll;");
     db.pragma(`user_version = ${SNAPSHOT_FORMAT}`);
   }
 
@@ -106,6 +128,18 @@ export function openStore(path: string): SnapshotStore {
     deleteClosed.run();
     for (const pr of pullRequests) insertClosed.run(pr.repo, pr.number, JSON.stringify(pr));
   });
+  const deleteIssueRepos = db.prepare("DELETE FROM issue_repo");
+  const insertIssueRepo = db.prepare("INSERT OR IGNORE INTO issue_repo (repo) VALUES (?)");
+  const selectIssueRepos = db.prepare<[], { repo: string }>("SELECT repo FROM issue_repo ORDER BY rowid");
+  const saveIssues = db.transaction((repos: string[]) => {
+    deleteIssueRepos.run();
+    for (const repo of repos) insertIssueRepo.run(repo);
+  });
+  // Keyed by the lower-case name: GitHub ignores the case of a repo's name, so "My-Org/Repo" is the same repo.
+  const upsertIssues = db.prepare(
+    "INSERT INTO issue_snapshot (repo, data_json, fetched_at) VALUES (?, ?, ?) ON CONFLICT (repo) DO UPDATE SET data_json = excluded.data_json, fetched_at = excluded.fetched_at",
+  );
+  const selectIssues = db.prepare<[string], { data_json: string; fetched_at: string }>("SELECT data_json, fetched_at FROM issue_snapshot WHERE repo = ?");
   // Both sides come from Date.toISOString, so comparing the strings compares the instants.
   const upsertSeen = db.prepare(
     "INSERT INTO pr_seen (repo, number, seen_at) VALUES (?, ?, ?) ON CONFLICT (repo, number) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at)",
@@ -152,6 +186,19 @@ export function openStore(path: string): SnapshotStore {
     },
     loadRecentlyClosed() {
       return selectClosed.all().map((row) => JSON.parse(row.data_json) as ClosedPullRequest);
+    },
+    saveIssueRepos(repos) {
+      saveIssues(repos);
+    },
+    loadIssueRepos() {
+      return selectIssueRepos.all().map((row) => row.repo);
+    },
+    saveIssues(snapshot, fetchedAt) {
+      upsertIssues.run(repoKey(snapshot.repo), JSON.stringify(snapshot), fetchedAt.toISOString());
+    },
+    loadIssues(repo) {
+      const row = selectIssues.get(repoKey(repo));
+      return row ? { ...(JSON.parse(row.data_json) as IssueSnapshot), fetchedAt: row.fetched_at } : null;
     },
     markSeen(repo, number, seenAt) {
       upsertSeen.run(repo, number, seenAt.toISOString());

@@ -124,6 +124,44 @@ describe("parseConfig notifications", () => {
   });
 });
 
+describe("parseConfig issues", () => {
+  it("has no stage labels by default", () => {
+    expect(parseConfig(minimal).issues).toEqual({ columns: [], repos: {} });
+  });
+
+  it("reads the common stage labels and a repo's own list", () => {
+    const config = parseConfig(`${minimal}issues:
+  columns: [needs-triage, in-progress]
+  repos:
+    my-org/repo-b:
+      columns: [todo, doing]
+`);
+
+    expect(config.issues).toEqual({ columns: ["needs-triage", "in-progress"], repos: { "my-org/repo-b": { columns: ["todo", "doing"] } } });
+  });
+
+  it("names a misspelled key in the issues section", () => {
+    expect(() => parseConfig(`issues: { colums: [todo] }\n${minimal}`)).toThrow(/colums/);
+  });
+
+  it("names a misspelled key in a repo's list", () => {
+    expect(() => parseConfig(`issues: { repos: { my-org/repo-b: { column: [todo] } } }\n${minimal}`)).toThrow(/issues\.repos\.my-org\/repo-b/);
+  });
+
+  it("names the field when a repo of the issues section is not owner/name", () => {
+    expect(() => parseConfig(`issues: { repos: { repo-b: { columns: [todo] } } }\n${minimal}`)).toThrow(/issues\.repos/);
+  });
+
+  it("refuses a stage label twice in a list, whatever its case, and names the second", () => {
+    const result = validateSettings({ issues: { columns: ["todo", "doing", "Todo"], repos: { "my-org/repo-b": { columns: ["a", "b", "a"] } } } });
+
+    expect(!result.ok && result.issues).toEqual([
+      { path: "issues.columns[2]", message: 'the stage "Todo" is in the list already' },
+      { path: "issues.repos.my-org/repo-b.columns[2]", message: 'the stage "a" is in the list already' },
+    ]);
+  });
+});
+
 describe("settingsForm", () => {
   it("shows what the file says, with the defaults for what it leaves out", () => {
     const form = settingsForm("github:\n  poll_interval: 90s\nrepos: [my-org/repo-a]\n");
@@ -135,6 +173,7 @@ describe("settingsForm", () => {
       review: { required_approvals: 1, recently_closed_window: "24h" },
       jira: { base_url: null, project_keys: [] },
       notifications: { ...ALL_ENABLED.enabled, quiet_hours: null },
+      issues: { columns: [], repos: {} },
     });
   });
 
@@ -216,6 +255,40 @@ team: [colleague1]
 
   it("leaves the file as it is when nothing changed", () => {
     expect(applySettings(commented, settingsForm(commented))).toBe(commented);
+  });
+
+  it("adds a repo's own list of stages", () => {
+    const text = applySettings(commented, { ...settingsForm(commented), issues: { columns: ["todo"], repos: { "my-org/repo-b": { columns: ["doing", "done"] } } } });
+
+    expect(text).toContain("# my dashboard");
+    expect(parseConfig(text).issues).toEqual({ columns: ["todo"], repos: { "my-org/repo-b": { columns: ["doing", "done"] } } });
+  });
+
+  it("deletes the list of a repo the form no longer has, and keeps the others with their comments", () => {
+    const text = `${commented}issues:
+  columns: [todo, doing]
+  repos:
+    my-org/repo-a:     # the main one works its own way
+      columns: [triage, review]
+    my-org/repo-b:
+      columns: [next]
+`;
+    const form = settingsForm(text);
+
+    const next = applySettings(text, { ...form, issues: { ...form.issues, repos: { "my-org/repo-a": form.issues.repos["my-org/repo-a"]! } } });
+
+    expect(next).not.toContain("repo-b");
+    // The yaml library puts a comment on the key's line on a line of its own; it is kept all the same.
+    expect(next).toMatch(/my-org\/repo-a:\s+# the main one works its own way/);
+    expect(parseConfig(next).issues).toEqual({ columns: ["todo", "doing"], repos: { "my-org/repo-a": { columns: ["triage", "review"] } } });
+  });
+
+  it("leaves no empty map behind when the last repo's own list goes", () => {
+    const text = "issues:\n  columns: [todo]\n  repos:\n    my-org/repo-b:\n      columns: [next]\n";
+
+    const next = applySettings(text, { ...settingsForm(text), issues: { columns: ["todo"], repos: {} } });
+
+    expect(next).toBe("issues:\n  columns: [ todo ]\n");
   });
 
   it("writes into an empty file", () => {

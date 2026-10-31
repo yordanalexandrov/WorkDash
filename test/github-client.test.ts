@@ -29,7 +29,7 @@ function answerDetails(query: string, variables: Record<string, string>, prsByRe
 }
 
 /** A stand-in for api.github.com that answers each aliased repository from `prsByRepo`. */
-function fakeGitHub(prsByRepo: Record<string, unknown[]>, options: { truncated?: string[] } = {}) {
+function fakeGitHub(prsByRepo: Record<string, unknown[]>, options: { truncated?: string[]; issuesOff?: string[] } = {}) {
   const calls: Call[] = [];
   const fetch = async (url: string | URL | Request, init?: RequestInit) => {
     const { query, variables } = JSON.parse(String(init?.body));
@@ -41,6 +41,7 @@ function fakeGitHub(prsByRepo: Record<string, unknown[]>, options: { truncated?:
       const repo = `${variables[`owner${index}`]}/${variables[`name${index}`]}`;
       data[alias!] = {
         nameWithOwner: repo,
+        hasIssuesEnabled: !options.issuesOff?.includes(repo),
         pullRequests: {
           nodes: prsByRepo[repo] ?? [],
           pageInfo: { hasNextPage: options.truncated?.includes(repo) ?? false },
@@ -419,6 +420,15 @@ describe("fetchSnapshot", () => {
     expect(snapshot.pullRequests.map((pr) => `${pr.repo}#${pr.number}`)).toEqual(["my-org/repo-a#1"]);
     expect(snapshot.problems).toEqual(["Could not resolve to a Repository with the name 'my-org/nope'."]);
     expect(snapshot.unreadRepos).toEqual(["my-org/nope"]);
+  });
+
+  it("names the repos whose issues are on in GitHub, in the order of the repos", async () => {
+    const github = fakeGitHub({}, { issuesOff: ["my-org/repo-b"] });
+
+    const snapshot = await fetchSnapshot({ repos: ["my-org/repo-c", "my-org/repo-b", "my-org/repo-a"], token: "t", fetch: github.fetch });
+
+    expect(github.calls[0]?.query).toContain("hasIssuesEnabled");
+    expect(snapshot.issueRepos).toEqual(["my-org/repo-c", "my-org/repo-a"]);
   });
 
   it("reports a repo whose open PRs do not fit in one page", async () => {

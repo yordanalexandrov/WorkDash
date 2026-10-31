@@ -50,6 +50,7 @@ type CommentNode = {
 
 type RepositoryNode = {
   nameWithOwner: string;
+  hasIssuesEnabled: boolean;
   pullRequests: { nodes: PullRequestNode[]; pageInfo: { hasNextPage: boolean } };
 } | null;
 
@@ -106,9 +107,11 @@ export type FetchedSnapshot = Snapshot & {
   problems: string[];
   /** Repos GitHub returned nothing for; their PRs are missing from the snapshot. */
   unreadRepos: string[];
+  /** The repos read whose issues are on in GitHub, in the order of the repos asked for; only they get an Issue dashboard tab. */
+  issueRepos: string[];
 };
 
-async function postGraphQL<T>(
+export async function postGraphQL<T>(
   body: { query: string; variables: Record<string, string> },
   token: string,
   fetch: typeof globalThis.fetch,
@@ -187,6 +190,7 @@ export async function fetchSnapshot(options: {
       return { ...pr, comments: fetched.comments, commits: old ? firstSeen(fetched.commits, old.commits, observedAt) : fetched.commits };
     }),
     unreadRepos: repos.filter((_, i) => !repositories[i]),
+    issueRepos: repositories.flatMap((repository) => (repository?.hasIssuesEnabled ? [repository.nameWithOwner] : [])),
     problems: [
       ...errors.map((e) => e.message),
       ...truncated.map(

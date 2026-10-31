@@ -5,9 +5,10 @@ import { type Legacy, openDataDir } from "./data-dir.js";
 import { openStore } from "./db.js";
 import { groupIntoSections, waitingOnMe } from "./domain/classify.js";
 import type { Missing } from "./domain/settings.js";
+import { createIssuePoller } from "./issue-poller.js";
 import { createNotifier } from "./notifier.js";
 import { type PollerSettings, startPoller } from "./poller.js";
-import { buildServer, type DashboardSource, dashboardState } from "./server.js";
+import { buildServer, type DashboardSource, dashboardState, type IssueSource, issueBoardState } from "./server.js";
 import { createSettings } from "./settings.js";
 import { createEventHub } from "./sse.js";
 import type { TokenStore } from "./token-store.js";
@@ -49,7 +50,7 @@ export type WorkDash = {
    * happened meanwhile comes as one missed summary. It is off on every start.
    */
   setPaused(paused: boolean): void;
-  /** Stops the config watcher, the poller and the server, then closes the database. */
+  /** Stops the config watcher, the pollers and the server, then closes the database. */
   close(): Promise<void>;
 };
 
@@ -132,6 +133,28 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     if (events.clientCount() > 0) events.broadcast("dashboard", dashboardState(dashboard));
   };
 
+  // The Issue dashboard: the issues of a repo, polled when a page opens it, apart from the PRs.
+  const issues: IssueSource = {
+    repos: () => config.repos,
+    config: () => config.issues,
+    recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
+    // The issue poller logs to the server's log, so it is made after the server; nothing asks for it before.
+    get poller() {
+      return issuePoller;
+    },
+  };
+  /** Pushes a repo's issues as they are now to every open browser; the pages on that repo take them. */
+  const publishIssues = (repo: string) => {
+    if (events.clientCount() > 0) events.broadcast("issues", issueBoardState(store, issues, repo));
+  };
+  /** After a config change: the stages may have changed, so every followed repo with issues saved is pushed again. */
+  const publishAllIssues = () => {
+    for (const repo of config.repos) {
+      const saved = store.loadIssues(repo);
+      if (saved) publishIssues(saved.repo);
+    }
+  };
+
   // Desktop notifications: what changed between two polls, pushed to the open browsers by the rules in `notifications`.
   const notifier = createNotifier({
     store,
@@ -164,8 +187,17 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     onSeen: refreshWaiting,
     settings,
     timeZone,
+    issues,
     webRoot: options.webRoot,
     logger: options.logger,
+  });
+  const issuePoller = createIssuePoller({
+    store,
+    token: () => token,
+    intervalMs: () => config.github.pollIntervalMs,
+    log: server.log,
+    onChange: publishIssues,
+    recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
   });
   const poller = startPoller({
     ...pollerSettings(config, token),
@@ -183,7 +215,10 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
       config = next;
       poller.reconfigure(pollerSettings(config, token));
     },
-    onChange: publishDashboard,
+    onChange() {
+      publishDashboard();
+      publishAllIssues();
+    },
     log: server.log,
   });
 
@@ -192,6 +227,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     configWatcher.close();
     clearInterval(missedTimer);
     poller.stop();
+    issuePoller.stop();
     await server.close();
     store.close();
   };
