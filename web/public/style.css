@@ -16,6 +16,9 @@
   --merged: #7b61e8;
   --line: rgba(20, 30, 60, 0.12);
   --chip: rgba(255, 255, 255, 0.75);
+  /* A chip that is on. */
+  --chip-on: #1a1f2b;
+  --chip-on-text: #fff;
   /* Text on a solid status colour. */
   --on-status: #fff;
   --on-pending: #1d2125;
@@ -48,6 +51,8 @@
     --merged: #a690ff;
     --line: rgba(200, 215, 255, 0.11);
     --chip: rgba(30, 36, 48, 0.8);
+    --chip-on: #e2e7f0;
+    --chip-on-text: #0f1218;
     --on-status: #fff;
     --on-pending: #1d2125;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(200, 215, 255, 0.05);
@@ -220,6 +225,133 @@ h1 .live.ok::after {
 
 .chip:hover {
   border-color: var(--faint);
+}
+
+/* Toolbar: the text filter, the repo chips (their dots are the colour legend) and "само моите"; wraps when the repos are many. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.toolbar .sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.toolbar .chip {
+  transition:
+    transform var(--bounce-ms, 0.3s) var(--bounce, ease-out),
+    background-color 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.toolbar .chip:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.toolbar .chip:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.chip.on {
+  border-color: var(--chip-on);
+  color: var(--chip-on-text);
+  background: var(--chip-on);
+}
+
+.chip:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--rh) 70% var(--stripe-l));
+}
+
+.chip .n {
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter input {
+  width: 250px;
+  max-width: calc(100vw - 32px);
+  padding: 4px 30px 4px 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  outline: none;
+  color: var(--text);
+  background: var(--chip);
+  font: inherit;
+  font-size: 12.5px;
+  transition:
+    width var(--bounce-ms, 0.35s) var(--bounce, ease-out),
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+
+.filter input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.filter input:focus,
+.filter.has input {
+  width: 330px;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 22%, transparent);
+}
+
+.filter .mag {
+  position: absolute;
+  left: 10px;
+  color: var(--faint);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.filter kbd {
+  position: absolute;
+  right: 9px;
+  pointer-events: none;
+}
+
+kbd {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--faint);
+  background: var(--chip);
+  font: 10.5px ui-monospace, monospace;
+}
+
+.shown {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  animation: drop var(--bounce-ms, 0.35s) var(--bounce, ease-out) both;
+}
+
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 #notifications.off {

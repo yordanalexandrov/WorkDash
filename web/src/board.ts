@@ -20,8 +20,8 @@ const ACCENT: Record<ColumnId, string> = {
   closed: "var(--merged)",
 };
 
-/** The board's columns: the sections in workflow order, then the recently closed PRs. */
-export function boardColumns(state: DashboardState): BoardColumn[] {
+/** The board's columns: the sections in workflow order, then the recently closed PRs; counts are of what is given, so of what the filter kept. */
+export function boardColumns(state: Pick<DashboardState, "sections" | "recentlyClosed">): BoardColumn[] {
   return [
     ...state.sections.map(({ section, pullRequests }): BoardColumn => ({
       id: section,
