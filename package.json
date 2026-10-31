@@ -13,7 +13,11 @@
     "watch:web": "npm run build:web -- --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prototype": "esbuild web/prototype/main.tsx --bundle --format=esm --target=es2022 --loader:.css=text --tsconfig=web/prototype/tsconfig.json --outdir=web/prototype/out --servedir=web/prototype --serve=5180 --watch=forever",
+    "prototype:build": "esbuild web/prototype/main.tsx --bundle --format=esm --target=es2022 --loader:.css=text --tsconfig=web/prototype/tsconfig.json --outdir=web/prototype/out",
+    "prototype:typecheck": "tsc --noEmit -p web/prototype",
+    "prototype:snapshot": "curl -fsS http://localhost:${WORKDASH_PORT:-3000}/api/prs -o web/prototype/snapshot.json"
   },
   "dependencies": {
     "@fastify/static": "^10.1.8",

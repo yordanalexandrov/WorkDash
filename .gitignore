@@ -7,3 +7,7 @@ data/
 config.yaml
 *.iml
 web/dist/
+
+# PROTOTYPE: the snapshot holds real work data, never commit it
+web/prototype/snapshot.json
+web/prototype/out/
