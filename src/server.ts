@@ -63,6 +63,8 @@ export type IssueSource = {
   repos: () => string[];
   /** The stage labels in effect. */
   config: () => IssuesConfig;
+  /** How far back closed issues still show (`recently_closed_window`). */
+  recentlyClosedWindowMs: () => number;
   poller: Pick<IssuePoller, "demand" | "polling" | "error">;
 };
 
@@ -70,11 +72,15 @@ export type IssueSource = {
 const NO_ISSUES: IssueSource = {
   repos: () => [],
   config: () => ({ columns: [], repos: {} }),
-  poller: { demand: () => "skip", polling: () => false, error: () => null },
+  recentlyClosedWindowMs: () => 0,
+  poller: { demand: () => ({ answer: "skip", dueAt: new Date(Date.now() + 3_600_000).toISOString() }), polling: () => false, error: () => null },
 };
 
-/** What GET /api/issues returns and the `issues` event carries for `repo`: its saved issues, each in its stage, and how its poll goes. */
-export function issueBoardState(store: SnapshotStore, source: IssueSource, repo: string): IssueBoardState {
+/**
+ * What GET /api/issues returns and the `issues` event carries for `repo`: its saved issues, each in its stage, those closed
+ * within the window as it is now, and how its poll goes.
+ */
+export function issueBoardState(store: SnapshotStore, source: IssueSource, repo: string, now = new Date()): IssueBoardState {
   const snapshot = store.loadIssues(repo);
   const stages = stagesFor(source.config(), repo);
   return {
@@ -83,6 +89,7 @@ export function issueBoardState(store: SnapshotStore, source: IssueSource, repo:
     stages,
     issues: (snapshot?.issues ?? []).map((issue) => ({ ...issue, stage: stageOf(issue, stages) })),
     totalCount: snapshot?.totalCount ?? 0,
+    closed: withinWindow(snapshot?.closed ?? [], now, source.recentlyClosedWindowMs()),
     polling: source.poller.polling(repo),
     error: source.poller.error(repo),
   };
@@ -264,7 +271,7 @@ function registerIssues(server: FastifyInstance, store: SnapshotStore, source: I
     const parsed = IssuePollRequest.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
     if (!follows(source, parsed.data.repo)) return reply.code(404).send({ error: "not a followed repo" });
-    return { answer: source.poller.demand(parsed.data.repo, parsed.data.reason) };
+    return source.poller.demand(parsed.data.repo, parsed.data.reason);
   });
 }
 

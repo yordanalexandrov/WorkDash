@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { DashboardState } from "../src/api.js";
-import { age, configErrorText, errorText, intervalText, pollButton, statusText } from "../src/format.js";
+import type { DashboardState, IssueBoardState } from "../src/api.js";
+import { age, configErrorText, errorText, intervalText, issueErrorText, issueStatusText, pollButton, statusText } from "../src/format.js";
 
 const now = new Date("2026-10-30T12:00:00Z");
 
@@ -20,6 +20,10 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     recentlyClosed: [],
     ...overrides,
   };
+}
+
+function issueBoard(overrides: Partial<IssueBoardState> = {}): IssueBoardState {
+  return { repo: "my-org/repo-a", fetchedAt: "2026-10-30T11:35:00Z", stages: [], issues: [], closed: [], totalCount: 0, polling: false, error: null, ...overrides };
 }
 
 describe("statusText", () => {
@@ -49,6 +53,26 @@ describe("statusText", () => {
       expect(at("2026-10-30T11:00:00Z")).toEqual({ text: "me · последен poll преди 1 ч", stale: true });
       expect(at("2026-10-28T09:00:00Z")).toEqual({ text: "me · последен poll преди 2 д", stale: true });
     });
+  });
+});
+
+describe("issueStatusText", () => {
+  it("says it is loading before the server has answered for the open repo", () => {
+    expect(issueStatusText(null, now)).toEqual({ text: "Зареждане…", stale: false });
+  });
+
+  it("says it waits for the first poll while nothing is saved for the repo", () => {
+    expect(issueStatusText(issueBoard({ fetchedAt: null }), now)).toEqual({ text: "Чака първия poll…", stale: false });
+  });
+
+  it("names the open repo and says how old its snapshot is, in either mode", () => {
+    expect(issueStatusText(issueBoard({ fetchedAt: "2026-10-30T11:59:30Z" }), now)).toEqual({ text: "repo-a · последен poll току-що", stale: false });
+    expect(issueStatusText(issueBoard({ fetchedAt: "2026-10-30T11:35:00Z" }), now)).toEqual({ text: "repo-a · последен poll преди 25 мин", stale: false });
+  });
+
+  it("marks the snapshot stale once it is an hour old", () => {
+    expect(issueStatusText(issueBoard({ fetchedAt: "2026-10-30T11:00:01Z" }), now)).toEqual({ text: "repo-a · последен poll преди 59 мин", stale: false });
+    expect(issueStatusText(issueBoard({ fetchedAt: "2026-10-30T11:00:00Z" }), now)).toEqual({ text: "repo-a · последен poll преди 1 ч", stale: true });
   });
 });
 
@@ -161,5 +185,33 @@ describe("configErrorText", () => {
     expect(configErrorText(dashboard({ configError: "config.yaml: invalid YAML: bad indentation" }))).toBe(
       "config.yaml не е приложен, в сила е последната валидна конфигурация. config.yaml: invalid YAML: bad indentation",
     );
+  });
+});
+
+describe("issueErrorText", () => {
+  it("is null while the open repo's last poll succeeded", () => {
+    expect(issueErrorText(issueBoard(), "periodic", "open")).toBeNull();
+    expect(issueErrorText(null, "periodic", "open")).toBeNull();
+  });
+
+  it("says why the open repo's last poll failed, with issues saved or not", () => {
+    const error = { kind: "unreachable", message: "fetch failed", resetAt: null } as const;
+
+    expect(issueErrorText(issueBoard({ error }), "periodic", "open")).toBe("GitHub е недостъпен: fetch failed");
+    expect(issueErrorText(issueBoard({ error, fetchedAt: null }), "periodic", "open")).toBe("GitHub е недостъпен: fetch failed");
+  });
+
+  it("says when \"Обнови\" works again in On-demand while a rate limit lasts", () => {
+    const error = { kind: "rate_limit", message: "API rate limit exceeded", resetAt: "2026-10-30T12:20:00Z" } as const;
+
+    expect(issueErrorText(issueBoard({ error }), "on_demand", "open")).toBe(
+      `Изчерпан rate limit на GitHub, „Обнови“ работи пак от ${new Date("2026-10-30T12:20:00Z").toLocaleTimeString()}`,
+    );
+  });
+
+  it("reports a lost server ahead of a poll failure", () => {
+    const error = { kind: "auth", message: "401", resetAt: null } as const;
+
+    expect(issueErrorText(issueBoard({ error }), "periodic", "reconnecting")).toBe("Няма връзка със сървъра, свързване отново…");
   });
 });
