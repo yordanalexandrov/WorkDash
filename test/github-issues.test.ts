@@ -34,8 +34,8 @@ function issueNode(number: number, overrides: Record<string, unknown> = {}) {
   };
 }
 
-function repository(nodes: unknown[], totalCount = nodes.length) {
-  return { data: { repository: { nameWithOwner: "my-org/repo-a", issues: { totalCount, nodes } } } };
+function repository(nodes: unknown[], totalCount = nodes.length, closed: unknown[] = []) {
+  return { data: { repository: { nameWithOwner: "my-org/repo-a", issues: { totalCount, nodes }, closed: { nodes: closed } } } };
 }
 
 type CommentNode = { id: string; author: { __typename: string; login: string } | null; createdAt: string; body: string };
@@ -62,16 +62,57 @@ function fakeGitHubWithComments(nodes: unknown[], comments: Record<number, Comme
   return { fetch, commentQueries };
 }
 
+const closedNode = (number: number, closedAt: string, stateReason: string | null) => issueNode(number, { closedAt, stateReason });
+
+/** Since when closed issues count as recently closed in these tests. */
+const SINCE = new Date("2026-10-30T12:00:00Z");
+
 describe("fetchIssues", () => {
   it("asks for the open issues of the one repo, most recently updated first", async () => {
     const github = fakeGitHub(() => repository([]));
 
-    await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(github.calls).toHaveLength(1);
     expect(github.calls[0]!.query).toMatch(/^query RepositoryIssues/);
     expect(github.calls[0]!.query).toMatch(/issues\(states: OPEN, first: 100, orderBy: \{ field: UPDATED_AT, direction: DESC \}\)/);
-    expect(github.calls[0]!.variables).toEqual({ owner: "my-org", name: "repo-a" });
+    expect(github.calls[0]!.variables).toEqual({ owner: "my-org", name: "repo-a", since: "2026-10-30T12:00:00.000Z" });
+  });
+
+  it("asks for the closed issues updated since the window began, so it gets those closed in it", async () => {
+    const github = fakeGitHub(() => repository([]));
+
+    await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(github.calls[0]!.query).toMatch(/closed: issues\(states: CLOSED, first: 100, orderBy: \{ field: UPDATED_AT, direction: DESC \}, filterBy: \{ since: \$since \}\)/);
+  });
+
+  it("keeps the closed issues closed in the window, newest first, with how they were closed", async () => {
+    const github = fakeGitHub(() =>
+      repository([], 0, [
+        closedNode(4, "2026-10-30T13:00:00Z", "NOT_PLANNED"),
+        // Updated in the window, but closed before it: a comment on an old issue.
+        closedNode(5, "2026-10-20T09:00:00Z", "COMPLETED"),
+        closedNode(6, "2026-10-31T08:00:00Z", "COMPLETED"),
+      ]),
+    );
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(snapshot.closed).toEqual([
+      { ...issue({ number: 6 }), closedAt: "2026-10-31T08:00:00Z", closedAs: "completed" },
+      { ...issue({ number: 4 }), closedAt: "2026-10-30T13:00:00Z", closedAs: "not_planned" },
+    ]);
+  });
+
+  it("counts a duplicate as not planned, and a close without a reason as completed, as GitHub shows it", async () => {
+    const github = fakeGitHub(() =>
+      repository([], 0, [closedNode(1, "2026-10-31T08:00:00Z", "DUPLICATE"), closedNode(2, "2026-10-31T07:00:00Z", null)]),
+    );
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(snapshot.closed.map((closed) => closed.closedAs)).toEqual(["not_planned", "completed"]);
   });
 
   it("reads each issue with its labels and their colours, assignees, author and comment count", async () => {
@@ -83,11 +124,12 @@ describe("fetchIssues", () => {
       }),
     ]);
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot).toEqual({
       repo: "my-org/repo-a",
       totalCount: 1,
+      closed: [],
       issues: [
         issue({
           number: 7,
@@ -107,7 +149,7 @@ describe("fetchIssues", () => {
       repository([issueNode(1, { milestone: { title: "v2.0", dueOn: "2026-11-30T00:00:00Z" } }), issueNode(2, { milestone: { title: "Someday", dueOn: null } }), issueNode(3)]),
     );
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.issues.map((i) => i.milestone)).toEqual([{ title: "v2.0", dueOn: "2026-11-30T00:00:00Z" }, { title: "Someday", dueOn: null }, null]);
   });
@@ -124,7 +166,7 @@ describe("fetchIssues", () => {
       repository([issueNode(1, { closedByPullRequestsReferences: { nodes: [pr(10, "OPEN"), pr(11, "OPEN", true), pr(12, "MERGED"), pr(13, "CLOSED"), pr(4, "OPEN", false, "my-org/repo-b")] } })]),
     );
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.issues[0]!.linkedPullRequests).toEqual([
       { repo: "my-org/repo-a", number: 10, url: "https://github.com/my-org/repo-a/pull/10", status: "open" },
@@ -138,7 +180,7 @@ describe("fetchIssues", () => {
   it("says how many are open in all when there are more than one page", async () => {
     const github = fakeGitHub(() => repository([issueNode(1)], 240));
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.totalCount).toBe(240);
   });
@@ -146,7 +188,7 @@ describe("fetchIssues", () => {
   it("names a deleted author ghost", async () => {
     const github = fakeGitHub(() => repository([issueNode(1, { author: null })]));
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.issues[0]!.author).toBe("ghost");
   });
@@ -154,19 +196,19 @@ describe("fetchIssues", () => {
   it("fails when GitHub returns no repository, so nothing is saved", async () => {
     const github = fakeGitHub(() => ({ data: { repository: null }, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a Repository" }] }));
 
-    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch })).rejects.toThrow(/Could not resolve/);
+    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch })).rejects.toThrow(/Could not resolve/);
   });
 
   it("fails with the error types of a rate limit, for classifyPollError", async () => {
     const github = fakeGitHub(() => ({ errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] }));
 
-    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch })).rejects.toMatchObject({ errorTypes: ["RATE_LIMITED"] });
+    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch })).rejects.toMatchObject({ errorTypes: ["RATE_LIMITED"] });
   });
 
   it("reads the description, and no closing date for an open issue", async () => {
     const github = fakeGitHub(() => repository([issueNode(1, { body: "Steps to reproduce" })]));
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.issues[0]).toMatchObject({ body: "Steps to reproduce", closedAt: null });
   });
@@ -180,7 +222,7 @@ describe("fetchIssues", () => {
       ],
     });
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.issues[0]!.latestComments).toEqual([
       { id: "c1", author: "ghost", createdAt: "2026-10-29T12:00:00Z", body: "comment c1" },
@@ -199,7 +241,7 @@ describe("fetchIssues", () => {
       { 2: [commentNode("c2", "2026-10-30T09:00:00Z")], 3: [commentNode("c3", "2026-10-30T09:30:00Z")] },
     );
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch, previous });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch, previous });
 
     expect(github.commentQueries).toEqual([[2, 3]]);
     expect(snapshot.issues.map((i) => i.latestComments.map((c) => c.id))).toEqual([["old"], ["c2"], ["c3"]]);
@@ -208,7 +250,7 @@ describe("fetchIssues", () => {
   it("asks nothing more when no issue changed or the changed ones have no comments", async () => {
     const github = fakeGitHubWithComments([issueNode(1), issueNode(2, { updatedAt: "2026-10-31T10:00:00Z" })]);
 
-    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", fetch: github.fetch, previous: [issue({ number: 1 })] });
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch, previous: [issue({ number: 1 })] });
 
     expect(github.commentQueries).toEqual([]);
     expect(snapshot.issues.map((i) => i.latestComments)).toEqual([[], []]);
@@ -222,6 +264,6 @@ describe("fetchIssues", () => {
       return github.fetch(url, init);
     };
 
-    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", fetch })).rejects.toThrow(/no comments for my-org\/repo-a#1/);
+    await expect(fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch })).rejects.toThrow(/no comments for my-org\/repo-a#1/);
   });
 });

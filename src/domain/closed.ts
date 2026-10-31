@@ -8,8 +8,8 @@ export function vanishedPullRequests(previous: PullRequest[], current: PullReque
   return previous.filter((pr) => !open.has(key(pr)) && !unreadRepos.includes(pr.repo));
 }
 
-/** The closed PRs still worth showing: closed within the last `windowMs`. */
-export function withinWindow(closed: ClosedPullRequest[], now: Date, windowMs: number): ClosedPullRequest[] {
+/** The closed PRs (or issues) still worth showing: closed within the last `windowMs`. */
+export function withinWindow<T extends { closedAt: string }>(closed: T[], now: Date, windowMs: number): T[] {
   const since = now.getTime() - windowMs;
   return closed.filter((pr) => new Date(pr.closedAt).getTime() >= since);
 }

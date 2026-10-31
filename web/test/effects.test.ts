@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ClosedPullRequest } from "../src/api.js";
-import { confettiPiece, newlyMerged, SPARKS, sparkPiece } from "../src/effects.js";
+import { closedIssue } from "../../test/fixtures.js";
+import type { ClosedIssue, ClosedPullRequest, IssueBoardState } from "../src/api.js";
+import { confettiPiece, newlyCompleted, newlyMerged, SPARKS, sparkPiece } from "../src/effects.js";
 
 const closed = (number: number, state: ClosedPullRequest["state"] = "MERGED"): ClosedPullRequest => ({
   repo: "my-org/repo-a",
@@ -27,6 +28,40 @@ describe("newlyMerged", () => {
 
   it("gives nothing for the first snapshot, which has none before it", () => {
     expect(newlyMerged(null, [closed(1), closed(2)])).toEqual([]);
+  });
+});
+
+describe("newlyCompleted", () => {
+  /** What the Issue dashboard got for a repo: its closed issues, as fetched at `fetchedAt` (null when nothing is saved yet). */
+  const board = (closed: ClosedIssue[], options: { repo?: string; fetchedAt?: string | null } = {}): Pick<IssueBoardState, "repo" | "fetchedAt" | "closed"> => ({
+    repo: options.repo ?? "my-org/repo-a",
+    fetchedAt: options.fetchedAt === undefined ? "2026-10-31T08:00:00Z" : options.fetchedAt,
+    closed,
+  });
+
+  it("gives the key of an issue that came into the closed ones as completed between two answers for the repo", () => {
+    expect(newlyCompleted(board([closedIssue({ number: 1 })]), board([closedIssue({ number: 2 }), closedIssue({ number: 1 })]))).toEqual(["my-org/repo-a#2"]);
+  });
+
+  it("leaves out an issue closed as not planned, and one already among the closed ones", () => {
+    const before = board([closedIssue({ number: 1 })]);
+    const after = board([closedIssue({ number: 2, closedAs: "not_planned" }), closedIssue({ number: 1 })]);
+
+    expect(newlyCompleted(before, after)).toEqual([]);
+  });
+
+  it("gives nothing on first load: no answer before, or one with nothing saved yet", () => {
+    const after = board([closedIssue({ number: 1 })]);
+
+    expect(newlyCompleted(null, after)).toEqual([]);
+    expect(newlyCompleted(board([], { fetchedAt: null }), after)).toEqual([]);
+  });
+
+  it("gives nothing when the answer before was for another repo, as when a tab is opened", () => {
+    const before = board([], { repo: "my-org/repo-b" });
+    const after = board([closedIssue({ number: 1 })]);
+
+    expect(newlyCompleted(before, after)).toEqual([]);
   });
 });
 

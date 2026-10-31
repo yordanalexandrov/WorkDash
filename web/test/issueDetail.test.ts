@@ -27,6 +27,7 @@ describe("findIssue", () => {
       { ...issue({ number: 7 }), stage: "in-progress" },
     ],
     totalCount: 2,
+    closed: [],
     polling: false,
     error: null,
   };

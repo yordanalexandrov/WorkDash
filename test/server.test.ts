@@ -10,7 +10,7 @@ import { settingsForm } from "../src/config.js";
 import { createEventHub, type EventHub } from "../src/sse.js";
 import type { IssueDemand } from "../src/domain/issue-poll.js";
 import type { IssuesConfig } from "../src/domain/issues.js";
-import { issue, pullRequest } from "./fixtures.js";
+import { closedIssue, issue, pullRequest } from "./fixtures.js";
 
 const rules: ClassifyRules = { team: ["colleague1"], requiredApprovals: 1 };
 
@@ -601,7 +601,7 @@ describe("the issues API", () => {
     return {
       demands,
       poller: {
-        demand: (repo: string, demand: IssueDemand) => (demands.push({ repo, demand }), answer),
+        demand: (repo: string, demand: IssueDemand) => (demands.push({ repo, demand }), { answer, dueAt: "2026-10-31T12:05:00.000Z" }),
         polling: (repo: string) => repo === "my-org/repo-b",
         error: () => null,
       },
@@ -617,6 +617,7 @@ describe("the issues API", () => {
       issues: {
         repos: () => ["my-org/repo-a", "my-org/repo-b"],
         config: () => config,
+        recentlyClosedWindowMs: () => DAY,
         poller: options.poller ?? fakeIssuePoller().poller,
       },
     });
@@ -627,7 +628,7 @@ describe("the issues API", () => {
 
   it("serves a repo's saved issues with when they were fetched, each in its stage, and the stages in order", async () => {
     const { server, store } = serverWith();
-    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(1, "bug"), labelled(2, "in-progress", "ready-for-agent")], totalCount: 120 }, new Date("2026-10-30T10:00:00Z"));
+    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(1, "bug"), labelled(2, "in-progress", "ready-for-agent")], totalCount: 120, closed: [] }, new Date("2026-10-30T10:00:00Z"));
 
     const response = await server.inject("/api/issues?repo=my-org/repo-a");
 
@@ -641,6 +642,7 @@ describe("the issues API", () => {
         { ...labelled(2, "in-progress", "ready-for-agent"), stage: "in-progress" },
       ],
       totalCount: 120,
+      closed: [],
       polling: false,
       error: null,
     });
@@ -651,12 +653,12 @@ describe("the issues API", () => {
 
     const body = (await server.inject("/api/issues?repo=my-org/repo-b")).json();
 
-    expect(body).toEqual({ repo: "my-org/repo-b", fetchedAt: null, stages: ["todo"], issues: [], totalCount: 0, polling: true, error: null });
+    expect(body).toEqual({ repo: "my-org/repo-b", fetchedAt: null, stages: ["todo"], issues: [], totalCount: 0, closed: [], polling: true, error: null });
   });
 
   it("serves the stages in effect now, so a reloaded config.yaml reorders the board", async () => {
     const { server, store, reconfigure } = serverWith();
-    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(2, "in-progress", "ready-for-agent")], totalCount: 1 }, new Date());
+    store.saveIssues({ repo: "my-org/repo-a", issues: [labelled(2, "in-progress", "ready-for-agent")], totalCount: 1, closed: [] }, new Date());
 
     reconfigure({ columns: ["in-progress", "ready-for-agent"], repos: {} });
     const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
@@ -665,11 +667,25 @@ describe("the issues API", () => {
     expect(body.issues[0].stage).toBe("ready-for-agent");
   });
 
+  it("serves the issues closed within recently_closed_window, whatever their labels, and not those closed before", async () => {
+    const { server, store } = serverWith();
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+    const done = closedIssue({ number: 3, labels: [{ name: "in-progress", color: "ededed" }], closedAt: hoursAgo(2) });
+    const dropped = closedIssue({ number: 4, closedAt: hoursAgo(5), closedAs: "not_planned" });
+    // Within the window when it was polled, but the window has moved on since.
+    const old = closedIssue({ number: 5, closedAt: hoursAgo(25) });
+    store.saveIssues({ repo: "my-org/repo-a", issues: [], totalCount: 0, closed: [done, dropped, old] }, new Date());
+
+    const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
+
+    expect(body.closed).toEqual([done, dropped]);
+  });
+
   it("serves each issue's milestone and Linked PRs as the poll saved them", async () => {
     const { server, store } = serverWith();
     const milestone = { title: "v2.0", dueOn: "2026-11-30T00:00:00Z" };
     const linkedPullRequests = [{ repo: "my-org/repo-a", number: 12, url: "https://github.com/my-org/repo-a/pull/12", status: "draft" as const }];
-    store.saveIssues({ repo: "my-org/repo-a", issues: [issue({ number: 3, milestone, linkedPullRequests })], totalCount: 1 }, new Date());
+    store.saveIssues({ repo: "my-org/repo-a", issues: [issue({ number: 3, milestone, linkedPullRequests })], totalCount: 1, closed: [] }, new Date());
 
     const body = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
 
@@ -684,15 +700,15 @@ describe("the issues API", () => {
     expect((await server.inject("/api/issues")).statusCode).toBe(400);
   });
 
-  it("hands a demand for a repo's issues to the issue poller and says what came of it", async () => {
+  it("hands a demand for a repo's issues to the issue poller and says what came of it and when the interval is next due", async () => {
     const { demands, poller } = fakeIssuePoller("join");
     const { server } = serverWith({ poller });
 
-    const response = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "my-org/repo-a", reason: "open" } });
+    const response = await server.inject({ method: "POST", url: "/api/issues/poll", payload: { repo: "my-org/repo-a", reason: "interval" } });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ answer: "join" });
-    expect(demands).toEqual([{ repo: "my-org/repo-a", demand: "open" }]);
+    expect(response.json()).toEqual({ answer: "join", dueAt: "2026-10-31T12:05:00.000Z" });
+    expect(demands).toEqual([{ repo: "my-org/repo-a", demand: "interval" }]);
   });
 
   it("refuses a demand with an unknown reason or for a repo not followed", async () => {
