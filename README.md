@@ -93,9 +93,13 @@ Service worker-ът, а с него и инсталирането, изискв�
 npm install
 npm test             # Vitest
 npm run typecheck
+npm run lint         # oxlint с типова информация (--type-aware); правилата са в .oxlintrc.json
 npm run build && node dist/main.js
 npm run watch:web    # пресглобява web/dist/app.js при промяна в web/src
 ```
+
+CI (`.github/workflows/ci.yml`) пуска typecheck, lint, тестовете и build на всеки PR и push в `main`
+и проверява, че Docker образът се сглобява.
 
 Frontend-ът е Preact (TSX) в `web/src`, сглобен от esbuild в `web/dist`; статичните файлове са в `web/public`.
 

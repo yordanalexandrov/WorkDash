@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "import", "vitest", "promise"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    // Types declare callbacks with method syntax and nothing reads `this`, so every hit is a false alarm.
+    "typescript/unbound-method": "off",
+    // `expect(value, message)` is how vitest names the failing case in a loop.
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    "vitest/require-mock-type-parameters": "off"
+  },
+  "overrides": [
+    {
+      // Fakes stringify what fetch was given; the tests know it is a string.
+      "files": ["test/**", "web/test/**"],
+      "rules": { "typescript/no-base-to-string": "off" }
+    }
+  ],
+  "ignorePatterns": ["dist", "web/dist", "web/prototype"]
+}

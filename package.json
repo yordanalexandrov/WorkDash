@@ -13,6 +13,7 @@
     "watch:web": "npm run build:web -- --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "lint": "oxlint --type-aware --deny-warnings",
     "test": "vitest run"
   },
   "dependencies": {
@@ -26,6 +27,8 @@
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.20.5",
     "esbuild": "^0.28.2",
+    "oxlint": "^1.90.0",
+    "oxlint-tsgolint": "^7.0.2005",
     "preact": "^10.29.8",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"

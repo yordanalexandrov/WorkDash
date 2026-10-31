@@ -17,7 +17,7 @@ function fakeGitHub() {
     const repos = Object.keys(variables)
       .filter((key) => key.startsWith("owner"))
       .map((key) => `${variables[key]}/${variables[key.replace("owner", "name")]}`);
-    const token = (init?.headers as Record<string, string>).Authorization!.replace("Bearer ", "");
+    const token = (init!.headers as Record<string, string>).Authorization!.replace("Bearer ", "");
     calls.push({ repos, token });
     await new Promise((resolve) => setTimeout(resolve, 10));
     inFlight--;

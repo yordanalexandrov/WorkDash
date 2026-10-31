@@ -217,7 +217,7 @@ describe("POST /api/seen", () => {
     await server.inject({ method: "POST", url: "/api/seen", payload: { repo: "my-org/repo-a", number: 4 } });
 
     expect(broadcasts).toEqual([{ type: "dashboard", data: (await server.inject("/api/prs")).json() }]);
-    expect((broadcasts[0]?.data as { sections: { pullRequests: unknown[] }[] }).sections[0]?.pullRequests).toEqual([]);
+    expect((broadcasts[0]!.data as { sections: { pullRequests: unknown[] }[] }).sections[0]?.pullRequests).toEqual([]);
   });
 });
 
