@@ -28,11 +28,16 @@ export function Replay({ run, onFire, held, hue, canOpen, onOpen, onClose }: Rep
   }, [held]);
   const panel = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0);
+  // The wrapper, not the panel that bounces in inside it, so its entrance does not move the feed; again whenever the bar reflows.
   useLayoutEffect(() => {
-    const place = () => setTop((panel.current?.getBoundingClientRect().bottom ?? 0) + FEED_GAP);
+    const el = panel.current;
+    if (!el) return;
+    const place = () => setTop(el.getBoundingClientRect().bottom + FEED_GAP);
     place();
-    addEventListener("resize", place);
-    return () => removeEventListener("resize", place);
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    observer.observe(document.body);
+    return () => observer.disconnect();
   }, []);
   return (
     <>

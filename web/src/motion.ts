@@ -586,7 +586,7 @@ export function flash(el: HTMLElement, color: string, kind: "card" | "row"): voi
     bit.className = kindOf;
     bit.style.setProperty("--rc", color);
     wrap.appendChild(bit);
-    void bit.animate(keyframes, { duration: spring.duration * 1.5, easing: spring.easing }).finished.then(
+    void bit.animate(keyframes, { duration: spring.duration, easing: spring.easing }).finished.then(
       () => bit.remove(),
       () => bit.remove(),
     );

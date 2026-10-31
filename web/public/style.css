@@ -512,8 +512,8 @@ h1 .live.ok::after {
   pointer-events: auto;
   animation: toast-in var(--bounce-ms, 600ms) var(--bounce, ease-out) backwards;
   transition:
-    opacity 0.5s,
-    transform 0.5s;
+    opacity var(--glide-ms) var(--glide),
+    transform var(--glide-ms) var(--glide);
 }
 
 .toast.opens {

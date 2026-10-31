@@ -42,7 +42,7 @@ export function ReplayPanel({ time, start, end, buckets, playing, speed, fired, 
       </button>
       <div class="clock" aria-live="off">
         {clockLabel(time)}
-        <small>{left > 0 ? `${left}ч до snapshot-а` : "snapshot-ът"}</small>
+        <small>{time < end ? `${left}ч до snapshot-а` : "snapshot-ът"}</small>
       </div>
       <div class="track">
         <svg viewBox={`0 0 ${width} ${HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
