@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { IssueBoardState, StagedIssue } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
 import { prKey } from "../detail.js";
-import { confetti, middleOf, newlyCompleted } from "../effects.js";
+import { confetti, middleOf, NO_WATCH, watchCompleted } from "../effects.js";
 import type { Filter } from "../filter.js";
 import { shortRepo } from "../format.js";
 import { issueColumns } from "../issueBoard.js";
@@ -151,12 +151,14 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const hue = open ? repoHue(hues, open) : 0;
   const note = shownOfTotal(shown);
 
-  // An issue completed between two answers for the open repo bursts confetti from its card once it has landed in "Затворени";
-  // not on first load, not on opening a tab (`newlyCompleted`). `confetti` holds back under reduced motion and on a hidden page.
-  const lastShown = useRef<IssueBoardState | null>(null);
+  // An issue completed between two poll answers for the open repo bursts confetti from its card once it has landed in
+  // "Затворени"; not for the saved issues, not on opening a tab (`watchCompleted`). `confetti` holds back under reduced motion
+  // and on a hidden page.
+  const watch = useRef(NO_WATCH);
   useEffect(() => {
-    const completed = shown ? newlyCompleted(lastShown.current, shown) : [];
-    lastShown.current = shown;
+    const step = watchCompleted(watch.current, shown);
+    watch.current = step.watch;
+    const { completed } = step;
     if (!completed.length) return;
     setTimeout(() => {
       for (const key of completed) burstFrom(fx.current, key);

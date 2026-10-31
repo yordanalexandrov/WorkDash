@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { closedIssue } from "../../test/fixtures.js";
 import type { ClosedIssue, ClosedPullRequest, IssueBoardState } from "../src/api.js";
-import { confettiPiece, newlyCompleted, newlyMerged, SPARKS, sparkPiece } from "../src/effects.js";
+import { confettiPiece, newlyMerged, NO_WATCH, SPARKS, sparkPiece, watchCompleted } from "../src/effects.js";
 
 const closed = (number: number, state: ClosedPullRequest["state"] = "MERGED"): ClosedPullRequest => ({
   repo: "my-org/repo-a",
@@ -31,37 +31,64 @@ describe("newlyMerged", () => {
   });
 });
 
-describe("newlyCompleted", () => {
+describe("watchCompleted", () => {
   /** What the Issue dashboard got for a repo: its closed issues, as fetched at `fetchedAt` (null when nothing is saved yet). */
   const board = (closed: ClosedIssue[], options: { repo?: string; fetchedAt?: string | null } = {}): Pick<IssueBoardState, "repo" | "fetchedAt" | "closed"> => ({
     repo: options.repo ?? "my-org/repo-a",
     fetchedAt: options.fetchedAt === undefined ? "2026-10-31T08:00:00Z" : options.fetchedAt,
     closed,
   });
+  /** What the page shows of the repo, one state after the other (null while it shows none), and the issues each one bursts for. */
+  const along = (states: (Pick<IssueBoardState, "repo" | "fetchedAt" | "closed"> | null)[]): string[][] => {
+    let watch = NO_WATCH;
+    return states.map((state) => {
+      const step = watchCompleted(watch, state);
+      watch = step.watch;
+      return step.completed;
+    });
+  };
+  const saved = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T05:00:00Z" });
 
-  it("gives the key of an issue that came into the closed ones as completed between two answers for the repo", () => {
-    expect(newlyCompleted(board([closedIssue({ number: 1 })]), board([closedIssue({ number: 2 }), closedIssue({ number: 1 })]))).toEqual(["my-org/repo-a#2"]);
+  it("gives the key of an issue completed between two poll answers that came in while the page showed the repo", () => {
+    const first = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
+    const second = board([closedIssue({ number: 2 }), closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:01:00Z" });
+
+    expect(along([saved, first, second])).toEqual([[], [], ["my-org/repo-a#2"]]);
+  });
+
+  it("gives nothing for the first poll answer after the saved issues, however long ago they were saved", () => {
+    const answer = board([closedIssue({ number: 2 }), closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
+
+    expect(along([saved, answer])).toEqual([[], []]);
+  });
+
+  it("gives nothing for the first poll answer when nothing was saved yet", () => {
+    const answer = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
+
+    expect(along([board([], { fetchedAt: null }), answer])).toEqual([[], []]);
+  });
+
+  it("takes a poll's start, which carries the issues as saved, for no answer", () => {
+    const first = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
+    const second = board([closedIssue({ number: 2 }), closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:01:00Z" });
+
+    expect(along([saved, saved, first, first, second])).toEqual([[], [], [], [], ["my-org/repo-a#2"]]);
   });
 
   it("leaves out an issue closed as not planned, and one already among the closed ones", () => {
-    const before = board([closedIssue({ number: 1 })]);
-    const after = board([closedIssue({ number: 2, closedAs: "not_planned" }), closedIssue({ number: 1 })]);
+    const first = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:00:00Z" });
+    const second = board([closedIssue({ number: 2, closedAs: "not_planned" }), closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:01:00Z" });
 
-    expect(newlyCompleted(before, after)).toEqual([]);
+    expect(along([saved, first, second])).toEqual([[], [], []]);
   });
 
-  it("gives nothing on first load: no answer before, or one with nothing saved yet", () => {
-    const after = board([closedIssue({ number: 1 })]);
+  it("starts over when another repo shows between two answers, as when a tab is opened and left", () => {
+    const first = board([], { fetchedAt: "2026-10-31T08:00:00Z" });
+    const other = board([], { repo: "my-org/repo-b", fetchedAt: "2026-10-31T08:00:30Z" });
+    const second = board([closedIssue({ number: 1 })], { fetchedAt: "2026-10-31T08:01:00Z" });
 
-    expect(newlyCompleted(null, after)).toEqual([]);
-    expect(newlyCompleted(board([], { fetchedAt: null }), after)).toEqual([]);
-  });
-
-  it("gives nothing when the answer before was for another repo, as when a tab is opened", () => {
-    const before = board([], { repo: "my-org/repo-b" });
-    const after = board([closedIssue({ number: 1 })]);
-
-    expect(newlyCompleted(before, after)).toEqual([]);
+    expect(along([saved, first, other, second])).toEqual([[], [], [], []]);
+    expect(along([saved, first, null, second])).toEqual([[], [], [], []]);
   });
 });
 
