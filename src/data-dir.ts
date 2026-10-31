@@ -21,20 +21,20 @@ export type Legacy = {
 };
 
 /**
- * Opens the data directory, creating it when needed. On the first start it takes the old config.yaml in (without
- * `github.token_env`, which named the variable holding the token) and, while no token is saved, the token from that
- * variable (GITHUB_TOKEN by default). What the directory already holds is never replaced.
+ * Opens the data directory, creating it when needed. With `legacy`, on the first start it takes the old config.yaml in
+ * (without `github.token_env`, which named the variable holding the token) and, while no token is saved, the token
+ * from that variable (GITHUB_TOKEN by default); without it, it starts with empty settings. What the directory already
+ * holds is never replaced. The token is kept in `tokens`, or in a plain file in the directory when none is given.
  */
-export function openDataDir(dir: string, legacy: Legacy): DataDir {
+export function openDataDir(dir: string, legacy?: Legacy, tokens: TokenStore = fileTokenStore(join(dir, "github-token"))): DataDir {
   mkdirSync(dir, { recursive: true });
   const configPath = join(dir, "config.yaml");
-  const tokens = fileTokenStore(join(dir, "github-token"));
 
-  const old = existsSync(legacy.configPath) ? readFileSync(legacy.configPath, "utf8") : null;
+  const old = legacy && existsSync(legacy.configPath) ? readFileSync(legacy.configPath, "utf8") : null;
   const { text, tokenEnv } = old === null ? { text: EMPTY_SETTINGS, tokenEnv: "GITHUB_TOKEN" } : withoutTokenEnv(old);
   if (!existsSync(configPath)) writeFileAtomically(configPath, text);
 
-  const envToken = legacy.env[tokenEnv];
+  const envToken = legacy?.env[tokenEnv];
   if (tokens.get() === null && envToken) tokens.set(envToken);
 
   return { dbPath: join(dir, "workdash.db"), configPath, tokens };

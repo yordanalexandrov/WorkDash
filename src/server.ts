@@ -1,6 +1,6 @@
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
-import Fastify, { type FastifyInstance, LogController } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController } from "fastify";
 import { z } from "zod";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
@@ -45,9 +45,6 @@ type PollControl = Pick<Poller, "mode" | "polling" | "setMode" | "demand">;
 
 /** For a dashboard without a poller: Periodic, never polling, deaf to demands. */
 const NO_POLLER: PollControl = { mode: () => "periodic", polling: () => false, setMode: () => {}, demand: () => "skip" };
-
-// Static files are kept in web/public; the bundle built from web/src lands in web/dist.
-const WEB_ROOTS = ["../web/public/", "../web/dist/"].map((path) => fileURLToPath(new URL(path, import.meta.url)));
 
 /** Everything the dashboard is built from. Read on every call, so a reloaded config.yaml takes effect right away. */
 export type DashboardSource = {
@@ -116,14 +113,19 @@ export function buildServer(
     settings?: Settings;
     /** The zone quiet hours are read in, shown next to them. */
     timeZone?: string;
-    logger?: boolean;
+    /**
+     * The directory the page is served from: its static files in `public/`, the bundle built from web/src in `dist/`.
+     * Given by the caller, since where this module sits says nothing once it is bundled. Without it, only the API.
+     */
+    webRoot?: string;
+    logger?: FastifyServerOptions["logger"];
   },
 ): FastifyInstance {
   const { events = createEventHub(), pendingNotifications = () => [], acknowledgeNotifications = () => {}, logger = false } = options;
   const poller = options.poller ?? NO_POLLER;
   const server = Fastify({ logger, logController: new LogController({ disableRequestLogging: true }) });
 
-  server.register(fastifyStatic, { root: WEB_ROOTS });
+  if (options.webRoot !== undefined) server.register(fastifyStatic, { root: ["public", "dist"].map((dir) => join(options.webRoot!, dir)) });
 
   // The API answers only this machine's own pages. A page on another site can still make the browser send requests
   // here: under its own host name after DNS rebinding (refused by the Host check), or as a form-like write with no
