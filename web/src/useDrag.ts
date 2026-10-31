@@ -15,9 +15,10 @@ export type Drag = {
   zone: ZoneState;
   /**
    * Watches a press on `el`, a [data-flip] element, from its `pointerdown`: it becomes a drag once the pointer has moved past
-   * the threshold, and `onDrop` runs when it is dropped into the zone. A press on a link or a button in it is left alone.
+   * the threshold, and `onDrop` runs, with the zone's rect, once it has gone into the zone. A press on a link or a button in it
+   * is left alone.
    */
-  grab(event: PointerEvent, el: HTMLElement, onDrop: () => Promise<void>): void;
+  grab(event: PointerEvent, el: HTMLElement, onDrop: (zone: DOMRectReadOnly) => Promise<void>): void;
 };
 
 type Press = {
@@ -33,7 +34,7 @@ type Press = {
   over: boolean;
   /** The copy in the effects layer, once the press has become a drag. */
   copy: HTMLElement | null;
-  onDrop(): Promise<void>;
+  onDrop(zone: DOMRectReadOnly): Promise<void>;
   /** Stops listening to the pointer and the keyboard. */
   stop(): void;
 };
@@ -105,8 +106,10 @@ export function useDrag(layer: RefObject<HTMLElement>, zone: RefObject<HTMLEleme
     setZoneState("off");
     const from = copy.style.transform;
     if (into && zone.current) {
-      void dropInto(copy, from, layoutRect(zone.current), dropSpin(p.tilt))
-        .then(p.onDrop)
+      // Taken now: the zone goes as soon as the drag ends.
+      const target = layoutRect(zone.current);
+      void dropInto(copy, from, target, dropSpin(p.tilt))
+        .then(() => p.onDrop(target))
         .then(
           () => setTimeout(() => hold(p.key, false), MAX_HOLD_MS),
           () => hold(p.key, false),

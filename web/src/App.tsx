@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { boardColumns } from "./board.js";
 import { Banners } from "./components/Banners.js";
 import { Board } from "./components/Board.js";
@@ -13,11 +13,12 @@ import { Toolbar } from "./components/Toolbar.js";
 import { TopBar } from "./components/TopBar.js";
 import { ViewToggle } from "./components/ViewToggle.js";
 import { NO_FILTER, repoChips } from "./filter.js";
-import type { DashboardPullRequest, Section } from "./api.js";
+import type { ClosedPullRequest, DashboardPullRequest, Section } from "./api.js";
 import { findOpen, prKey } from "./detail.js";
+import { confetti, middleOf, newlyMerged, sparks } from "./effects.js";
 import { configErrorText, errorText, shortRepo, statusText } from "./format.js";
-import { dropFlyers, type Flyer, finishLanding, flash, land, liftFlyers, prFlipKey, useBooted } from "./motion.js";
-import { repoHue, repoHues } from "./palette.js";
+import { BOUNCE, dropFlyers, type Pos, type Flyer, finishLanding, flash, land, liftFlyers, prFlipKey, useBooted, visibleIn } from "./motion.js";
+import { PALETTE, repoHue, repoHues } from "./palette.js";
 import { filterDashboard } from "./prFilter.js";
 import { DEFAULT_SORT, prItems } from "./prTable.js";
 import { type Happening, happenings, WINDOW } from "./replay.js";
@@ -42,10 +43,40 @@ function byFlipKey(key: string): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-flip="${CSS.escape(key)}"]`);
 }
 
-/** A replayed happening flashes the card or row of its PR (`key` is its prKey), if it shows in the view; else only the feed has it. */
-function fire(happening: Happening): void {
+/** The element with the FLIP key `key`, if it shows in the viewport. */
+function shownByFlipKey(key: string): HTMLElement | null {
+  const el = byFlipKey(key);
+  return el && visibleIn(el.getBoundingClientRect(), innerWidth, innerHeight) ? el : null;
+}
+
+/** Confetti from a merge: this many pieces from the PR's card or row, and from the head of the closed ones at first sight. */
+const MERGE_BURST = 30;
+const REVEAL_BURST = 46;
+
+/** Confetti in `layer` from the middle of `el`. */
+function burst(layer: HTMLElement | null, el: Element, count: number): void {
+  if (!layer) return;
+  const { x, y } = middleOf(el.getBoundingClientRect());
+  confetti(layer, x, y, count, PALETTE);
+}
+
+/**
+ * A replayed happening flashes the card or row of its PR (`key` is its prKey), if it shows in the view; else only the feed has it.
+ * A merge also bursts confetti, from its card or row, or else from the head of the closed ones on the board or in the table.
+ */
+function fire(happening: Happening, layer: HTMLElement | null): void {
   const el = byFlipKey(`pr:${happening.key}`);
-  if (el && el.getClientRects().length > 0) flash(el, happening.color, el.classList.contains("trow") ? "row" : "card");
+  const shows = el !== null && el.getClientRects().length > 0;
+  if (shows) flash(el, happening.color, el.classList.contains("trow") ? "row" : "card");
+  if (happening.kind !== "merged") return;
+  // Never from a folded column or group: its head shows, but what merged is out of sight.
+  const column = byFlipKey("col:closed");
+  const group = byFlipKey(`g:${CLOSED_GROUP}`);
+  const from =
+    (shows ? el : null) ??
+    (column && !column.classList.contains("strip") ? column.querySelector(".col-head") : null) ??
+    (group && !group.classList.contains("shut") ? group : null);
+  if (from && from.getClientRects().length > 0) burst(layer, from, MERGE_BURST);
 }
 
 /** Where a sheet opened from the feed grows from when its PR does not show: a card's size in the middle of the window. */
@@ -93,6 +124,7 @@ export function App() {
   const fx = useRef<HTMLDivElement>(null);
   const dropZone = useRef<HTMLDivElement>(null);
   const drag = useDrag(fx, dropZone);
+  const spark = (at: Pos) => fx.current && sparks(fx.current, at.x, at.y, "✓ видях");
   // The cards or rows lifted off the view being left, to land once the next one is in.
   const lifted = useRef<Flyer[] | null>(null);
   // A switch while the last one still flies ends it at once and lifts from the real cards or rows.
@@ -134,6 +166,40 @@ export function App() {
   const items = useMemo(() => (filtered ? prItems(filtered.sections) : []), [filtered]);
   const nothingOpen = openPrRepos.length === 0;
 
+  // Confetti for the merged ones, once the closed column first shows unfolded with one in it. Kept here, not in the board, so
+  // a trip to the table or folding the column does not play it again; a column that never showed has not played it.
+  const revealed = useRef(false);
+  const reveal =
+    !revealed.current && filtered?.recentlyClosed.some((pr) => pr.state === "MERGED")
+      ? {
+          id: "closed",
+          run: function run(head: HTMLElement) {
+            if (revealed.current) return;
+            // A tab opened in the background plays it once it is looked at, if the column still shows unfolded then.
+            if (document.hidden) {
+              document.addEventListener("visibilitychange", () => head.isConnected && !head.closest(".strip") && run(head), { once: true });
+              return;
+            }
+            revealed.current = true;
+            burst(fx.current, head, REVEAL_BURST);
+          },
+        }
+      : null;
+  // A PR merged while the dashboard is open bursts from its card or row once it has landed among the closed ones.
+  const lastClosed = useRef<ClosedPullRequest[] | null>(null);
+  useEffect(() => {
+    if (!state) return;
+    const merged = newlyMerged(lastClosed.current, state.recentlyClosed);
+    lastClosed.current = state.recentlyClosed;
+    if (!merged.length) return;
+    setTimeout(() => {
+      for (const key of merged) {
+        const el = shownByFlipKey(`pr:${key}`);
+        if (el) burst(fx.current, el, MERGE_BURST);
+      }
+    }, BOUNCE.duration);
+  }, [state]);
+
   // "Пусни деня": the happenings of the PRs the toolbar keeps and the snapshot's time, frozen as it starts.
   const [replay, setReplay] = useState<ReplayRun | null>(null);
   const toggleReplay = () => {
@@ -170,7 +236,7 @@ export function App() {
         {replay ? (
           <Replay
             run={replay}
-            onFire={fire}
+            onFire={(happening) => fire(happening, fx.current)}
             held={sheet !== null}
             hue={(repo) => repoHue(hues, repo)}
             canOpen={(key) => findOpen(state, key) !== undefined}
@@ -199,13 +265,14 @@ export function App() {
             collapsed={collapsed}
             onToggle={(id) => setCollapsed((current) => toggleCollapsed(current, id))}
             onSeen={seen}
+            onSpark={spark}
             onOpen={openSheet}
             openKey={openKey}
             booted={booted}
           />
         )}
         {state && view === "board" && (
-          <Board columns={columns} booted={booted} message={nothingOpen && state.fetchedAt ? "Няма PR-и, които да те засягат." : null}>
+          <Board columns={columns} booted={booted} reveal={reveal} message={nothingOpen && state.fetchedAt ? "Няма PR-и, които да те засягат." : null}>
             {(column) =>
               column.id === "closed"
                 ? column.items.map((pr, index) => <ClosedCard key={`${pr.repo}#${pr.number}`} pr={pr} hue={repoHue(hues, pr.repo)} index={index} />)
@@ -220,7 +287,16 @@ export function App() {
                       {...(column.id === "waiting_on_me"
                         ? {
                             onSeen: seen,
-                            ...(sheet ? {} : { onGrab: (event: PointerEvent, slot: HTMLElement) => drag.grab(event, slot, () => seen(pr)) }),
+                            onSpark: spark,
+                            ...(sheet
+                              ? {}
+                              : {
+                                  onGrab: (event: PointerEvent, slot: HTMLElement) =>
+                                    drag.grab(event, slot, (zone) => {
+                                      spark(middleOf(zone));
+                                      return seen(pr);
+                                    }),
+                                }),
                           }
                         : {})}
                     />
@@ -259,7 +335,8 @@ export function App() {
             gone={!live}
             {...(live?.section === "waiting_on_me"
               ? {
-                  onSeen: () => {
+                  onSeen: (from: HTMLElement) => {
+                    spark(middleOf(from.getBoundingClientRect()));
                     setSheet(null);
                     seen(live.pr).catch(() => {});
                   },

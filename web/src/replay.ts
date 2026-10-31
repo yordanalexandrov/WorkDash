@@ -5,7 +5,7 @@ import { pushedAt } from "../../src/domain/types.js";
 import type { ClosedPullRequest, DashboardPullRequest } from "./api.js";
 import { prKey } from "./detail.js";
 
-export type Kind = "comment" | "commit" | "review" | "changes" | "closed";
+export type Kind = "comment" | "commit" | "review" | "changes" | "merged" | "closed";
 
 /** One thing that happened, at `at` (ms), to the item under `key`: "**who** what", a snippet below, in `color`. */
 export type Happening = {
@@ -26,6 +26,7 @@ const COLOR: Record<Kind, string> = {
   commit: "var(--pending)",
   review: "var(--ok)",
   changes: "var(--bad)",
+  merged: "var(--merged)",
   closed: "var(--merged)",
 };
 
@@ -54,7 +55,10 @@ export function happenings(open: DashboardPullRequest[], closed: ClosedPullReque
       push(pr, Date.parse(review.submittedAt), kind, review.author, what);
     }
   }
-  for (const pr of closed) push(pr, Date.parse(pr.closedAt), "closed", pr.author, pr.state === "MERGED" ? "merge-на" : "затвори");
+  for (const pr of closed) {
+    const merged = pr.state === "MERGED";
+    push(pr, Date.parse(pr.closedAt), merged ? "merged" : "closed", pr.author, merged ? "merge-на" : "затвори");
+  }
   return out.sort((a, b) => a.at - b.at);
 }
 

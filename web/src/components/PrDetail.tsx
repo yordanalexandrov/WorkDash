@@ -19,8 +19,8 @@ type PrDetailProps = {
   hue: number;
   /** The PR has left the open ones (merged, closed or no longer mine); the sheet shows its last data. */
   gone: boolean;
-  /** Marks the PR seen; only for a PR in "Чака теб". */
-  onSeen?: () => void;
+  /** Marks the PR seen, from its button; only for a PR in "Чака теб". */
+  onSeen?: (from: HTMLElement) => void;
 };
 
 /**
@@ -137,7 +137,7 @@ export function PrDetail({ pr, section, hue, gone, onSeen }: PrDetailProps) {
           Отвори в GitHub ↗
         </a>
         {onSeen && !gone ? (
-          <button type="button" class="primary" title="Маркирай всичко досега като видяно" onClick={onSeen}>
+          <button type="button" class="primary" title="Маркирай всичко досега като видяно" onClick={(event) => onSeen(event.currentTarget)}>
             видях
           </button>
         ) : null}
