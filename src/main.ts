@@ -77,6 +77,7 @@ const publishDashboard = () => {
 const issues: IssueSource = {
   repos: () => config.repos,
   config: () => config.issues,
+  recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
   poller: {
     demand: (repo, demand) => issuePoller.demand(repo, demand),
     polling: (repo) => issuePoller.polling(repo),
@@ -135,6 +136,7 @@ const issuePoller = createIssuePoller({
   intervalMs: () => config.github.pollIntervalMs,
   log: server.log,
   onChange: publishIssues,
+  recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
 });
 const poller = startPoller({
   ...pollerSettings(config, token),

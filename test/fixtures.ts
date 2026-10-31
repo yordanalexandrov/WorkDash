@@ -1,4 +1,4 @@
-import type { Issue } from "../src/domain/issues.js";
+import type { ClosedIssue, Issue } from "../src/domain/issues.js";
 import type { PullRequest } from "../src/domain/types.js";
 
 /** An open, mergeable PR by `me` with green CI and no reviews; override what a test cares about. */
@@ -45,4 +45,9 @@ export function issue(overrides: Partial<Issue> = {}): Issue {
     updatedAt: "2026-10-30T10:00:00Z",
     ...overrides,
   };
+}
+
+/** An issue of `my-org/repo-a` closed as completed on 2026-10-31 at 08:00 UTC; override what a test cares about. */
+export function closedIssue(overrides: Partial<ClosedIssue> = {}): ClosedIssue {
+  return { ...issue(overrides), closedAt: "2026-10-31T08:00:00Z", closedAs: "completed", ...overrides };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { issue } from "../../test/fixtures.js";
+import { closedIssue, issue } from "../../test/fixtures.js";
 import { matchesQuery } from "../src/filter.js";
 import { NO_FILTER } from "../src/filter.js";
 import { filterIssueColumns, issueTexts } from "../src/issueFilter.js";
@@ -37,7 +37,7 @@ describe("filterIssueColumns", () => {
       ...issue({ number, title: number % 2 ? "Fix the tabs" : "Add the filter", assignees: number > 2 ? ["Me"] : ["colleague2"] }),
       stage: null,
     }));
-    return { id, title: id, accent: "var(--blue)", count: items.length, hot: false, items };
+    return { id, title: id, accent: "var(--blue)", count: items.length, hot: false, closed: false, items };
   };
   const columns = [column("none", 1, 2, 3), column("stage:in-progress", 4, 5)];
   const numbers = (shown: IssueColumn[]) => shown.map(({ id, count, items }) => [id, count, items.map((item) => item.number)]);
@@ -61,6 +61,20 @@ describe("filterIssueColumns", () => {
       ["none", 0, []],
       ["stage:in-progress", 0, []],
     ]);
+  });
+
+  it("narrows Затворени too", () => {
+    const closed: IssueColumn = {
+      id: "closed",
+      title: "Затворени",
+      accent: "var(--merged)",
+      count: 2,
+      hot: false,
+      closed: true,
+      items: [closedIssue({ number: 6, assignees: ["me"] }), closedIssue({ number: 7 })],
+    };
+
+    expect(numbers(filterIssueColumns([closed], { ...NO_FILTER, mine: true }, "me"))).toEqual([["closed", 1, [6]]]);
   });
 
   it("gives the columns back as they are with no filter", () => {

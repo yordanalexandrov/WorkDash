@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openStore } from "../src/db.js";
 import type { PrEvent } from "../src/domain/events.js";
 import type { ClosedPullRequest, PullRequest } from "../src/domain/types.js";
-import { issue, pullRequest } from "./fixtures.js";
+import { closedIssue, issue, pullRequest } from "./fixtures.js";
 
 function pr(repo: string, number: number): PullRequest {
   return pullRequest({ repo, number, author: "colleague1" });
@@ -109,8 +109,8 @@ describe("SnapshotStore", () => {
 });
 
 describe("SnapshotStore: issues", () => {
-  const repoA = { repo: "my-org/repo-a", issues: [issue({ number: 1 })], totalCount: 1 };
-  const repoB = { repo: "my-org/repo-b", issues: [issue({ repo: "my-org/repo-b", number: 2 })], totalCount: 5 };
+  const repoA = { repo: "my-org/repo-a", issues: [issue({ number: 1 })], totalCount: 1, closed: [closedIssue({ number: 9 })] };
+  const repoB = { repo: "my-org/repo-b", issues: [issue({ repo: "my-org/repo-b", number: 2 })], totalCount: 5, closed: [] };
 
   it("has no issues of a repo before its first poll", () => {
     expect(openStore(":memory:").loadIssues("my-org/repo-a")).toBeNull();
@@ -121,9 +121,9 @@ describe("SnapshotStore: issues", () => {
 
     store.saveIssues(repoA, new Date("2026-10-30T10:00:00Z"));
     store.saveIssues(repoB, new Date("2026-10-30T10:05:00Z"));
-    store.saveIssues({ ...repoA, issues: [], totalCount: 0 }, new Date("2026-10-30T10:10:00Z"));
+    store.saveIssues({ ...repoA, issues: [], totalCount: 0, closed: [] }, new Date("2026-10-30T10:10:00Z"));
 
-    expect(store.loadIssues("my-org/repo-a")).toEqual({ repo: "my-org/repo-a", issues: [], totalCount: 0, fetchedAt: "2026-10-30T10:10:00.000Z" });
+    expect(store.loadIssues("my-org/repo-a")).toEqual({ repo: "my-org/repo-a", issues: [], totalCount: 0, closed: [], fetchedAt: "2026-10-30T10:10:00.000Z" });
     expect(store.loadIssues("my-org/repo-b")).toEqual({ ...repoB, fetchedAt: "2026-10-30T10:05:00.000Z" });
   });
 

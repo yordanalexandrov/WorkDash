@@ -23,7 +23,7 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
 }
 
 function issueBoard(overrides: Partial<IssueBoardState> = {}): IssueBoardState {
-  return { repo: "my-org/repo-a", fetchedAt: "2026-10-30T11:35:00Z", stages: [], issues: [], totalCount: 0, polling: false, error: null, ...overrides };
+  return { repo: "my-org/repo-a", fetchedAt: "2026-10-30T11:35:00Z", stages: [], issues: [], closed: [], totalCount: 0, polling: false, error: null, ...overrides };
 }
 
 describe("statusText", () => {

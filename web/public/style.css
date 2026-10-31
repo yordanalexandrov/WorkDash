@@ -1370,6 +1370,10 @@ kbd {
   color: var(--bad);
 }
 
+.closed-st.muted {
+  color: var(--muted);
+}
+
 /* Table: a glassy panel; one grid whose rows and group heads take its columns (subgrid), so the columns fit what the
    rows hold and every row stays a box of its own for FLIP. Only the panel's scroll box scrolls; the header sticks in it. */
 .tablev {

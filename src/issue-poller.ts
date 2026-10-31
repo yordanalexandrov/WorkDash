@@ -25,6 +25,7 @@ type RepoPoll = {
  * the interval or presses "Обнови" (`answerIssueDemand`: at most once a minute but for "Обнови"), and a demand while its poll
  * is under way joins that poll, so two pages on one repo make one request. The page keeps the interval, as only it knows
  * whether the Issue dashboard shows; the answer tells it when to ask next. Each poll saves the repo's snapshot; a failed one keeps the last and is told by `error(repo)`.
+ * A poll also fetches the repo's issues closed within `recentlyClosedWindowMs`.
  * A rate limit on any repo holds every repo back, as they share the token. `onChange` runs when a poll starts and ends.
  */
 export function createIssuePoller(options: {
@@ -34,9 +35,11 @@ export function createIssuePoller(options: {
   intervalMs: () => number;
   log: { info(msg: string): void; error(msg: string): void };
   onChange: (repo: string) => void;
+  /** How far back closed issues count as recently closed (`recently_closed_window`); read on every poll. */
+  recentlyClosedWindowMs: () => number;
   fetch?: typeof globalThis.fetch;
 }): IssuePoller {
-  const { store, token, intervalMs, log, onChange, fetch } = options;
+  const { store, token, intervalMs, log, onChange, recentlyClosedWindowMs, fetch } = options;
   const repos = new Map<string, RepoPoll>();
   /** The last rate limit GitHub answered with; it holds every repo back until it lifts. */
   let rateLimit: PollError | null = null;
@@ -65,7 +68,8 @@ export function createIssuePoller(options: {
     state.lastPolledAt = new Date().toISOString();
     changed(repo);
     try {
-      const snapshot = await fetchIssues({ repo, token: withToken, fetch });
+      const closedSince = new Date(Date.now() - recentlyClosedWindowMs());
+      const snapshot = await fetchIssues({ repo, token: withToken, closedSince, fetch });
       store.saveIssues(snapshot, new Date());
       state.error = null;
       rateLimit = null;
