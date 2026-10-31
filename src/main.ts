@@ -1,14 +1,16 @@
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { type Config, ConfigError, loadConfig, watchConfig } from "./config.js";
+import { type Config, ConfigError, loadConfig, parseConfig, watchConfig } from "./config.js";
+import { openDataDir } from "./data-dir.js";
 import { openStore } from "./db.js";
 import { createNotifier } from "./notifier.js";
 import { type PollerSettings, startPoller } from "./poller.js";
-import { buildServer, type DashboardSource, dashboardState } from "./server.js";
+import { buildServer, type DashboardSource, dashboardState, type Missing } from "./server.js";
+import { createSettings } from "./settings.js";
 import { createEventHub } from "./sse.js";
 
-const CONFIG_PATH = process.env.CONFIG_PATH ?? "config.yaml";
-const DB_PATH = process.env.DB_PATH ?? "data/workdash.db";
+/** Where the database, the settings and the GitHub token live. */
+const DATA_DIR = process.env.DATA_DIR ?? "data";
+/** The config.yaml from before the settings lived in DATA_DIR, taken in on the first start. */
+const LEGACY_CONFIG_PATH = process.env.CONFIG_PATH ?? "config.yaml";
 const HOST = process.env.HOST ?? "127.0.0.1";
 const PORT = Number(process.env.PORT ?? 3000);
 /** The zone quiet hours are read in; the machine's local time when TZ is not set. */
@@ -21,14 +23,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-/** The GitHub token named by `github.token_env`; a ConfigError when that variable is not set. */
-function tokenFor(config: Config): string {
-  const token = process.env[config.github.tokenEnv];
-  if (!token) throw new ConfigError(`github.token_env: environment variable ${config.github.tokenEnv} is not set`);
-  return token;
-}
-
-function pollerSettings(config: Config, token: string): PollerSettings {
+function pollerSettings(config: Config, token: string | null): PollerSettings {
   return { repos: config.repos, token, intervalMs: config.github.pollIntervalMs, recentlyClosedWindowMs: config.review.recentlyClosedWindowMs };
 }
 
@@ -38,18 +33,18 @@ try {
   fail(`TZ: unknown time zone "${TIME_ZONE}"; expected a name such as "America/New_York"`);
 }
 
+const data = openDataDir(DATA_DIR, { configPath: LEGACY_CONFIG_PATH, env: process.env });
 let config: Config;
-let token: string;
 try {
-  config = loadConfig(CONFIG_PATH);
-  token = tokenFor(config);
+  config = loadConfig(data.configPath);
 } catch (error) {
-  if (error instanceof ConfigError) fail(`${CONFIG_PATH}: ${error.message}`);
-  throw error;
+  if (!(error instanceof ConfigError)) throw error;
+  // Started with nothing set up; the watcher shows why the file is not in effect, and the Settings screen mends it.
+  config = parseConfig("");
 }
+let token = data.tokens.get();
 
-mkdirSync(dirname(DB_PATH), { recursive: true });
-const store = openStore(DB_PATH);
+const store = openStore(data.dbPath);
 
 const events = createEventHub();
 const dashboard: DashboardSource = {
@@ -66,6 +61,7 @@ const dashboard: DashboardSource = {
     demand: (demand) => poller.demand(demand),
   },
   configError: () => configWatcher.error(),
+  missing: () => [...(token === null ? ["token" as const] : []), ...(config.repos.length === 0 ? ["repos" as const] : [])] satisfies Missing[],
 };
 /**
  * Pushes the dashboard as it is now to every open browser. With none open it does nothing, which also keeps the
@@ -87,7 +83,27 @@ const notifier = createNotifier({
 const missedTimer = setInterval(notifier.flushMissed, MISSED_CHECK_MS);
 missedTimer.unref();
 
-const server = buildServer({ ...dashboard, events, pendingNotifications: notifier.takePending, acknowledgeNotifications: notifier.acknowledge, logger: true });
+const settings = createSettings({
+  configPath: data.configPath,
+  tokens: data.tokens,
+  fallback: () => config,
+  onSaved: () => configWatcher.check(),
+  onToken(next) {
+    token = next;
+    poller.reconfigure(pollerSettings(config, token));
+    publishDashboard();
+  },
+});
+
+const server = buildServer({
+  ...dashboard,
+  events,
+  pendingNotifications: notifier.takePending,
+  acknowledgeNotifications: notifier.acknowledge,
+  settings,
+  timeZone: TIME_ZONE,
+  logger: true,
+});
 const poller = startPoller({
   ...pollerSettings(config, token),
   store,
@@ -97,13 +113,11 @@ const poller = startPoller({
   onSnapshot: notifier.afterSnapshot,
 });
 
-// Edits to config.yaml apply without a restart; an invalid edit is shown in the UI and the last valid config stays.
-const configWatcher = watchConfig(CONFIG_PATH, {
+// Saved settings, and edits to config.yaml by hand, apply without a restart; an invalid edit is shown in the UI and the last valid config stays.
+const configWatcher = watchConfig(data.configPath, {
   current: config,
   apply(next) {
-    const nextToken = tokenFor(next);
     config = next;
-    token = nextToken;
     poller.reconfigure(pollerSettings(config, token));
   },
   onChange: publishDashboard,

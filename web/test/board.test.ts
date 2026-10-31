@@ -25,6 +25,7 @@ function dashboard(overrides: Partial<DashboardState> = {}): DashboardState {
     error: null,
     problems: [],
     configError: null,
+    missing: [],
     sections: [
       { section: "waiting_on_me", pullRequests: [open(1), open(2)] },
       { section: "free_for_review", pullRequests: [] },

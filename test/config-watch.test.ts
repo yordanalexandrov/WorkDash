@@ -60,12 +60,12 @@ describe("watchConfig", () => {
       onChange: () => errors.push(watcher!.error()),
     });
 
-    writeFileSync(path, "repos: []\n");
+    writeFileSync(path, "repos: [repo-b]\n");
     await waitFor(() => errors.length === 1);
     writeFileSync(path, yamlWithRepos("my-org/repo-b"));
     await waitFor(() => errors.length === 2);
 
-    expect(errors[0]).toMatch(/repos: list at least one repo/);
+    expect(errors[0]).toMatch(/repos\[0\]: expected "owner\/name"/);
     expect(errors[1]).toBeNull();
   });
 
@@ -83,10 +83,10 @@ describe("watchConfig", () => {
   it("reports an invalid edit and keeps the last valid config, then recovers on the next valid edit", async () => {
     const w = watch();
 
-    writeFileSync(path, "repos: []\n");
+    writeFileSync(path, "repos: [repo-b]\n");
 
     await waitFor(() => w.error() !== null);
-    expect(w.error()).toMatch(/repos: list at least one repo/);
+    expect(w.error()).toMatch(/repos\[0\]: expected "owner\/name"/);
     expect(applied).toEqual([]);
 
     writeFileSync(path, yamlWithRepos("my-org/repo-c"));
@@ -123,5 +123,14 @@ describe("watchConfig", () => {
     await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS * 10));
 
     expect(applied).toEqual([]);
+  });
+
+  it("applies an edit at once when asked to check, without waiting for the next look", () => {
+    watcher = watchConfig(path, { current: parseConfig(yamlWithRepos("my-org/repo-a")), intervalMs: 60_000, apply: (config) => applied.push(config) });
+
+    writeFileSync(path, yamlWithRepos("my-org/repo-b"));
+    watcher.check();
+
+    expect(applied.map((config) => config.repos)).toEqual([["my-org/repo-b"]]);
   });
 });

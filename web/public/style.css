@@ -2392,6 +2392,358 @@ kbd {
   animation-play-state: paused !important;
 }
 
+/* Settings: a full view in place of the board or table; glassy cards like the columns, one draft saved from the bar below. */
+.banner.setup {
+  --accent: var(--blue);
+}
+
+.banner:has(.to-settings, .set-note > button) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.banner .chip {
+  flex: none;
+}
+
+.chip.gear {
+  padding: 4px 9px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.chip.gear span {
+  display: inline-block;
+  transition: transform var(--glide-ms, 0.4s) var(--glide, ease-out);
+}
+
+.chip.gear.on span {
+  transform: rotate(90deg);
+}
+
+.chip.primary {
+  border-color: transparent;
+  color: var(--chip-on-text);
+  background: var(--blue);
+  font-weight: 650;
+}
+
+.chip.primary:disabled {
+  border-color: var(--line);
+  color: var(--faint);
+  background: var(--chip);
+}
+
+/* The page never scrolls, so the view scrolls itself; the cards keep to 1040px in the middle. */
+.settings {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px max(16px, calc((100% - 1040px) / 2)) 0;
+}
+
+.set-loading {
+  color: var(--muted);
+}
+
+.set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 0 12px;
+}
+
+.set-head h2 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.set-note {
+  margin-bottom: 12px;
+}
+
+.set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.set-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--col);
+  box-shadow: var(--shadow);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  animation: col-enter var(--bounce-ms, 700ms) var(--bounce, ease-out) both;
+  animation-delay: calc(var(--ci, 0) * 60ms);
+}
+
+.set-card h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.set-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.set-label {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.set-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.set-issue {
+  color: var(--bad);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.set-warn {
+  color: var(--pending);
+  font-size: 12px;
+}
+
+.set-input {
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+}
+
+.set-input:hover {
+  border-color: var(--faint);
+}
+
+.set-input.short {
+  width: 9em;
+}
+
+.set-input.time {
+  width: 7.5em;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.set-field.bad .set-input,
+.names li.bad {
+  border-color: var(--bad);
+}
+
+.names ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.names ul:empty {
+  display: none;
+}
+
+.names li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  animation: row-enter var(--bounce-ms, 550ms) var(--bounce, ease-out) both;
+}
+
+.names li.warn {
+  border-color: color-mix(in srgb, var(--pending) 60%, var(--line));
+}
+
+.names li .name {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+
+.names li .set-issue,
+.names li .set-warn {
+  order: 3;
+  flex-basis: 100%;
+}
+
+.names li img.av {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.names .x {
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--faint);
+  background: transparent;
+  cursor: pointer;
+}
+
+.names .x:hover {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+.names-add {
+  display: flex;
+  gap: 6px;
+}
+
+.names-add .set-input {
+  flex: 1 1 auto;
+}
+
+.token-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-none {
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.token-check {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.token-check.ok {
+  color: var(--ok);
+}
+
+.token-check.bad {
+  color: var(--bad);
+}
+
+.set-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A checkbox drawn as a switch; the knob glides. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch .track {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background-color 0.2s;
+}
+
+.switch .track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition: transform var(--glide-ms, 0.4s) var(--glide, ease-out);
+}
+
+.switch input:checked + .track {
+  background: var(--ok);
+}
+
+.switch input:checked + .track::after {
+  transform: translateX(12px);
+}
+
+.switch input:focus-visible + .track {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.set-quiet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* The save bar stays in sight at the bottom while the cards scroll. */
+.set-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 0 14px;
+  background: linear-gradient(transparent, var(--glass) 30%);
+}
+
+.set-state {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.set-actions.dirty .set-state {
+  color: var(--pending);
+  font-weight: 650;
+}
+
 /* Reduced motion: only instant changes of state. */
 @media (prefers-reduced-motion: reduce) {
   *,
