@@ -78,10 +78,9 @@ const issues: IssueSource = {
   repos: () => config.repos,
   config: () => config.issues,
   recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
-  poller: {
-    demand: (repo, demand) => issuePoller.demand(repo, demand),
-    polling: (repo) => issuePoller.polling(repo),
-    error: (repo) => issuePoller.error(repo),
+  // The issue poller logs to the server's log, so it is made after the server; nothing asks for it before.
+  get poller() {
+    return issuePoller;
   },
 };
 /** Pushes a repo's issues as they are now to every open browser; the pages on that repo take them. */
