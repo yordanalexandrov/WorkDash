@@ -17,9 +17,10 @@ type SheetProps = {
   onToggleSize(): void;
   /**
    * What it shows, by a key: a new key fades the content out, puts the new content in and fades it back in, the box
-   * staying where it is (no grow, no FLIP); at once under reduced motion.
+   * staying where it is (no grow, no FLIP); at once under reduced motion. Left out, the content never fades: a page that
+   * remounts the sheet (by `key`) for another item does not need it.
    */
-  showing: string;
+  showing?: string;
   /** ✕ or a click on the shade asks to close. */
   onClose(): void;
   onClosed(): void;
@@ -37,7 +38,7 @@ const FADE_IN = { duration: 160, easing: "linear", fill: "backwards" } as const;
  * a shade behind it, ✕ with the focus on it, and Tab kept inside. ⤢ / ⤡ expand it to nearly the whole window and back.
  * It knows nothing of PRs; Esc and `f` are the page's shortcuts.
  */
-export function Sheet({ label, from, closing, target, expanded, onToggleSize, onClose, onClosed, showing, children }: SheetProps) {
+export function Sheet({ label, from, closing, target, expanded, onToggleSize, onClose, onClosed, showing = "", children }: SheetProps) {
   const sheet = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const shade = useRef<HTMLDivElement>(null);

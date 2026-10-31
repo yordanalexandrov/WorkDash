@@ -313,7 +313,6 @@ export function PrDashboard({ state, seen, shown, view, hues, topSlot, fx, boote
       {sheet && shownSheet.current ? (
         <Sheet
           key={openKey}
-          showing={openKey!}
           label={shownSheet.current.pr.title}
           from={sheet.from}
           closing={sheet.closing}
