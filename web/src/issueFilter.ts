@@ -1,9 +1,9 @@
 // What the toolbar filter looks at in an issue (see filter.ts), and the Issue dashboard's columns narrowed by it.
 
-import { sameLogin } from "../../src/domain/activity.js";
 import type { StagedIssue } from "./api.js";
 import type { ColumnHead } from "./column.js";
 import { type Filter, matchesQuery } from "./filter.js";
+import { assignedToMe } from "./issueMarks.js";
 
 /**
  * What of an issue the filter looks at. Every column's items have the number and title; the rest counts when the item
@@ -19,7 +19,7 @@ export function issueTexts(issue: Filterable): string[] {
 
 /** Whether the filter keeps an issue: "само моите" keeps the ones assigned to me (none before it is known who I am), and the text has to match too. */
 function keeps(issue: Filterable, filter: Filter, viewer: string | null): boolean {
-  const mine = !filter.mine || (viewer !== null && (issue.assignees ?? []).some((login) => sameLogin(login, viewer)));
+  const mine = !filter.mine || assignedToMe({ assignees: issue.assignees ?? [] }, viewer);
   return mine && matchesQuery(issueTexts(issue), filter.query);
 }
 
