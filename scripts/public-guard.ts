@@ -5,6 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export type Leak = { line: number; kind: "email address" | "Jira instance" | "denylisted term" };
@@ -15,16 +16,24 @@ const JIRA = /([\p{L}\p{N}-]+)\.atlassian\.net/giu;
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
 
 /** Every line of `text` that leaks an email address, a Jira instance or a denylisted term; the first leak per line. */
-export function findLeaks(text: string, denylist: string[] = []): Leak[] {
+export function findLeaks(text: string, denylist: string[] = [], { emails = true } = {}): Leak[] {
   const terms = denylist.map((term) => new RegExp(`(?<![\\p{L}\\p{N}_])${term.replace(ESCAPE, "\\$&")}(?![\\p{L}\\p{N}_])`, "iu"));
   const leaks: Leak[] = [];
   text.split("\n").forEach((content, index) => {
     const line = index + 1;
-    if ([...content.matchAll(EMAIL)].some(([email]) => !ALLOWED_EMAIL.test(email))) leaks.push({ line, kind: "email address" });
+    if (emails && [...content.matchAll(EMAIL)].some(([email]) => !ALLOWED_EMAIL.test(email))) leaks.push({ line, kind: "email address" });
     else if ([...content.matchAll(JIRA)].some(([, host]) => host!.toLowerCase() !== "example")) leaks.push({ line, kind: "Jira instance" });
     else if (terms.some((term) => term.test(content))) leaks.push({ line, kind: "denylisted term" });
   });
   return leaks;
+}
+
+/**
+ * The leaks in the tracked file at `path`. npm writes `package-lock.json` from the registry, so its email addresses
+ * are package authors', not ours; its Jira hosts and denylisted terms are still checked.
+ */
+export function findFileLeaks(path: string, text: string, denylist: string[] = []): Leak[] {
+  return findLeaks(text, denylist, { emails: basename(path) !== "package-lock.json" });
 }
 
 /** Terms one per line or comma-separated; blank lines and lines starting with # are skipped. */
@@ -48,13 +57,13 @@ function main(range: string | undefined) {
   const denylist = readDenylist();
   if (denylist.length === 0) console.warn("No denylist: checking emails and Jira hosts only.");
   const found: string[] = [];
-  const report = (where: string, text: string) => findLeaks(text, denylist).forEach(({ line, kind }) => found.push(`${where}:${line}: ${kind}`));
+  const add = (where: string, leaks: Leak[]) => leaks.forEach(({ line, kind }) => found.push(`${where}:${line}: ${kind}`));
+  const report = (where: string, text: string) => add(where, findLeaks(text, denylist));
 
   for (const path of git("ls-files", "-z").split("\0")) {
-    // npm writes the lockfiles from the registry: package authors' addresses, not ours.
-    if (!path || path.endsWith("package-lock.json")) continue;
+    if (!path) continue;
     const content = readFileSync(path);
-    if (!content.includes(0)) report(path, content.toString("utf8"));
+    if (!content.includes(0)) add(path, findFileLeaks(path, content.toString("utf8"), denylist));
   }
   if (range) {
     for (const sha of git("rev-list", range).split("\n").filter(Boolean)) {
