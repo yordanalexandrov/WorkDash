@@ -10,7 +10,7 @@ This repository is public. Never put anything that identifies the author's emplo
 - work email addresses (commits in this repo use the personal address set in the repo-local git config);
 - details of internal processes or tools beyond what the feature itself needs.
 
-Real values belong only in the git-ignored `config.yaml` and `.env`. Examples use placeholders (`my-org/repo-a`, `colleague1`, `ABC-123`, `example.atlassian.net`). Before every commit, push or publish to GitHub, scan what is about to go out for such data and stop if anything matches.
+Real values belong only in the git-ignored `config.yaml` and `.env`. Examples use placeholders (`my-org/repo-a`, `colleague1`, `ABC-123`, `example.atlassian.net`). Before every commit, push or publish to GitHub, scan what is about to go out for such data and stop if anything matches. `npm run guard -- main..HEAD` does that scan for emails, Jira hosts and the private terms in `.public-guard-denylist`; the `Public` workflow runs it on every PR, but a PR is already public, so run it before pushing.
 
 ## UI design
 
