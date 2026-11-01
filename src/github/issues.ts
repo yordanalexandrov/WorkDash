@@ -1,5 +1,5 @@
-import type { ClosedAs, ClosedIssue, Issue, IssueSnapshot, LinkedPullRequestStatus, SubIssueProgress } from "../domain/issues.js";
-import type { Comment } from "../domain/types.js";
+import type { ClosedAs, ClosedIssue, Issue, IssueSnapshot, LinkedPullRequest, LinkedPullRequestMerge, LinkedPullRequestStatus, SubIssueProgress } from "../domain/issues.js";
+import type { Comment, Mergeable, MergeStateStatus } from "../domain/types.js";
 import { postGraphQL } from "./client.js";
 import { PAGE_SIZE } from "./query.js";
 
@@ -44,7 +44,7 @@ fragment IssueFields on Issue {
   comments { totalCount }
   milestone { title dueOn }
   closedByPullRequestsReferences(first: ${LINKED_PULL_REQUESTS_PAGE_SIZE}) {
-    nodes { number url state isDraft repository { nameWithOwner } }
+    nodes { number url state isDraft mergeable mergeStateStatus repository { nameWithOwner } }
   }
   parent { number title repository { nameWithOwner } }
   subIssuesSummary { total completed }
@@ -78,6 +78,8 @@ type LinkedPullRequestNode = {
   url: string;
   state: "OPEN" | "MERGED" | "CLOSED";
   isDraft: boolean;
+  mergeable: Mergeable;
+  mergeStateStatus: MergeStateStatus;
   repository: { nameWithOwner: string };
 };
 
@@ -200,12 +202,7 @@ function toIssue(repo: string, node: IssueNode): Issue {
     comments: node.comments.totalCount,
     latestComments: [],
     milestone: node.milestone && { title: node.milestone.title, dueOn: node.milestone.dueOn },
-    linkedPullRequests: node.closedByPullRequestsReferences.nodes.map((pr) => ({
-      repo: pr.repository.nameWithOwner,
-      number: pr.number,
-      url: pr.url,
-      status: linkedStatus(pr),
-    })),
+    linkedPullRequests: node.closedByPullRequestsReferences.nodes.map(toLinkedPullRequest),
     parent: node.parent && { repo: node.parent.repository.nameWithOwner, number: node.parent.number, title: node.parent.title },
     subIssues: subIssueProgress(node.subIssuesSummary),
     dependencies: {
@@ -221,6 +218,28 @@ function toIssue(repo: string, node: IssueNode): Issue {
 }
 
 /** An open draft is a draft; otherwise GitHub's state says it. */
+function toLinkedPullRequest(pr: LinkedPullRequestNode): LinkedPullRequest {
+  const status = linkedStatus(pr);
+  const linked: LinkedPullRequest = { repo: pr.repository.nameWithOwner, number: pr.number, url: pr.url, status };
+  return status === "open" ? { ...linked, merge: linkedMerge(pr) } : linked;
+}
+
+const MERGES: Record<MergeStateStatus, LinkedPullRequestMerge> = {
+  CLEAN: "ready",
+  HAS_HOOKS: "ready",
+  UNSTABLE: "ready",
+  BEHIND: "behind",
+  DIRTY: "conflict",
+  BLOCKED: "blocked",
+  DRAFT: "unknown",
+  UNKNOWN: "unknown",
+};
+
+/** Whether an open PR can go in; `mergeable` may say CONFLICTING while the state is still being computed. */
+function linkedMerge(pr: LinkedPullRequestNode): LinkedPullRequestMerge {
+  return pr.mergeable === "CONFLICTING" ? "conflict" : MERGES[pr.mergeStateStatus];
+}
+
 function linkedStatus(pr: LinkedPullRequestNode): LinkedPullRequestStatus {
   if (pr.state === "OPEN") return pr.isDraft ? "draft" : "open";
   return pr.state === "MERGED" ? "merged" : "closed";

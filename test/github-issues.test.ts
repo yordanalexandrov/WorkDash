@@ -163,6 +163,8 @@ describe("fetchIssues", () => {
       url: `https://github.com/${repo}/pull/${number}`,
       state,
       isDraft,
+      mergeable: "MERGEABLE",
+      mergeStateStatus: isDraft ? "DRAFT" : "CLEAN",
       repository: { nameWithOwner: repo },
     });
     const github = fakeGitHub(() =>
@@ -172,12 +174,39 @@ describe("fetchIssues", () => {
     const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
 
     expect(snapshot.issues[0]!.linkedPullRequests).toEqual([
-      { repo: "my-org/repo-a", number: 10, url: "https://github.com/my-org/repo-a/pull/10", status: "open" },
+      { repo: "my-org/repo-a", number: 10, url: "https://github.com/my-org/repo-a/pull/10", status: "open", merge: "ready" },
       { repo: "my-org/repo-a", number: 11, url: "https://github.com/my-org/repo-a/pull/11", status: "draft" },
       { repo: "my-org/repo-a", number: 12, url: "https://github.com/my-org/repo-a/pull/12", status: "merged" },
       { repo: "my-org/repo-a", number: 13, url: "https://github.com/my-org/repo-a/pull/13", status: "closed" },
-      { repo: "my-org/repo-b", number: 4, url: "https://github.com/my-org/repo-b/pull/4", status: "open" },
+      { repo: "my-org/repo-b", number: 4, url: "https://github.com/my-org/repo-b/pull/4", status: "open", merge: "ready" },
     ]);
+  });
+
+  it("says of an open linked PR whether it can be merged, needs a rebase or cannot go in", async () => {
+    const pr = (number: number, mergeStateStatus: string, mergeable = "MERGEABLE") => ({
+      number,
+      url: `https://github.com/my-org/repo-a/pull/${number}`,
+      state: "OPEN",
+      isDraft: false,
+      mergeable,
+      mergeStateStatus,
+      repository: { nameWithOwner: "my-org/repo-a" },
+    });
+    const nodes = [
+      pr(1, "CLEAN"),
+      pr(2, "HAS_HOOKS"),
+      pr(3, "UNSTABLE"),
+      pr(4, "BEHIND"),
+      pr(5, "DIRTY", "CONFLICTING"),
+      pr(6, "UNKNOWN", "CONFLICTING"),
+      pr(7, "BLOCKED"),
+      pr(8, "UNKNOWN", "UNKNOWN"),
+    ];
+    const github = fakeGitHub(() => repository([issueNode(1, { closedByPullRequestsReferences: { nodes } })]));
+
+    const snapshot = await fetchIssues({ repo: "my-org/repo-a", token: "t", closedSince: SINCE, fetch: github.fetch });
+
+    expect(snapshot.issues[0]!.linkedPullRequests.map((linked) => linked.merge)).toEqual(["ready", "ready", "ready", "behind", "conflict", "conflict", "blocked", "unknown"]);
   });
 
   it("reads the parent, the progress of the sub-issues and how many blockers there are, open and in all, both ways", async () => {

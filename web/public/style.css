@@ -1412,6 +1412,11 @@ kbd {
   --c: var(--merged);
 }
 
+/* A Linked PR closed without a merge. */
+.ic.struck {
+  text-decoration: line-through;
+}
+
 .chk svg {
   width: 15px;
   height: 15px;
