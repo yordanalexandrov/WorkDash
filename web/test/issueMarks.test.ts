@@ -18,16 +18,16 @@ describe("linkedPrMark", () => {
 
   it("names a PR of the issue's own repo by its number, and says its status on hover", () => {
     expect(linkedPrMark(linked("merged"), "my-org/repo-a")).toEqual({
-      text: "#12",
+      text: "PR #12",
       kind: "merged",
       title: "PR #12 · merged",
       url: "https://github.com/my-org/repo-a/pull/12",
     });
-    expect(linkedPrMark(linked("open"), "My-Org/Repo-A").text).toBe("#12");
+    expect(linkedPrMark(linked("open"), "My-Org/Repo-A").text).toBe("PR #12");
   });
 
   it("names a PR of another repo by the repo's short name too", () => {
-    expect(linkedPrMark(linked("closed", "my-org/repo-b", 4), "my-org/repo-a")).toMatchObject({ text: "repo-b#4", title: "PR my-org/repo-b#4 · затворен" });
+    expect(linkedPrMark(linked("closed", "my-org/repo-b", 4), "my-org/repo-a")).toMatchObject({ text: "PR repo-b#4", title: "PR my-org/repo-b#4 · затворен" });
   });
 });
 

@@ -34,25 +34,13 @@ type Parent = NonNullable<StagedIssue["parent"]>;
 
 /**
  * A run of a column's cards: an issue without a parent, or the sub-issues of one parent in that column under the parent's
- * head. `spread` says the parent's sub-issues are in more than one column, so its head is a quiet one; `led` that the
- * parent's own card is right above them, so the head need not name it.
+ * head. `led` says the parent's own card is right above them, so the head need not name it.
  */
-export type CardRun<T> = { kind: "issue"; issue: T } | { kind: "parent"; key: string; parent: Parent; items: T[]; spread: boolean; led: boolean };
+export type CardRun<T> = { kind: "issue"; issue: T } | { kind: "parent"; key: string; parent: Parent; items: T[]; led: boolean };
 
-/** The parents (by `issueKey`) whose sub-issues are in more than one of the columns given. */
-export function spreadParents(columns: { items: { parent: Parent | null }[] }[]): Set<string> {
-  const seen = new Map<string, number>();
-  const spread = new Set<string>();
-  columns.forEach((column, index) => {
-    for (const { parent } of column.items) {
-      if (!parent) continue;
-      const key = issueKey(parent);
-      const first = seen.get(key);
-      if (first === undefined) seen.set(key, index);
-      else if (first !== index) spread.add(key);
-    }
-  });
-  return spread;
+/** The labels of every issue the board has, open (all but the stage label) or closed, by `issueKey`: what a parent's head shows. */
+export function labelsByIssue(state: Pick<IssueBoardState, "issues" | "closed">): Map<string, IssueLabel[]> {
+  return new Map([...state.issues.map((issue) => [issueKey(issue), cardLabels(issue)] as const), ...state.closed.map((issue) => [issueKey(issue), issue.labels] as const)]);
 }
 
 /**
@@ -60,7 +48,7 @@ export function spreadParents(columns: { items: { parent: Parent | null }[] }[])
  * column has it (and it is no one's sub-issue), else where the first of them is in the order given; an issue without a
  * parent where it is.
  */
-export function parentRuns<T extends { repo: string; number: number; parent: Parent | null }>(items: T[], spread: ReadonlySet<string>): CardRun<T>[] {
+export function parentRuns<T extends { repo: string; number: number; parent: Parent | null }>(items: T[]): CardRun<T>[] {
   type Group = Extract<CardRun<T>, { kind: "parent" }>;
   const groups = new Map<string, Group>();
   for (const issue of items) {
@@ -68,7 +56,7 @@ export function parentRuns<T extends { repo: string; number: number; parent: Par
     const key = issueKey(issue.parent);
     const group = groups.get(key);
     if (group) group.items.push(issue);
-    else groups.set(key, { kind: "parent", key, parent: issue.parent, items: [issue], spread: spread.has(key), led: false });
+    else groups.set(key, { kind: "parent", key, parent: issue.parent, items: [issue], led: false });
   }
   const leads = new Set(items.filter((issue) => !issue.parent && groups.has(issueKey(issue))).map((issue) => issueKey(issue)));
   const runs: CardRun<T>[] = [];

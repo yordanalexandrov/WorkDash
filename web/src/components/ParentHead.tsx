@@ -1,19 +1,20 @@
 import { sameRepo } from "../../../src/domain/repos.js";
+import type { IssueLabel } from "../api.js";
 import { shortRepo } from "../format.js";
 import type { CardRun } from "../issueBoard.js";
+import { LabelChips } from "./IssueMarks.js";
 
-/** How a card sits under its parent's head: in a plain group, in a quiet one, or on its own. */
-export type CardNest = "group" | "quiet" | null;
-
-/** The class of a card's slot: hidden while its sheet is open, indented under its parent's head. */
-export function slotClass(ghost: boolean, nest: CardNest): string {
-  return `slot${ghost ? " ghost" : ""}${nest ? ` nested ${nest}` : ""}`;
+/** The class of a card's slot: hidden while its sheet is open, indented on a dashed rail under its parent's head. */
+export function slotClass(ghost: boolean, nested: boolean): string {
+  return `slot${ghost ? " ghost" : ""}${nested ? " nested" : ""}`;
 }
 
 type ParentHeadProps = {
   run: Extract<CardRun<unknown>, { kind: "parent" }>;
   /** The open repo, so a parent of another repo says its repo. */
   repo: string;
+  /** The parent's labels, when the board has the parent; none else. */
+  labels: IssueLabel[];
   /** Unique on the board: the column's id and the parent's key. */
   id: string;
   shut: boolean;
@@ -23,16 +24,16 @@ type ParentHeadProps = {
 };
 
 /**
- * The head of a parent's sub-issues in a column: ▾, `#n` and the parent's title, the count; a click folds or unfolds them.
- * Right under the parent's own card it says only "sub-issues". When the parent's sub-issues are in several columns it is
- * a quiet one, small and faint, in each of them.
+ * The quiet head of a parent's sub-issues in a column: ▾, what it says, the count; a click folds or unfolds them. Right
+ * under the parent's own card it says only "sub-issues"; in a column without the parent it says the parent's `#n` and
+ * labels (its title on hover) on a faint fill, which tells that the parent is elsewhere.
  */
-export function ParentHead({ run, repo, id, shut, index, onToggle }: ParentHeadProps) {
-  const { parent, items, spread, led } = run;
+export function ParentHead({ run, repo, labels, id, shut, index, onToggle }: ParentHeadProps) {
+  const { parent, items, led } = run;
   const number = `${sameRepo(parent.repo, repo) ? "" : shortRepo(parent.repo)}#${parent.number}`;
   return (
     <div
-      class={`phead${spread ? " quiet" : ""}${shut ? " shut" : ""}`}
+      class={`phead${led ? "" : " away"}${shut ? " shut" : ""}`}
       role="button"
       tabIndex={0}
       aria-expanded={!shut}
@@ -52,10 +53,10 @@ export function ParentHead({ run, repo, id, shut, index, onToggle }: ParentHeadP
       {led ? (
         <span class="ptitle">sub-issues</span>
       ) : (
-        <>
+        <span class="ptitle">
           <span class="pnum">{number}</span>
-          <span class="ptitle">{parent.title}</span>
-        </>
+          <LabelChips labels={labels} />
+        </span>
       )}
       <span class="pcount">{items.length}</span>
     </div>

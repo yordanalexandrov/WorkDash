@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { closedIssue, issue } from "../../test/fixtures.js";
 import type { StagedIssue } from "../src/api.js";
-import { cardLabels, issueColumns, parentRuns, spreadParents } from "../src/issueBoard.js";
+import { cardLabels, issueColumns, labelsByIssue, parentRuns } from "../src/issueBoard.js";
 
 const staged = (number: number, stage: string | null, ...labels: string[]): StagedIssue => ({
   ...issue({ number, labels: labels.map((name) => ({ name, color: "ededed" })) }),
@@ -78,7 +78,7 @@ const child = (number: number, parent: number | null, repo = "my-org/repo-a"): S
 
 describe("parentRuns", () => {
   it("keeps the sub-issues of one parent together where the first of them is, and the others where they are", () => {
-    const runs = parentRuns([child(1, null), child(2, 10), child(3, null), child(4, 10), child(5, 20)], new Set());
+    const runs = parentRuns([child(1, null), child(2, 10), child(3, null), child(4, 10), child(5, 20)]);
 
     expect(runs.map((run) => (run.kind === "issue" ? run.issue.number : { parent: run.parent.number, numbers: run.items.map((item) => item.number) }))).toEqual([
       1,
@@ -88,34 +88,31 @@ describe("parentRuns", () => {
     ]);
   });
 
-  it("tells apart parents of the same number in another repo and marks the spread ones", () => {
-    const runs = parentRuns([child(1, 10), child(2, 10, "my-org/repo-b")], new Set(["my-org/repo-b#10"]));
+  it("tells apart parents of the same number in another repo", () => {
+    const runs = parentRuns([child(1, 10), child(2, 10, "my-org/repo-b")]);
 
-    expect(runs.map((run) => run.kind === "parent" && { key: run.key, spread: run.spread })).toEqual([
-      { key: "my-org/repo-a#10", spread: false },
-      { key: "my-org/repo-b#10", spread: true },
-    ]);
+    expect(runs.map((run) => run.kind === "parent" && run.key)).toEqual(["my-org/repo-a#10", "my-org/repo-b#10"]);
   });
 });
 
 describe("parentRuns with the parent in the column", () => {
   it("puts the sub-issues right after their parent's card, wherever the first of them is", () => {
-    const runs = parentRuns([child(2, 10), child(1, null), child(10, null), child(4, 10)], new Set());
+    const runs = parentRuns([child(2, 10), child(1, null), child(10, null), child(4, 10)]);
 
     expect(runs.map((run) => (run.kind === "issue" ? run.issue.number : { led: run.led, numbers: run.items.map((item) => item.number) }))).toEqual([1, 10, { led: true, numbers: [2, 4] }]);
   });
 
   it("does not pull a sub-issue's own sub-issues after it: they stay where the first of them is", () => {
-    const runs = parentRuns([child(2, 10), child(10, 5)], new Set());
+    const runs = parentRuns([child(2, 10), child(10, 5)]);
 
     expect(runs.map((run) => (run.kind === "issue" ? run.issue.number : `${run.parent.number}:${run.items.map((item) => item.number).join(",")}`))).toEqual(["10:2", "5:10"]);
   });
 });
 
-describe("spreadParents", () => {
-  it("names the parents whose sub-issues are in more than one column", () => {
-    const spread = spreadParents([{ items: [child(1, 10), child(2, 20), child(3, 20)] }, { items: [child(4, 10)] }, { items: [child(5, null)] }]);
+describe("labelsByIssue", () => {
+  it("gives an open issue's labels but its stage label, and a closed one's all", () => {
+    const labels = labelsByIssue({ issues: [staged(1, "todo", "todo", "epic")], closed: [closedIssue({ number: 2, labels: [{ name: "todo", color: "ededed" }] })] });
 
-    expect([...spread]).toEqual(["my-org/repo-a#10"]);
+    expect(Object.fromEntries([...labels].map(([key, list]) => [key, list.map((label) => label.name)]))).toEqual({ "my-org/repo-a#1": ["epic"], "my-org/repo-a#2": ["todo"] });
   });
 });
