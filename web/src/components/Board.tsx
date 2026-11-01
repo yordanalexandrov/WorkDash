@@ -14,19 +14,21 @@ type BoardProps<C extends ColumnHead> = {
   booted: boolean;
   /** The column whose head `run` gets a while after it shows unfolded (`onReveal` of Column). */
   reveal?: { id: string; run(head: HTMLElement): void } | null;
+  /** Columns as tall as their cards, the board scrolling down as a whole, instead of each column scrolling on its own. */
+  tall?: boolean;
 };
 
 /**
  * One column per entry, side by side; a column folded or unfolded by hand stays so while the page is open.
  * Columns and cards glide to their new places after every change (FLIP) and cascade in when the board first shows.
  */
-export function Board<C extends ColumnHead>({ columns, children, message, booted, reveal }: BoardProps<C>) {
+export function Board<C extends ColumnHead>({ columns, children, message, booted, reveal, tall = false }: BoardProps<C>) {
   const [folded, setFolded] = useState<Record<string, boolean>>({});
   const ref = useRef<HTMLElement>(null);
   useFlip(ref);
   const toggle = (column: C) => setFolded((all) => ({ ...all, [column.id]: !isStrip(column.count, all[column.id]) }));
   return (
-    <main ref={ref} class={`board${booted ? " booted" : ""}`} data-flip-root>
+    <main ref={ref} class={`board${booted ? " booted" : ""}${tall ? " tall" : ""}`} data-flip-root>
       {columns.map((column, index) => (
         <Column
           key={column.id}

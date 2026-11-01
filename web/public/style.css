@@ -961,6 +961,110 @@ kbd {
   padding: 2px 9px 12px;
 }
 
+/* The Issue board's columns grow as tall as their cards and the board scrolls down as a whole: no column scrolls on its own. */
+.board.tall {
+  overflow-y: auto;
+}
+
+.board.tall .col:not(.strip) {
+  max-height: none;
+}
+
+/* clip, not hidden: hidden across would turn visible down into a scroll box. */
+.board.tall .cards {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+/* A parent's sub-issues in a column: its head, then its cards indented on a rail. When they are in several columns, the head
+   in each is quiet: small, faint, no fill, and the rail a faint dashed line. */
+.phead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 3px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  user-select: none;
+}
+
+.phead:hover {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+
+.phead .caret {
+  display: inline-block;
+  font-size: 10px;
+  transition: transform var(--glide-ms, 0.3s) var(--glide, ease-out);
+}
+
+.phead.shut .caret {
+  transform: rotate(-90deg);
+}
+
+.phead .ptitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phead .pcount {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.phead.quiet {
+  gap: 4px;
+  margin: 0 0 -5px;
+  padding: 0 4px;
+  color: var(--faint);
+  background: none;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
+.phead.quiet:hover {
+  color: var(--muted);
+  background: none;
+}
+
+.phead.quiet .caret {
+  font-size: 8px;
+}
+
+.phead.quiet .pcount {
+  font-size: 10px;
+}
+
+.slot.nested {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--muted) 22%, transparent);
+}
+
+.slot.nested.quiet {
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px dashed var(--line);
+}
+
+.phead {
+  animation: enter var(--bounce-ms, 650ms) var(--bounce, ease-out) both;
+  animation-delay: calc(240ms + var(--ci, 0) * 80ms + min(var(--ti, 0), 12) * 60ms);
+}
+
+.board.booted .phead {
+  animation-delay: 0s;
+}
+
 .col.strip {
   flex: 0 0 46px;
   align-self: stretch;
