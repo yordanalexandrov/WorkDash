@@ -41,7 +41,7 @@
     "mermaid": "^12.2.0",
     "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
-    "preact": "^10.29.8",
+    "preact": "^11.1.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   }

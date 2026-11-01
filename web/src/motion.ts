@@ -178,7 +178,7 @@ export function layoutPos(el: HTMLElement, root: Element): Pos {
  * column is a new node) glides and skips its entrance. A change of `reset` (a new view) and reduced motion only record positions,
  * and so does scrolling a column, so that the next commit does not glide what only scrolled.
  */
-export function useFlip(root: RefObject<HTMLElement>, reset?: unknown): void {
+export function useFlip(root: RefObject<HTMLElement | null>, reset?: unknown): void {
   const before = useRef(new Map<string, { pos: Pos; el: HTMLElement }>());
   const last = useRef(reset);
   useEffect(() => {

@@ -16,7 +16,7 @@ type ToolbarProps = {
   /** How many open items the filter keeps, and of how many. */
   shown: number;
   total: number;
-  inputRef: RefObject<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement | null>;
   /** "Пусни деня": whether it runs, whether it can (not before the first snapshot), and starting or stopping it; only the PR dashboard has it. */
   replay?: { on: boolean; disabled: boolean; onToggle(): void };
 };

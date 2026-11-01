@@ -11,6 +11,8 @@ describe("findLeaks", () => {
       "origin git@github.com:yordanalexandrov/WorkDash.git",
       "Signed-off-by: dependabot[bot] <support@github.com>",
       "Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+      "- [Changelog](https://github.com/electron-userland/electron-builder/blob/electron-builder@26.18.0/CHANGELOG.md)",
+      "npm i preact@11.1.0 @types/node@22.20.5",
     ].join("\n");
     expect(findLeaks(text)).toEqual([]);
   });
