@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 export type Leak = { line: number; kind: "email address" | "Jira instance" | "denylisted term" };
 
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
-const ALLOWED_EMAIL = /^(?:lamercian@gmail\.com|[\w.+-]+@users\.noreply\.github\.com|noreply@github\.com|git@github\.com|[\w.+-]+@example\.(?:com|org|net))$/i;
+const ALLOWED_EMAIL = /^(?:lamercian@gmail\.com|[\w.+-]+@users\.noreply\.github\.com|noreply@github\.com|support@github\.com|git@github\.com|[\w.+-]+@example\.(?:com|org|net))$/i;
 const JIRA = /([\p{L}\p{N}-]+)\.atlassian\.net/giu;
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
 
