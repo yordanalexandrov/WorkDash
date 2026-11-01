@@ -85,8 +85,15 @@ docker compose cp ./config.yaml workdash:/app/data/config.yaml
 ## Пускане
 
 ```sh
-docker compose up -d --build
+npm run deploy                # последният origin/main
+npm run deploy -- <ref>       # или конкретен commit, tag или branch
 ```
+
+Образът се строи от `git archive` на посочения commit, а не от работната директория, затова некомитнати
+промени и checkout-натият branch не влизат в него. Получава tag `workdash:<sha>` и label
+`org.opencontainers.image.revision`; вече построен commit не се строи отново. Базовите образи са закачени по
+digest. Скриптът пресъздава контейнера без build и приключва, когато контейнерът е на този commit и таблото
+отговаря. Връщане назад: `npm run deploy -- <предишен sha>`.
 
 Таблото е на <http://localhost:3000>. Сървърът пита GitHub на всеки `github.poll_interval` и праща
 резултата на отворените табла през SSE (`/api/events`), без reload. Превключвателят „При поискване“ в горната
