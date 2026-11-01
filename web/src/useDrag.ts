@@ -82,7 +82,7 @@ function swallowClickAfter(pointerId: number): void {
  * the zone, until `onDrop` has settled and a gate hold more has passed for the render that takes it away; if it is still there
  * then, it shows again.
  */
-export function useDrag(layer: RefObject<HTMLElement>, zone: RefObject<HTMLElement>): Drag {
+export function useDrag(layer: RefObject<HTMLElement | null>, zone: RefObject<HTMLElement | null>): Drag {
   const press = useRef<Press | null>(null);
   const [held, setHeld] = useState<ReadonlySet<string>>(() => new Set());
   const [zoneState, setZoneState] = useState<ZoneState>("off");

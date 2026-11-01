@@ -83,7 +83,7 @@ type IssueDashboardProps = {
   /** Where in the top bar the tabs go, below the toggles. */
   topSlot: HTMLElement | null;
   /** The effects layer, for the confetti of an issue completed while the board shows. */
-  fx: RefObject<HTMLDivElement>;
+  fx: RefObject<HTMLDivElement | null>;
   booted: boolean;
 };
 
@@ -142,7 +142,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const [sheet, setSheet] = useState<OpenSheet | null>(null);
   const openKey = sheet ? issueKey(sheet.issue) : null;
   const live = openKey ? findIssue(shown, openKey) : undefined;
-  const shownSheet = useRef<ShownIssue>();
+  const shownSheet = useRef<ShownIssue | undefined>(undefined);
   if (live) shownSheet.current = live;
   const openSheet = (issue: ShownIssue, from: HTMLElement) =>
     setSheet({ issue: { repo: issue.repo, number: issue.number }, flip: from.dataset["flip"] ?? issueFlipKey(issue), from: from.getBoundingClientRect(), closing: false });

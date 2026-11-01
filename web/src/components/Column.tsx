@@ -26,7 +26,7 @@ type ColumnProps = {
 export function Column({ column, index, strip, onToggle, booted, onReveal, children }: ColumnProps) {
   const { title, accent, count } = column;
   const hot = column.hot && !strip;
-  const head = useRef<HTMLElement>(null);
+  const head = useRef<HTMLDivElement>(null);
   const reveal = useRef(onReveal);
   reveal.current = onReveal;
   const turn = booted ? 0 : index * 80;
@@ -40,7 +40,7 @@ export function Column({ column, index, strip, onToggle, booted, onReveal, child
     <section class={`col${strip ? " strip" : ""}${hot ? " hot" : ""}`} data-flip={`col:${column.id}`} style={{ "--accent": accent, "--ci": index }}>
       {hot ? <span class="halo" aria-hidden="true" /> : null}
       {hot ? <span class="ring" aria-hidden="true" /> : null}
-      <header
+      <div
         ref={head}
         class="col-head"
         role="button"
@@ -56,7 +56,7 @@ export function Column({ column, index, strip, onToggle, booted, onReveal, child
       >
         <h2>{title}</h2>
         <CountUp id={`col:${column.id}`} value={count} delay={strip || booted ? turn : 240 + turn} />
-      </header>
+      </div>
       {strip ? null : <div class="cards">{count ? children : <p class="col-empty">Празно</p>}</div>}
     </section>
   );

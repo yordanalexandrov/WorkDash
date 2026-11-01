@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # The types follow the oldest Node the server supports (engines: >=22), not the newest.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       # One PR for the tooling, one for what ships.
       dev:

@@ -101,7 +101,7 @@ type PrDashboardProps = {
   /** Where in the top bar the toolbar and "Пусни деня" go, below the toggles. */
   topSlot: HTMLElement | null;
   /** The effects layer, shared with the view switch's flyers. */
-  fx: RefObject<HTMLDivElement>;
+  fx: RefObject<HTMLDivElement | null>;
   booted: boolean;
 };
 
@@ -123,7 +123,7 @@ export function PrDashboard({ state, seen, shown, view, hues, topSlot, fx, boote
   const toggleSize = () => setExpanded((current) => !current);
   // What the sheet shows: the PR as the state has it now, or, once it has left the open ones, as it last was.
   const live = sheet ? findOpen(state, prKey(sheet.pr)) : undefined;
-  const shownSheet = useRef<{ pr: DashboardPullRequest; section: Section }>();
+  const shownSheet = useRef<{ pr: DashboardPullRequest; section: Section } | undefined>(undefined);
   if (live) shownSheet.current = live;
   const openSheet = (pr: DashboardPullRequest, from: HTMLElement) =>
     setSheet({ pr: { repo: pr.repo, number: pr.number }, from: from.getBoundingClientRect(), closing: false });
