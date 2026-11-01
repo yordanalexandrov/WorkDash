@@ -20,6 +20,7 @@
     "lint": "oxlint --type-aware --deny-warnings",
     "knip": "knip",
     "guard": "node scripts/public-guard.ts",
+    "deploy": "node scripts/deploy.ts",
     "test": "vitest run",
     "version": "npm --prefix desktop version \"$npm_package_version\" --no-git-tag-version --allow-same-version && git add desktop/package.json desktop/package-lock.json"
   },
