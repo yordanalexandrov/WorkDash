@@ -1,12 +1,12 @@
 import type { RefObject, VNode } from "preact";
 import { createPortal } from "preact/compat";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ClosedIssue, IssueBoardState, StagedIssue } from "../api.js";
+import type { ClosedIssue, IssueBoardState, IssueLabel, StagedIssue } from "../api.js";
 import { issueTabs, pickRepo } from "../dashboard.js";
 import { confetti, middleOf, NO_WATCH, watchCompleted } from "../effects.js";
 import type { Filter } from "../filter.js";
 import { shortRepo } from "../format.js";
-import { issueColumns, parentRuns, spreadParents } from "../issueBoard.js";
+import { issueColumns, labelsByIssue, parentRuns } from "../issueBoard.js";
 import { filterIssueColumns, filterIssues } from "../issueFilter.js";
 import { findIssue, type ShownIssue } from "../issueDetail.js";
 import { nodeInSnapshot } from "../issueGraph.js";
@@ -22,7 +22,7 @@ import { IssueCard } from "./IssueCard.js";
 import { IssueDetail } from "./IssueDetail.js";
 import { CLOSED_ISSUES, ISSUE_DEFAULT_SORT, IssueTable } from "./IssueTable.js";
 import { IssueTabs } from "./IssueTabs.js";
-import { type CardNest, ParentHead } from "./ParentHead.js";
+import { ParentHead } from "./ParentHead.js";
 import { Sheet } from "./Sheet.js";
 import { Toolbar } from "./Toolbar.js";
 import type { GraphIssue } from "../../../src/domain/issue-graph.js";
@@ -126,8 +126,8 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   const shown = issues && open && sameRepo(issues.repo, open) ? issues : null;
   // Every column the board has goes through the filter; the toolbar's "N от M" counts the open issues.
   const columns = useMemo(() => (shown ? filterIssueColumns(issueColumns(shown), filter, viewer) : []), [shown, filter, viewer]);
-  // The parents whose sub-issues are in more than one column get a quiet head in each; which heads are folded, while the board shows.
-  const spread = useMemo(() => spreadParents(columns), [columns]);
+  // A parent's head in a column without it shows its labels; which heads are folded, while the board shows.
+  const labels = useMemo(() => (shown ? labelsByIssue(shown) : new Map<string, IssueLabel[]>()), [shown]);
   const [shutParents, setShutParents] = useState<ReadonlySet<string>>(new Set());
   const keptIssues = useMemo(() => (shown ? filterIssues(shown.issues, filter, viewer) : []), [shown, filter, viewer]);
   const keptClosed = useMemo(() => (shown ? filterIssues(shown.closed, filter, viewer) : []), [shown, filter, viewer]);
@@ -235,27 +235,27 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
           {(column) => {
             // A parent's sub-issues sit together under its head in each column; a click on the head folds them there.
             let index = 0;
-            const runs = <T extends StagedIssue | ClosedIssue>(items: T[], card: (issue: T, index: number, nest: CardNest) => VNode) =>
-              parentRuns(items, spread).flatMap((run) => {
-                if (run.kind === "issue") return [card(run.issue, index++, null)];
+            const runs = <T extends StagedIssue | ClosedIssue>(items: T[], card: (issue: T, index: number, nested: boolean) => VNode) =>
+              parentRuns(items).flatMap((run) => {
+                if (run.kind === "issue") return [card(run.issue, index++, false)];
                 const id = `${column.id}|${run.key}`;
                 const shut = shutParents.has(id);
                 const head = (
-                  <ParentHead key={`pg:${id}`} run={run} repo={open ?? ""} id={id} shut={shut} index={index++} onToggle={() => setShutParents((current) => toggleCollapsed(current, id))} />
+                  <ParentHead key={`pg:${id}`} run={run} repo={open ?? ""} labels={labels.get(run.key) ?? []} id={id} shut={shut} index={index++} onToggle={() => setShutParents((current) => toggleCollapsed(current, id))} />
                 );
-                return [head, ...(shut ? [] : run.items.map((issue) => card(issue, index++, run.spread ? "quiet" : "group")))];
+                return [head, ...(shut ? [] : run.items.map((issue) => card(issue, index++, true)))];
               });
             return column.closed
-              ? runs(column.items, (issue, at, nest) => (
-                  <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={at} nest={nest} onOpen={openSheet} ghost={sheet?.flip === issueFlipKey(issue)} />
+              ? runs(column.items, (issue, at, nested) => (
+                  <ClosedIssueCard key={`${issue.repo}#${issue.number}`} issue={issue} hue={hue} index={at} nested={nested} onOpen={openSheet} ghost={sheet?.flip === issueFlipKey(issue)} />
                 ))
-              : runs(column.items, (issue, at, nest) => (
+              : runs(column.items, (issue, at, nested) => (
                   <IssueCard
                     key={`${issue.repo}#${issue.number}`}
                     issue={issue}
                     hue={hue}
                     index={at}
-                    nest={nest}
+                    nested={nested}
                     mine={assignedToMe(issue, viewer)}
                     onOpen={openSheet}
                     ghost={sheet?.flip === issueFlipKey(issue)}

@@ -5,7 +5,7 @@ import { sheetOpeners } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { issueFlipKey } from "../motion.js";
-import { type CardNest, slotClass } from "./ParentHead.js";
+import { slotClass } from "./ParentHead.js";
 import { Avatar } from "./Avatar.js";
 import { BlockedChip, LabelChips, LinkedPrs, MeChip, MilestoneChip, SubIssuesChip } from "./IssueMarks.js";
 
@@ -21,8 +21,8 @@ type IssueCardProps = {
   onOpen(issue: StagedIssue, from: HTMLElement): void;
   /** Hidden while its sheet is open, so the sheet looks like the card grown. */
   ghost: boolean;
-  /** Under its parent's head: a plain group's, or the quiet one of a parent whose sub-issues are in several columns. */
-  nest?: CardNest;
+  /** Under its parent's head, indented on a rail. */
+  nested?: boolean;
 };
 
 /**
@@ -31,11 +31,11 @@ type IssueCardProps = {
  * sub-issues ("3/9") and a quiet "блокиран" when it has an open blocker. No repo tag: the tab says the repo, the stripe and tint its project colour.
  * The slot is what moves (entrance, FLIP), as on the PR board. A click or Enter on it opens its detail sheet.
  */
-export function IssueCard({ issue, hue, index, mine, onOpen, ghost, nest = null }: IssueCardProps) {
+export function IssueCard({ issue, hue, index, mine, onOpen, ghost, nested = false }: IssueCardProps) {
   const slot = useRef<HTMLDivElement>(null);
   const labels = cardLabels(issue);
   return (
-    <div ref={slot} class={slotClass(ghost, nest)} data-flip={issueFlipKey(issue)} style={{ "--ti": index }}>
+    <div ref={slot} class={slotClass(ghost, nested)} data-flip={issueFlipKey(issue)} style={{ "--ti": index }}>
       <article class="card opens" style={{ "--rh": hue }} tabIndex={0} {...sheetOpeners(() => onOpen(issue, slot.current!))}>
         <div class="card-top">
           <a class="num" href={issue.url} target="_blank" rel="noopener">{`#${issue.number}`}</a>

@@ -6,7 +6,7 @@ import { count } from "./badges.js";
 import { shortRepo } from "./format.js";
 import { sameRepo } from "../../src/domain/repos.js";
 
-/** A Linked PR as a small chip: its number (with the repo when it is another), its status colour, a link to GitHub. */
+/** A Linked PR as a small chip: "PR" and its number (with the repo when it is another), its status colour, a link to GitHub. */
 export type LinkedPrMark = { text: string; kind: "ok" | "muted" | "merged" | "bad"; title: string; url: string };
 
 // Status colours, as GitHub draws a PR: open green, draft grey, merged violet, closed red.
@@ -17,7 +17,7 @@ const WORDS: Record<LinkedPullRequestStatus, string> = { open: "отворен",
 export function linkedPrMark(pr: LinkedPullRequest, issueRepo: string): LinkedPrMark {
   const own = sameRepo(pr.repo, issueRepo);
   return {
-    text: own ? `#${pr.number}` : `${shortRepo(pr.repo)}#${pr.number}`,
+    text: own ? `PR #${pr.number}` : `PR ${shortRepo(pr.repo)}#${pr.number}`,
     kind: KINDS[pr.status],
     title: `PR ${own ? "" : pr.repo}#${pr.number} · ${WORDS[pr.status]}`,
     url: pr.url,
