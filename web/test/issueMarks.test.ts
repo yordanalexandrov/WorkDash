@@ -1,25 +1,40 @@
 import { describe, expect, it } from "vitest";
+import type { LinkedPullRequestMerge } from "../../src/domain/issues.js";
 import { assignedToMe, blockedCountMark, blockedMark, closedAsMark, linkedPrMark, milestoneMark, stageMark, subIssuesMark } from "../src/issueMarks.js";
 
-const linked = (status: "open" | "draft" | "merged" | "closed", repo = "my-org/repo-a", number = 12) => ({
+const linked = (status: "open" | "draft" | "merged" | "closed", repo = "my-org/repo-a", number = 12, merge?: LinkedPullRequestMerge) => ({
   repo,
   number,
   url: `https://github.com/${repo}/pull/${number}`,
   status,
+  ...(merge && { merge }),
 });
 
 describe("linkedPrMark", () => {
-  it("colours a linked PR by its status, in the status colours", () => {
-    expect(linkedPrMark(linked("open"), "my-org/repo-a").kind).toBe("ok");
-    expect(linkedPrMark(linked("draft"), "my-org/repo-a").kind).toBe("muted");
-    expect(linkedPrMark(linked("merged"), "my-org/repo-a").kind).toBe("merged");
-    expect(linkedPrMark(linked("closed"), "my-org/repo-a").kind).toBe("bad");
+  it("colours a linked PR by its status, in the status colours: a closed one grey and struck through", () => {
+    expect(linkedPrMark(linked("draft"), "my-org/repo-a")).toMatchObject({ kind: "muted", struck: false });
+    expect(linkedPrMark(linked("merged"), "my-org/repo-a")).toMatchObject({ kind: "merged", struck: false });
+    expect(linkedPrMark(linked("closed"), "my-org/repo-a")).toMatchObject({ kind: "muted", struck: true });
+  });
+
+  it("colours an open linked PR by whether it can go in: green mergeable, amber needs a rebase, red cannot", () => {
+    const mark = (merge?: LinkedPullRequestMerge) => linkedPrMark(linked("open", "my-org/repo-a", 12, merge), "my-org/repo-a");
+    expect(mark("ready")).toMatchObject({ kind: "ok", title: "PR #12 · може да се merge-не" });
+    expect(mark("behind")).toMatchObject({ kind: "pending", title: "PR #12 · трябва rebase" });
+    expect(mark("conflict")).toMatchObject({ kind: "bad", title: "PR #12 · конфликт, не може да се merge-не" });
+    expect(mark("blocked")).toMatchObject({ kind: "bad", title: "PR #12 · блокиран от правилата на repo-то, не може да се merge-не" });
+    expect(mark("unknown")).toMatchObject({ kind: "muted", title: "PR #12 · GitHub още проверява дали може да се merge-не" });
+  });
+
+  it("keeps an open linked PR saved before its merge state was read green", () => {
+    expect(linkedPrMark(linked("open"), "my-org/repo-a")).toMatchObject({ kind: "ok", title: "PR #12 · отворен" });
   });
 
   it("names a PR of the issue's own repo by its number, and says its status on hover", () => {
     expect(linkedPrMark(linked("merged"), "my-org/repo-a")).toEqual({
       text: "PR #12",
       kind: "merged",
+      struck: false,
       title: "PR #12 · merged",
       url: "https://github.com/my-org/repo-a/pull/12",
     });

@@ -1,25 +1,44 @@
 // The marks of an issue that the card, the table row and the detail sheet all show.
 
 import { sameLogin } from "../../src/domain/activity.js";
-import type { ClosedAs, Issue, IssueDependencies, LinkedPullRequest, LinkedPullRequestStatus, Milestone, SubIssueProgress } from "../../src/domain/issues.js";
+import type { ClosedAs, Issue, IssueDependencies, LinkedPullRequest, LinkedPullRequestMerge, LinkedPullRequestStatus, Milestone, SubIssueProgress } from "../../src/domain/issues.js";
 import { count } from "./badges.js";
 import { shortRepo } from "./format.js";
 import { sameRepo } from "../../src/domain/repos.js";
 
-/** A Linked PR as a small chip: "PR" and its number (with the repo when it is another), its status colour, a link to GitHub. */
-export type LinkedPrMark = { text: string; kind: "ok" | "muted" | "merged" | "bad"; title: string; url: string };
+/**
+ * A Linked PR as a small chip: "PR" and its number (with the repo when it is another), its status colour, a link to GitHub; a closed
+ * one is struck through.
+ */
+export type LinkedPrMark = { text: string; kind: "ok" | "pending" | "muted" | "merged" | "bad"; struck: boolean; title: string; url: string };
 
-// Status colours, as GitHub draws a PR: open green, draft grey, merged violet, closed red.
-const KINDS: Record<LinkedPullRequestStatus, LinkedPrMark["kind"]> = { open: "ok", draft: "muted", merged: "merged", closed: "bad" };
-const WORDS: Record<LinkedPullRequestStatus, string> = { open: "отворен", draft: "draft", merged: "merged", closed: "затворен" };
+type Look = Pick<LinkedPrMark, "kind"> & { word: string };
+
+// An open PR is coloured by whether it can go in: green it can, amber it needs a rebase, red it cannot. A draft is grey,
+// a merged one violet, a closed one grey and struck through, so that red only ever means "cannot go in".
+const STATUS_LOOKS: Record<LinkedPullRequestStatus, Look> = {
+  open: { kind: "ok", word: "отворен" },
+  draft: { kind: "muted", word: "draft" },
+  merged: { kind: "merged", word: "merged" },
+  closed: { kind: "muted", word: "затворен" },
+};
+const MERGE_LOOKS: Record<LinkedPullRequestMerge, Look> = {
+  ready: { kind: "ok", word: "може да се merge-не" },
+  behind: { kind: "pending", word: "трябва rebase" },
+  conflict: { kind: "bad", word: "конфликт, не може да се merge-не" },
+  blocked: { kind: "bad", word: "блокиран от правилата на repo-то, не може да се merge-не" },
+  unknown: { kind: "muted", word: "GitHub още проверява дали може да се merge-не" },
+};
 
 /** The mark of a Linked PR on an issue of `issueRepo`. */
 export function linkedPrMark(pr: LinkedPullRequest, issueRepo: string): LinkedPrMark {
   const own = sameRepo(pr.repo, issueRepo);
+  const { kind, word } = pr.status === "open" && pr.merge ? MERGE_LOOKS[pr.merge] : STATUS_LOOKS[pr.status];
   return {
     text: own ? `PR #${pr.number}` : `PR ${shortRepo(pr.repo)}#${pr.number}`,
-    kind: KINDS[pr.status],
-    title: `PR ${own ? "" : pr.repo}#${pr.number} · ${WORDS[pr.status]}`,
+    kind,
+    struck: pr.status === "closed",
+    title: `PR ${own ? "" : pr.repo}#${pr.number} · ${word}`,
     url: pr.url,
   };
 }

@@ -19,8 +19,17 @@ export type Milestone = { title: string; dueOn: string | null };
 /** What became of a linked PR: GitHub's state, with a draft told apart from an open PR ready for review. */
 export type LinkedPullRequestStatus = "open" | "draft" | "merged" | "closed";
 
-/** A Linked PR: a pull request that will close the issue when it merges, perhaps in another repo. */
-export type LinkedPullRequest = { repo: string; number: number; url: string; status: LinkedPullRequestStatus };
+/**
+ * Whether an open linked PR can go in: ready to merge, behind its base (needs a rebase), in conflict, blocked by the repo's
+ * rules (reviews or required checks), or not yet known while GitHub computes it.
+ */
+export type LinkedPullRequestMerge = "ready" | "behind" | "conflict" | "blocked" | "unknown";
+
+/**
+ * A Linked PR: a pull request that will close the issue when it merges, perhaps in another repo. `merge` is there only for
+ * an open PR that is not a draft, and is missing from those saved before it was read.
+ */
+export type LinkedPullRequest = { repo: string; number: number; url: string; status: LinkedPullRequestStatus; merge?: LinkedPullRequestMerge };
 
 /** The parent issue of a sub-issue: its repo (perhaps another), number and title. */
 export type ParentIssue = { repo: string; number: number; title: string };
