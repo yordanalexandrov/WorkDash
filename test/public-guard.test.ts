@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 import { findFileLeaks, findLeaks, parseDenylist } from "../scripts/public-guard.js";
 
 describe("findLeaks", () => {
-  it("passes placeholders, the personal address and GitHub's noreply addresses", () => {
+  it("passes placeholders, the personal address and GitHub's own addresses, Dependabot's sign-off too", () => {
     const text = [
       "jira: https://example.atlassian.net/browse/ABC-123",
       "email: me@example.com",
       "Author: lamercian@gmail.com",
       "72871803+yordanalexandrov@users.noreply.github.com noreply@github.com",
       "origin git@github.com:yordanalexandrov/WorkDash.git",
+      "Signed-off-by: dependabot[bot] <support@github.com>",
+      "Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
     ].join("\n");
     expect(findLeaks(text)).toEqual([]);
   });
