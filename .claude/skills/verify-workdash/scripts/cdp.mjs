@@ -9,7 +9,13 @@
 //     --name matches the accessible name (aria-label, the label of an input, its placeholder, else the text),
 //     exactly first, then as a substring unless --exact; --within scopes the search to the first element matching CSS.
 //     A disabled target fails the command instead of silently doing nothing.
-//   cdp.mjs press  <key>                        e.g. Escape, Enter, /, t, r, f
+//   cdp.mjs press  <key>                        e.g. Escape, Enter, Tab, /, t, r, f
+//   cdp.mjs tab-to (--name N | --css S) [--role R] [--within CSS] [--exact] [--max K]
+//     presses Tab (at most K times, default 30) until that element has focus: the keyboard path to it
+//   cdp.mjs focused                             the accessible name of the element that has focus
+//   cdp.mjs scroll (--name N | --css S) [...]   scrolls the element to the top of its scroll box, as a user would scroll to it
+//   cdp.mjs tabs [--close-others]               the open tabs' URLs, * on the app's (the one every command drives);
+//                                               a link with target=_blank shows up here. --close-others closes the rest
 //   cdp.mjs wait   (--text T | --css S) [--gone] [--timeout MS]
 //   cdp.mjs text   [--css S]                    innerText of S (default: body)
 //   cdp.mjs screenshot <file.png> [--full] [--scheme dark|light] [--reduced-motion]
@@ -52,11 +58,16 @@ function parseArgs(args) {
   return { positional, flags };
 }
 
+// The app's tab. A link with target=_blank opens another tab, and Chrome may list it first, so pick by URL.
+const pageTargets = async () =>
+  (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`).then((r) => r.json())).filter((t) => t.type === "page");
+const appPage = (pages) =>
+  pages.find((t) => t.url.startsWith(BASE_URL)) ?? pages.find((t) => t.url === "about:blank") ?? pages[0];
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function connect() {
-  const list = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`).then((r) => r.json());
-  const page = list.find((t) => t.type === "page");
+  const page = appPage(await pageTargets());
   if (!page) die("no page target in Chrome");
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
@@ -105,12 +116,14 @@ const LOCATOR = String.raw`
   const ROLES = {
     button: 'button,[role=button],summary',
     radio: '[role=radio]',
-    link: 'a[href]',
+    link: 'a[href],[role=link]',
+    tab: '[role=tab]',
+    columnheader: '[role=columnheader]',
     textbox: 'input:not([type=checkbox]):not([type=radio]),textarea',
     checkbox: 'input[type=checkbox]',
     dialog: '[role=dialog]',
     row: '[role=row]',
-    any: 'button,[role=button],[role=radio],a[href],input,textarea,select,summary,[role=row],[role=dialog],[aria-label],label,h1,h2,h3',
+    any: 'button,[role=button],[role=radio],a[href],[role=link],[role=tab],[role=columnheader],input,textarea,select,summary,[role=row],[role=dialog],[aria-label],label,h1,h2,h3',
   };
   const norm = (s) => (s ?? '').replace(/\s+/g, ' ').trim();
   const nameOf = (el) => {
@@ -123,7 +136,8 @@ const LOCATOR = String.raw`
       if (shown && !el.closest('.names')) return norm(shown.innerText);
       return norm(el.getAttribute('placeholder'));
     }
-    return norm(el.innerText);
+    // An SVG node (a mermaid graph's) has no innerText, only textContent.
+    return norm(el.innerText ?? el.textContent);
   };
   const visible = (el) => {
     const r = el.getBoundingClientRect();
@@ -143,7 +157,10 @@ const LOCATOR = String.raw`
     const want = norm(spec.name);
     const titled = (el) => norm(el.getAttribute('title')) === want;
     els = all.filter((el) => nameOf(el) === want || titled(el));
-    if (!els.length && !spec.exact) els = all.filter((el) => nameOf(el).includes(want));
+    // CSS text-transform changes innerText (table headers read "БЛОКИРАН ОТ"), so the fallbacks ignore case.
+    const low = want.toLowerCase();
+    if (!els.length) els = all.filter((el) => nameOf(el).toLowerCase() === low);
+    if (!els.length && !spec.exact) els = all.filter((el) => nameOf(el).toLowerCase().includes(low));
   }
   return els;
 })
@@ -162,7 +179,7 @@ async function find(cdp, spec, { mustExist = true } = {}) {
       target.scrollIntoView({ block: 'center', inline: 'center' });
       const r = target.getBoundingClientRect();
       return { count: els.length, x: r.x + r.width / 2, y: r.y + r.height / 2,
-               tag: el.tagName.toLowerCase(), disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true', text: (el.getAttribute('aria-label') || el.innerText || el.value || '').trim().slice(0, 80) };
+               tag: el.tagName.toLowerCase(), disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true', text: (el.getAttribute('aria-label') || el.innerText || el.textContent || el.value || '').trim().slice(0, 80) };
     })()`,
   );
   if (value.x === undefined && mustExist) die(`no visible element for ${JSON.stringify(spec)} (matches: ${value.count})`);
@@ -261,6 +278,49 @@ async function main() {
         console.log(`pressed ${positional[0]}`);
         break;
       }
+      case "tab-to": {
+        // The keyboard path: Tab until the target has focus, so focus rings and Enter handlers get a real proof.
+        const spec = specFrom(flags);
+        const max = Number(flags.max ?? 30);
+        for (let i = 1; i <= max; i++) {
+          await pressKey(cdp, "Tab");
+          await sleep(50);
+          const hit = await evaluate(cdp, `(() => { const els = ${LOCATOR}(${JSON.stringify(spec)}); return els[${Number(spec.nth ?? 0)}] === document.activeElement; })()`);
+          if (hit) {
+            await sleep(SETTLE_MS);
+            console.log(`focused ${JSON.stringify(spec.name ?? spec.css)} after ${i} Tab${i === 1 ? "" : "s"}`);
+            return;
+          }
+        }
+        die(`${JSON.stringify(spec.name ?? spec.css)} did not get focus within ${max} Tabs; now on ${JSON.stringify(await focusedName(cdp))}`);
+        break;
+      }
+      case "focused":
+        console.log(await focusedName(cdp));
+        break;
+      case "scroll": {
+        const hit = await find(cdp, specFrom(flags));
+        await evaluate(cdp, "window.__wdTarget.scrollIntoView({ block: 'start', inline: 'nearest' })");
+        await sleep(SETTLE_MS);
+        console.log(`scrolled to <${hit.tag}> "${hit.text}"`);
+        break;
+      }
+      case "tabs": {
+        // A tab a link just opened has no URL for a moment: give it up to 2s to get one.
+        let pages = await pageTargets();
+        for (let i = 0; i < 10 && pages.some((t) => !t.url); i++) {
+          await sleep(200);
+          pages = await pageTargets();
+        }
+        const driven = appPage(pages);
+        for (const t of pages) {
+          if (flags["close-others"] && t.id !== driven.id) {
+            await fetch(`http://127.0.0.1:${CDP_PORT}/json/close/${t.id}`);
+            console.log(`closed ${t.url}`);
+          } else console.log(`${t.id === driven.id ? "* " : "  "}${t.url}`);
+        }
+        break;
+      }
       case "wait": {
         await waitFor(cdp, { text: flags.text, css: flags.css, gone: Boolean(flags.gone) }, Number(flags.timeout ?? 15000));
         console.log(`ok: ${flags.gone ? "gone" : "present"} ${flags.text ?? flags.css}`);
@@ -310,6 +370,11 @@ async function main() {
   } finally {
     cdp.close();
   }
+}
+
+async function focusedName(cdp) {
+  return evaluate(cdp, `(() => { const el = document.activeElement; if (!el || el === document.body) return '(nothing)';
+    return (el.getAttribute('aria-label') || el.innerText || el.textContent || el.tagName).replace(/\\s+/g, ' ').trim().slice(0, 120); })()`);
 }
 
 async function waitFor(cdp, { text, css, gone }, timeout) {

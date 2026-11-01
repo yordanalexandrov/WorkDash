@@ -53,10 +53,14 @@ It is read-only and checks that the server pid is alive and is this worktree's `
 | Command | What it does |
 | --- | --- |
 | `goto <path> [--wait-text T]` | Fresh load of `BASE_URL+path`, through `about:blank`, so `/#settings` after `/` really reloads and drops any draft. |
-| `click --name N [--role R] [--within CSS] [--exact] [--nth K]` | Clicks the element whose accessible name is N. Fails if it is disabled. |
+| `click --name N [--role R] [--within CSS] [--exact] [--nth K]` | Clicks the element whose accessible name is N. Fails if it is disabled. Roles: `button`, `radio`, `link` (also `[role=link]`, such as a graph node), `tab`, `columnheader`, `textbox`, `checkbox`, `dialog`, `row`. |
 | `click --css S` | The same, by CSS, when there is no name (cards, rows). |
 | `fill --name N --value V` / `--value-env VAR` `[--nth K]` | Clicks the field, selects all and types. Time inputs are set the way their picker sets them. `--nth` picks among same-named fields (0-based). |
-| `press <key>` | `Escape`, `Enter`, `Tab`, `/`, or a letter (`t`, `i`, `r`, `f`). Shortcuts fire only while focus is not in a field, and not while Settings is open. |
+| `press <key>` | `Escape`, `Enter`, `Tab`, `/`, or a letter (`t`, `i`, `r`, `f`). Shortcuts fire only while focus is not in a field, and not while Settings is open. After Esc closes a sheet, `wait --css "[role=dialog]" --gone` before the next shortcut: a key pressed while the sheet shrinks is lost. |
+| `tab-to --name N [--role R] [--within CSS] [--max K]` | Presses Tab, up to K times (default 30), until N has focus. This is the keyboard path to an element: follow it with `screenshot` for the focus ring, or `press Enter`. |
+| `focused` | Prints the accessible name of the element that has focus. |
+| `scroll --name N` / `--css S` | Scrolls N to the top of its scroll box, the way a user scrolls to a section in the sheet. Use it instead of `eval` before a screenshot. |
+| `tabs [--close-others]` | Lists the open tabs, with `*` on the app's tab, which every command drives. A link that opens GitHub in a new tab shows up here. `--close-others` closes the rest. |
 | `wait --text T` / `--css S` `[--gone] [--timeout MS]` | Polls until the text or element is there (or gone). Use it instead of sleeps. |
 | `text [--css S]` | Prints innerText. |
 | `url` | Prints the current URL. |
@@ -67,14 +71,14 @@ It is read-only and checks that the server pid is alive and is this worktree's `
 
 A page with a `confirm()` nobody answered stays wedged, even across commands: `Runtime.evaluate` never returns. The helper answers every dialog it sees and gives up after its watchdog (`--timeout` + 15s) with a message. On that message, or on any hang, run `$W stop && $W start`: the doctor can't see a wedged page, because the processes are healthy.
 
-Names are matched against `aria-label`, then the `<label>` of an input, then the visible `.set-label` of a Settings field, then the placeholder, then the visible text (whitespace collapsed). The match is exact first, then by substring unless `--exact`. Stable handles in this app:
+Names are matched against `aria-label`, then the `<label>` of an input, then the visible `.set-label` of a Settings field, then the placeholder, then the visible text (whitespace collapsed). The match is exact first, then case-insensitive, then a case-insensitive substring unless `--exact`. CSS `text-transform` changes the visible text (the table headers read „БЛОКИРАН ОТ“), so a name in lower case still matches. Stable handles in this app:
 
 - Top bar: `--role button --name "Настройки"` (⚙), the radiogroups `Табло` (`--role radio --name "PR-и" --exact` / `"Issues"`; key `i`; `?dashboard=issues` in the query), `Изглед` (`--role radio --name "Дъска"` / `"Таблица"`) and `Обновяване` (`--role radio --name "На всеки"` / `"При поискване"`), and the button `--role button --name "Обнови"`.
 - Banners: the `⚙ Настройки` link (`--role link --name "Настройки"`). Texts: `Няма GitHub токен и repo-та: добави ги в Настройки.`, `Няма GitHub токен: …`, `Няма repo-та за следене: …`.
 - Settings: the region `Настройки` (CSS `.settings`), the save bar `.set-actions` (`--role button --name "Запази" --within ".set-actions"`), and ✕ (`--role button --name "Затвори" --within ".settings"`).
 - Toolbar: `--role textbox --name "Филтър"` (also `/`), the repo chips by short name, and `само моите`.
 - Cards: `[data-flip='pr:<owner>/<repo>#<n>']`, and `issue:<owner>/<repo>#<n>` on the Issue dashboard. Click its `.age` to open the sheet (the title and `#n` are links to GitHub). The sheet is `[role=dialog]` with the PR title as its name.
-- Table: `[role=table]`, and `--role radio --name "секция"` etc. in the `Групирай по` group.
+- Table: `[role=table]`, the headers (`--role columnheader --name "блокиран от"`; a click sorts), the repo tabs (`--role tab --name "WorkDash"`), and `--role radio --name "секция"` etc. in the `Групирай по` group.
 
 Read API (for side effects only, never for driving; GET only, and it fails on HTTP errors): `$W api /api/prs`, `$W api /api/config`, `$W api "/api/issues?repo=owner/name"` (only for a followed repo). `$W data` lists the data dir and prints the `config.yaml` the server wrote.
 
