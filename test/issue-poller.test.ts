@@ -41,6 +41,9 @@ function fakeGitHub(options: { fail?: boolean; rateLimited?: boolean | string[];
       comments: { totalCount: options.comments ? 1 : 0 },
       milestone: null,
       closedByPullRequestsReferences: { nodes: [] },
+      parent: null,
+      subIssuesSummary: { total: 0, completed: 0 },
+      issueDependenciesSummary: { blockedBy: 0, blocking: 0, totalBlockedBy: 0, totalBlocking: 0 },
     };
     return Response.json({ data: { repository: { nameWithOwner: repo, issues: { totalCount: 1, nodes: [node] }, closed: { nodes: [] } } } });
   };

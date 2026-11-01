@@ -1187,6 +1187,46 @@ kbd {
   line-height: 16px;
 }
 
+/* "блокиран": an open issue with an open blocker. Quiet like "теб", but in the status colour --pending; never a pulse. */
+.blocked {
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--pending) 45%, transparent);
+  border-radius: 999px;
+  color: var(--pending);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* The table's "блокиран от": the number of open blockers, in the status colour --pending. */
+.blocked-n {
+  color: var(--pending);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The progress of an issue's sub-issues, "☑ 3/9" (the text "3/9", the ☑ drawn here): muted, --merged once all are completed. */
+.subs {
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.subs::before {
+  content: "☑ ";
+}
+
+.subs.done {
+  color: var(--merged);
+}
+
 /* An issue's milestone and its Linked PRs (the PRs as .ic chips in their status colours). */
 .issue-meta,
 .linked {
@@ -1464,14 +1504,14 @@ kbd {
   }
 }
 
-/* The Issue table: #, title, stage, labels, assignees, author, 💬, milestone, Linked PRs, age, updated. */
+/* The Issue table: #, title, stage, labels, assignees, author, 💬, milestone, Linked PRs, sub-issues, blocked by, age, updated. */
 .tgrid.issues {
-  grid-template-columns: 46px minmax(260px, 1fr) minmax(70px, 140px) minmax(110px, 240px) max-content max-content 40px minmax(60px, 140px) max-content 46px 50px;
+  grid-template-columns: 46px minmax(260px, 1fr) minmax(70px, 140px) minmax(110px, 240px) max-content max-content 40px minmax(60px, 140px) max-content max-content max-content 46px 50px;
 }
 
 @media (max-width: 1400px) {
   .tgrid.issues {
-    grid-template-columns: 46px minmax(170px, 1fr) minmax(70px, 120px) minmax(90px, 180px) max-content max-content 40px minmax(60px, 120px) max-content 46px 50px;
+    grid-template-columns: 46px minmax(170px, 1fr) minmax(70px, 120px) minmax(90px, 180px) max-content max-content 40px minmax(60px, 120px) max-content max-content max-content 46px 50px;
   }
 }
 
@@ -1715,8 +1755,8 @@ kbd {
   grid-column: span 2;
 }
 
-.tc.span3 {
-  grid-column: span 3;
+.tc.span5 {
+  grid-column: span 5;
 }
 
 /* An issue row's labels wrap rather than being cut, like the Jira keys; its assignees start at the cell's left. */
@@ -1977,6 +2017,116 @@ kbd {
 
 .detail .desc {
   font-size: 13px;
+}
+
+/* "Зависимости": the summary line (a spinner while the graph loads), then the Dependency graph at its natural width. */
+.detail .deps-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail .deps .spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--line);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.detail .graph {
+  overflow-x: auto;
+}
+
+/* "още N" under the graph: issues GitHub counts that the token cannot see. */
+.detail .deps-more {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail .graph svg {
+  display: block;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* The nodes take their colours from the tokens, not mermaid's theme, so they read in both themes and follow a switch of
+   it; mermaid's own rules sit under the SVG's id, hence !important. Status family only: see "Colour roles". */
+.graph g.node :is(rect, path, polygon, circle) {
+  fill: var(--card) !important;
+  stroke: var(--faint) !important;
+  stroke-width: 1px !important;
+}
+
+.graph g.node .nodeLabel,
+.graph g.node text {
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+
+.graph g.node.dep-blocked :is(rect, path, polygon, circle) {
+  stroke: var(--pending) !important;
+  stroke-width: 2px !important;
+}
+
+.graph g.node.dep-completed :is(rect, path, polygon, circle) {
+  stroke: var(--merged) !important;
+}
+
+.graph g.node.dep-not_planned :is(rect, path, polygon, circle) {
+  stroke: var(--muted) !important;
+  stroke-dasharray: 4 3 !important;
+}
+
+.graph g.node.dep-not_planned .nodeLabel {
+  color: var(--muted) !important;
+}
+
+/* A neighbour from outside the family: dotted, apart from not planned's dashes; its state's colour stays. */
+.graph g.node.dep-external :is(rect, path, polygon, circle) {
+  stroke-dasharray: 1 3 !important;
+  stroke-linecap: round;
+  stroke-width: 1.5px !important;
+}
+
+.graph g.node.dep-current :is(rect, path, polygon, circle) {
+  stroke: var(--blue) !important;
+  stroke-width: 3px !important;
+}
+
+/* A node opens its issue: the pointer, a faint `--blue` fill on hover (no lift: a transform would undo mermaid's placing
+   of it) and the `--blue` focus ring of everything clickable. */
+.graph g.node[role="link"] {
+  cursor: pointer;
+}
+
+.graph g.node[role="link"]:hover :is(rect, path, polygon, circle) {
+  fill: color-mix(in srgb, var(--blue) 8%, var(--card)) !important;
+}
+
+.graph g.node[role="link"]:focus {
+  outline: none;
+}
+
+.graph g.node[role="link"]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.graph :is(.flowchart-link, .edgePath path) {
+  stroke: var(--muted) !important;
+}
+
+.graph .marker {
+  fill: var(--muted) !important;
+  stroke: var(--muted) !important;
 }
 
 .detail .item {

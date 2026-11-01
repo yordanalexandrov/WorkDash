@@ -9,6 +9,7 @@ import { buildServer, dashboardState } from "../src/server.js";
 import type { Settings } from "../src/settings.js";
 import { settingsForm } from "../src/config.js";
 import { createEventHub, type EventHub } from "../src/sse.js";
+import { createIssueGraphs } from "../src/issue-graphs.js";
 import type { IssueDemand } from "../src/domain/issue-poll.js";
 import type { IssuesConfig } from "../src/domain/issues.js";
 import { closedIssue, issue, pullRequest } from "./fixtures.js";
@@ -631,6 +632,7 @@ describe("the issues API", () => {
         config: () => config,
         recentlyClosedWindowMs: () => DAY,
         poller: options.poller ?? fakeIssuePoller().poller,
+        graphs: { family: () => Promise.reject(new Error("not drawn here")) },
       },
     });
     return { server, store, reconfigure: (next: IssuesConfig) => (config = next) };
@@ -748,5 +750,116 @@ describe("the issues API", () => {
 
     expect(response.statusCode).toBe(403);
     expect(demands).toEqual([]);
+  });
+});
+
+describe("the dependency graph API", () => {
+  /** The graph query's answer for issue `number` with no parent and no sub-issues. */
+  const lone = (number: number) => ({
+    data: {
+      repository: {
+        issue: {
+          number,
+          title: `Issue ${number}`,
+          url: `https://github.com/my-org/repo-a/issues/${number}`,
+          state: "OPEN",
+          stateReason: null,
+          repository: { nameWithOwner: "my-org/repo-a" },
+          subIssuesSummary: { total: 0, completed: 0 },
+          blockedBy: { nodes: [] },
+          blocking: { nodes: [] },
+          issueDependenciesSummary: { totalBlockedBy: 0, totalBlocking: 0 },
+          parent: null,
+          subIssues: { nodes: [] },
+        },
+      },
+    },
+  });
+
+  /** A server whose graphs come from a stand-in for GitHub, at a clock the test moves; it counts the queries GitHub got. */
+  function serverWith(answer: (number: number) => Response = (number) => Response.json(lone(number))) {
+    let now = new Date("2026-11-01T10:00:00Z");
+    const queries: number[] = [];
+    const demands: string[] = [];
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      const number = Number(/issue\(number: (\d+)\)/.exec(String(JSON.parse(String(init?.body)).query))![1]);
+      queries.push(number);
+      return answer(number);
+    };
+    const server = buildServer({
+      ...source(),
+      store: openStore(":memory:"),
+      issues: {
+        repos: () => ["my-org/repo-a"],
+        config: () => ({ columns: [], repos: {} }),
+        recentlyClosedWindowMs: () => DAY,
+        poller: { demand: (repo) => (demands.push(repo), { answer: "poll", dueAt: now.toISOString() }), polling: () => false, error: () => null },
+        graphs: createIssueGraphs({ token: () => "t", fetch, now: () => now }),
+      },
+    });
+    return { server, queries, demands, later: (ms: number) => (now = new Date(now.getTime() + ms)) };
+  }
+
+  it("serves an issue's family as GitHub has it", async () => {
+    const { server } = serverWith();
+
+    const response = await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ issue: { repo: "my-org/repo-a", number: 7, state: "open" }, head: null, members: [] });
+  });
+
+  it("serves what it fetched for an issue opened again within a minute, and asks GitHub again after that", async () => {
+    const { server, queries, later } = serverWith();
+
+    await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7");
+    later(59_000);
+    await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7");
+    await server.inject("/api/issues/graph?repo=my-org/repo-a&number=8");
+    later(2_000);
+    await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7");
+
+    expect(queries).toEqual([7, 8, 7]);
+  });
+
+  it("asks GitHub again within the minute when the page says the family changed", async () => {
+    const { server, queries } = serverWith();
+
+    await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7");
+    await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7&refresh=true");
+    await server.inject("/api/issues/graph?repo=My-Org/Repo-A&number=7");
+
+    expect(queries).toEqual([7, 7]);
+  });
+
+  it("says why the graph could not be fetched, without touching the poll of the repo", async () => {
+    const { server, demands } = serverWith(() => Response.json({ message: "Bad credentials" }, { status: 401 }));
+
+    const response = await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7");
+    const board = (await server.inject("/api/issues?repo=my-org/repo-a")).json();
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toMatchObject({ kind: "auth" });
+    expect(board.error).toBeNull();
+    expect(demands).toEqual([]);
+  });
+
+  it("asks GitHub again after a failure rather than keep it for a minute", async () => {
+    let fail = true;
+    const { server, queries } = serverWith((number) => (fail ? new Response("", { status: 502 }) : Response.json(lone(number))));
+
+    expect((await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7")).statusCode).toBe(502);
+    fail = false;
+    expect((await server.inject("/api/issues/graph?repo=my-org/repo-a&number=7")).statusCode).toBe(200);
+    expect(queries).toEqual([7, 7]);
+  });
+
+  it("serves no graph of a repo not followed, nor of a number that is none", async () => {
+    const { server, queries } = serverWith();
+
+    expect((await server.inject("/api/issues/graph?repo=other-org/repo-z&number=7")).statusCode).toBe(404);
+    expect((await server.inject("/api/issues/graph?repo=my-org/repo-a&number=x")).statusCode).toBe(400);
+    expect((await server.inject("/api/issues/graph?repo=my-org/repo-a")).statusCode).toBe(400);
+    expect(queries).toEqual([]);
   });
 });

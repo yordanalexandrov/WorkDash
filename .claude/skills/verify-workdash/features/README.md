@@ -35,6 +35,7 @@ Each feature file has an H1 and one paragraph describing the user-visible behavi
 - [Board and table](./board-and-table.md) covers sections, cards, the view switch (`t`), and table grouping and sorting. **Needs token.**
 - [Filter and detail sheet](./filter-and-detail.md) covers the PR toolbar filter (`/`), repo chips, „само моите“, and the PR detail sheet (`f`, Esc). **Needs token.**
 - [Issue dashboard](./issues.md) covers the „PR-и / Issues“ switch (`i`), repo tabs, stage columns, the issue table, filter and sheet. Offline for the switch, the table shell and stages in `/api/issues`; the rest **needs token.** **Verified live** (the offline part).
+- [Dependencies](./dependencies.md) covers sub-issue progress and „блокиран“ on the card and the row, the table columns and the group by parent, and the Dependency graph in the sheet with its node navigation. **Needs token.** **Verified live** (all but GitHub in a new tab, which this repo's data can't reach).
 
 Not mapped yet: desktop notifications and „Пропуснати“, „Пусни деня“ (replay), drag to „видях“, „Наскоро затворени“.
 

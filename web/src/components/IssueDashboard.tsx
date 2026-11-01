@@ -8,7 +8,8 @@ import type { Filter } from "../filter.js";
 import { shortRepo } from "../format.js";
 import { issueColumns } from "../issueBoard.js";
 import { filterIssueColumns, filterIssues } from "../issueFilter.js";
-import { findIssue, issueKey, type ShownIssue } from "../issueDetail.js";
+import { findIssue, type ShownIssue } from "../issueDetail.js";
+import { nodeInSnapshot } from "../issueGraph.js";
 import { assignedToMe } from "../issueMarks.js";
 import { BOUNCE, issueFlipKey, visibleIn } from "../motion.js";
 import { PALETTE, repoHue } from "../palette.js";
@@ -23,13 +24,14 @@ import { CLOSED_ISSUES, ISSUE_DEFAULT_SORT, IssueTable } from "./IssueTable.js";
 import { IssueTabs } from "./IssueTabs.js";
 import { Sheet } from "./Sheet.js";
 import { Toolbar } from "./Toolbar.js";
-import { sameRepo } from "../../../src/domain/repos.js";
+import type { GraphIssue } from "../../../src/domain/issue-graph.js";
+import { type IssueRef, issueKey, sameRepo } from "../../../src/domain/repos.js";
 
 /**
  * The issue whose detail sheet is open, the FLIP key of the card or row it opened from (a row of an issue in several groups
  * has its own), the rect it grew out of, and whether it is shrinking back.
  */
-type OpenSheet = { issue: { repo: string; number: number }; flip: string; from: DOMRectReadOnly; closing: boolean };
+type OpenSheet = { issue: IssueRef; flip: string; from: DOMRectReadOnly; closing: boolean };
 
 /** The card or row the sheet opened from, if it still shows; else the issue's card or first row, if one does. */
 function source(sheet: OpenSheet): HTMLElement | null {
@@ -87,9 +89,9 @@ type IssueDashboardProps = {
 /** Confetti from an issue completed while the board shows: as many pieces as from a merged PR's card. */
 const COMPLETED_BURST = 30;
 
-/** Confetti in `layer` from the card of the issue `key` (`repo#number`), if it shows in the viewport. */
-function burstFrom(layer: HTMLElement | null, key: string): void {
-  const el = document.querySelector(`[data-flip="${CSS.escape(`issue:${key}`)}"]`);
+/** Confetti in `layer` from the issue card whose FLIP key is `flip` (`issueFlipKey`), if it shows in the viewport. */
+function burstFrom(layer: HTMLElement | null, flip: string): void {
+  const el = document.querySelector(`[data-flip="${CSS.escape(flip)}"]`);
   if (!layer || !el) return;
   const rect = el.getBoundingClientRect();
   if (!visibleIn(rect, innerWidth, innerHeight)) return;
@@ -140,6 +142,13 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   if (live) shownSheet.current = live;
   const openSheet = (issue: ShownIssue, from: HTMLElement) =>
     setSheet({ issue: { repo: issue.repo, number: issue.number }, flip: from.dataset["flip"] ?? issueFlipKey(issue), from: from.getBoundingClientRect(), closing: false });
+  // A node of the Dependency graph opens its issue: in the sheet, which switches to it where it is, when the open repo's
+  // issues have it (it shrinks back into that issue's card or row); else on GitHub in a new tab.
+  const openNode = (node: GraphIssue) => {
+    const found = nodeInSnapshot(node, shown);
+    if (!found) return void window.open(node.url, "_blank", "noopener");
+    setSheet((current) => (current && !current.closing ? { ...current, issue: { repo: found.repo, number: found.number }, flip: issueFlipKey(found) } : current));
+  };
   const closeSheet = () => setSheet((current) => (current && !current.closing ? { ...current, closing: true } : current));
   // Another repo's tab takes the sheet with it.
   useEffect(() => setSheet(null), [open]);
@@ -170,7 +179,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
     const { completed } = step;
     if (!completed.length) return;
     setTimeout(() => {
-      for (const key of completed) burstFrom(fx.current, key);
+      for (const flip of completed) burstFrom(fx.current, flip);
     }, BOUNCE.duration);
   }, [shown]);
   return (
@@ -247,7 +256,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
       )}
       {sheet && shownSheet.current ? (
         <Sheet
-          key={openKey}
+          showing={openKey!}
           label={shownSheet.current.title}
           from={sheet.from}
           closing={sheet.closing}
@@ -260,7 +269,7 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
             refocus(sheet);
           }}
         >
-          <IssueDetail issue={shownSheet.current} hue={hue} mine={assignedToMe(shownSheet.current, viewer)} gone={!live} />
+          <IssueDetail key={openKey} issue={shownSheet.current} hue={hue} mine={assignedToMe(shownSheet.current, viewer)} gone={!live} board={shown} onOpenNode={openNode} />
         </Sheet>
       ) : null}
     </>

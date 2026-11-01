@@ -9,7 +9,7 @@ import type {
   ReviewState,
   Snapshot,
 } from "../domain/types.js";
-import type { GitHubResponseFailure } from "../domain/poll-error.js";
+import type { GitHubResponseFailure } from "../domain/github-error.js";
 import { type CheckContext, summarizeChecks } from "./checks.js";
 import { buildClosedQuery, buildDetailsQuery, buildSnapshotQuery, PAGE_SIZE } from "./query.js";
 
@@ -70,7 +70,7 @@ type ClosedPullRequestNode = {
   closedAt: string | null;
 } | null;
 
-/** Headers that say why GitHub refused a request; classifyPollError reads them. */
+/** Headers that say why GitHub refused a request; classifyGitHubError reads them. */
 const FAILURE_HEADERS = ["x-ratelimit-remaining", "x-ratelimit-reset", "retry-after"];
 
 /** How long a poll waits for GitHub before treating it as unreachable. */
@@ -136,7 +136,7 @@ export async function postGraphQL<T>(
   }
 
   const { data, errors = [] } = (await response.json()) as GraphQLResponse<T>;
-  // A GraphQL failure (a rate limit, say) comes back as 200 with errors; keep what classifyPollError needs.
+  // A GraphQL failure (a rate limit, say) comes back as 200 with errors; keep what classifyGitHubError needs.
   const failure = (reason: string) =>
     new GitHubError(`GitHub GraphQL error: ${errors.map((e) => e.message).join("; ") || reason}`, {
       status: response.status,

@@ -8,7 +8,9 @@ import { withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import { ISSUE_DEMANDS } from "./domain/issue-poll.js";
 import { type IssueBoardState, type IssuesConfig, stageOf, stagesFor } from "./domain/issues.js";
+import { classifyGitHubError } from "./domain/github-error.js";
 import type { PollHealth } from "./domain/poll-error.js";
+import type { IssueGraphs } from "./issue-graphs.js";
 import type { IssuePoller } from "./issue-poller.js";
 import { DEMANDS, POLL_MODES } from "./domain/poll-mode.js";
 import type { Poller } from "./poller.js";
@@ -30,6 +32,8 @@ const SeenRequest = z.object({
 const AckRequest = z.object({ ids: z.array(z.string()) });
 
 const IssuesQuery = z.object({ repo: repoName });
+
+const IssueGraphQuery = z.object({ repo: repoName, number: z.coerce.number().int().positive(), refresh: z.stringbool().optional() });
 
 // The body names the demand `reason`, as the spec's API does.
 const IssuePollRequest = z.object({ repo: repoName, reason: z.enum(ISSUE_DEMANDS) }).transform(({ repo, reason }) => ({ repo, demand: reason }));
@@ -68,6 +72,8 @@ export type IssueSource = {
   /** How far back closed issues still show (`recently_closed_window`). */
   recentlyClosedWindowMs: () => number;
   poller: Pick<IssuePoller, "demand" | "polling" | "error">;
+  /** The Dependency graph's families, fetched apart from the poller. */
+  graphs: IssueGraphs;
 };
 
 /** For a dashboard without issues: no repo followed, so every request for one is refused. */
@@ -76,6 +82,7 @@ const NO_ISSUES: IssueSource = {
   config: () => ({ columns: [], repos: {} }),
   recentlyClosedWindowMs: () => 0,
   poller: { demand: () => ({ answer: "skip", dueAt: new Date(Date.now() + 3_600_000).toISOString() }), polling: () => false, error: () => null },
+  graphs: { family: () => Promise.reject(new Error("no issues")) },
 };
 
 /**
@@ -278,6 +285,20 @@ function registerIssues(server: FastifyInstance, store: SnapshotStore, source: I
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
     if (!follows(source, parsed.data.repo)) return reply.code(404).send({ error: "not a followed repo" });
     return source.poller.demand(parsed.data.repo, parsed.data.demand);
+  });
+
+  // An issue's Dependency graph, for its detail sheet. A failure is told to the page that asked and to nobody else: the
+  // repo's poll health and the banner do not hear of it.
+  server.get("/api/issues/graph", async (request, reply) => {
+    const parsed = IssueGraphQuery.safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const { repo, number, refresh } = parsed.data;
+    if (!follows(source, repo)) return reply.code(404).send({ error: "not a followed repo" });
+    try {
+      return await source.graphs.family(repo, number, { refresh });
+    } catch (error) {
+      return reply.code(502).send({ error: classifyGitHubError(error, new Date()) });
+    }
   });
 }
 

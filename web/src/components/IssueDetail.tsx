@@ -1,10 +1,14 @@
+import type { GraphIssue } from "../../../src/domain/issue-graph.js";
+import type { IssueBoardState } from "../api.js";
 import { count } from "../badges.js";
+import { hasDependencies } from "../issueGraph.js";
+import { Dependencies } from "./Dependencies.js";
 import { cleanBody, latest } from "../detail.js";
 import { age } from "../format.js";
 import { cardLabels } from "../issueBoard.js";
 import { isClosed, issueDates, type ShownIssue } from "../issueDetail.js";
 import { Avatar } from "./Avatar.js";
-import { ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill } from "./IssueMarks.js";
+import { BlockedChip, ClosedAsMark, LabelChips, LinkedPrs, MeChip, MilestoneChip, StagePill, SubIssuesChip } from "./IssueMarks.js";
 import { Markdown } from "./Markdown.js";
 
 /** How many comments the sheet lists, the latest first. */
@@ -19,14 +23,19 @@ type IssueDetailProps = {
   mine: boolean;
   /** The issue has left the board (closed before the window, or no longer among the fetched ones); the sheet shows its last data. */
   gone: boolean;
+  /** The open repo's issues as they are now, for the Dependency graph. */
+  board: IssueBoardState | null;
+  /** A node of the Dependency graph was opened (clicked, or Enter on it). */
+  onOpenNode(issue: GraphIssue): void;
 };
 
 /**
  * Everything about one issue ("Anatomy" → Detail sheet in docs/design.md): every fact of its card and row, with its stage
- * as a pill and every other label (a closed one: how it was closed and all its labels), plus the description, the latest comments and when it was opened, updated and closed.
+ * as a pill and every other label (a closed one: how it was closed and all its labels), plus the description, its
+ * Dependency graph when it has a parent, sub-issues or blockers, the latest comments and when it was opened, updated and closed.
  * Texts are markdown.
  */
-export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
+export function IssueDetail({ issue, hue, mine, gone, board, onOpenNode }: IssueDetailProps) {
   const body = cleanBody(issue.body);
   const comments = latest(issue.latestComments, LATEST, (comment) => comment.createdAt);
   return (
@@ -50,6 +59,8 @@ export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
           <LabelChips labels={isClosed(issue) ? issue.labels : cardLabels(issue)} />
           <MilestoneChip issue={issue} />
           <LinkedPrs issue={issue} />
+          <SubIssuesChip issue={issue} />
+          {isClosed(issue) ? null : <BlockedChip issue={issue} />}
           {issue.comments ? <span class="ic muted">{`💬 ${count(issue.comments, "коментар", "коментара")}`}</span> : null}
         </div>
         <div class="meta people">
@@ -70,6 +81,7 @@ export function IssueDetail({ issue, hue, mine, gone }: IssueDetailProps) {
         <section class="pane">
           <h3>Описание</h3>
           {body ? <Markdown text={body} class="desc" /> : <p class="none">Няма описание</p>}
+          {hasDependencies(issue) ? <Dependencies issue={issue} board={board} onOpen={onOpenNode} /> : null}
         </section>
         <section class="pane">
           <h3>Последни коментари</h3>

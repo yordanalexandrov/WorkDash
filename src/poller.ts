@@ -1,6 +1,7 @@
 import type { SnapshotStore, StoredSnapshot } from "./db.js";
 import { updateRecentlyClosed, vanishedPullRequests } from "./domain/closed.js";
-import { classifyPollError, nextPollDelay, type PollHealth } from "./domain/poll-error.js";
+import { classifyGitHubError } from "./domain/github-error.js";
+import { nextPollDelay, type PollHealth } from "./domain/poll-error.js";
 import { answerDemand, delayAfterSwitch, type Demand, type DemandAnswer, type PollMode } from "./domain/poll-mode.js";
 import { issueReposAfterPoll, repoKey } from "./domain/repos.js";
 import type { Snapshot } from "./domain/types.js";
@@ -106,7 +107,7 @@ export function startPoller(
       log.info(`poll: ${snapshot.pullRequests.length} open PRs across ${repos.length} repos`);
       if (problems.length) log.error(`poll problems: ${problems.join("; ")}`);
     } catch (error) {
-      health = { error: classifyPollError(error, new Date()), problems: [] };
+      health = { error: classifyGitHubError(error, new Date()), problems: [] };
       log.error(`poll failed (${health.error!.kind}): ${health.error!.message}`);
     }
     polling = false;

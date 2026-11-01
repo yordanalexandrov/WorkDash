@@ -378,7 +378,7 @@ describe("fetchSnapshot", () => {
     await expect(fetchSnapshot({ repos: ["my-org/repo-a"], token: "bad", fetch })).rejects.toThrow(/401.*Bad credentials/);
   });
 
-  it("keeps the status and rate-limit headers of a refused request, for classifyPollError", async () => {
+  it("keeps the status and rate-limit headers of a refused request, for classifyGitHubError", async () => {
     const fetch = async () =>
       Response.json(
         { message: "API rate limit exceeded" },

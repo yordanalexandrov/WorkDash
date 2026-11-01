@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Issue, StagedIssue } from "../../src/domain/issues.js";
 import { issue } from "../../test/fixtures.js";
 import { sortItems } from "../src/table.js";
-import { issueGroups, issueRows, issueTableColumns } from "../src/issueTable.js";
+import { issueGroups, issueRows, issueTableColumns, parentGroupLabel } from "../src/issueTable.js";
 
 const STAGES = ["ready", "in progress", "review"];
 const staged = (overrides: Partial<Issue> & { stage?: string | null } = {}): StagedIssue => ({ ...issue(overrides), stage: overrides.stage ?? null });
@@ -34,6 +34,23 @@ describe("issueTableColumns", () => {
       staged({ number: 3, stage: "ready", labels: [label("ready")] }),
     ];
     expect(sorted(issues, "labels")).toEqual([2, 1, 3]);
+  });
+
+  it("sorts by the share of sub-issues done, issues without sub-issues last", () => {
+    const issues = [
+      staged({ number: 1 }),
+      staged({ number: 2, subIssues: { total: 4, completed: 3 } }),
+      staged({ number: 3, subIssues: { total: 9, completed: 3 } }),
+      staged({ number: 4, subIssues: { total: 2, completed: 2 } }),
+    ];
+    expect(sorted(issues, "subIssues")).toEqual([3, 2, 4, 1]);
+  });
+
+  it("sorts by how many open blockers an issue has, the most blocked first on the first click", () => {
+    const deps = (blockedBy: number) => ({ blockedBy, totalBlockedBy: blockedBy + 1, blocking: 0, totalBlocking: 0 });
+    const issues = [staged({ number: 1 }), staged({ number: 2, dependencies: deps(2) }), staged({ number: 3, dependencies: deps(1) })];
+    const column = issueTableColumns(STAGES).find((c) => c.key === "blockedBy")!;
+    expect(sorted(issues, "blockedBy", column.first ?? 1)).toEqual([2, 3, 1]);
   });
 });
 
@@ -76,6 +93,49 @@ describe("issueGroups", () => {
       ["milestone:v9", [2]],
       ["milestone:", [1]],
     ]);
+  });
+
+  it("groups by parent in the order of the parents' numbers, those of another repo after, and those with none in \"Без родител\" last", () => {
+    const parent = (number: number, repo = "my-org/repo-a") => ({ repo, number, title: `Parent ${number}` });
+    const issues = [
+      staged({ number: 1 }),
+      staged({ number: 2, parent: parent(79) }),
+      staged({ number: 3, parent: parent(5, "my-org/repo-b") }),
+      staged({ number: 4, parent: parent(9) }),
+      staged({ number: 5, parent: parent(79) }),
+    ];
+    expect(groupsOf(issues, "parent")).toEqual([
+      ["parent:my-org/repo-a#9", [4]],
+      ["parent:my-org/repo-a#79", [2, 5]],
+      ["parent:my-org/repo-b#5", [3]],
+      ["parent:", [1]],
+    ]);
+  });
+
+  it("puts issues under one parent in one group, whatever the case GitHub names the parent's repo in", () => {
+    const parent = (repo: string) => ({ repo, number: 79, title: "Parent 79" });
+    const issues = [staged({ number: 2, parent: parent("my-org/repo-a") }), staged({ number: 3, parent: parent("My-Org/Repo-A") })];
+
+    expect(groupsOf(issues, "parent").map(([, numbers]) => numbers)).toEqual([[2, 3]]);
+  });
+});
+
+describe("parentGroupLabel", () => {
+  const parent = (number: number, repo = "my-org/repo-a") => ({ repo, number, title: `Parent ${number}` });
+
+  it("names a parent of the open repo by its number and title", () => {
+    const [group] = issueGroups([staged({ number: 2, parent: parent(79) })], "parent", STAGES);
+    expect(parentGroupLabel(group!, "my-org/repo-a")).toBe("#79 Parent 79");
+  });
+
+  it("names a parent of another repo with the repo's short name", () => {
+    const [group] = issueGroups([staged({ number: 2, parent: parent(5, "my-org/repo-b") })], "parent", STAGES);
+    expect(parentGroupLabel(group!, "my-org/repo-a")).toBe("repo-b#5 Parent 5");
+  });
+
+  it("calls the group of issues without a parent \"Без родител\"", () => {
+    const [group] = issueGroups([staged({ number: 1 })], "parent", STAGES);
+    expect(parentGroupLabel(group!, "my-org/repo-a")).toBe("Без родител");
   });
 });
 

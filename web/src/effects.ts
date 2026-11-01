@@ -3,9 +3,8 @@
 
 import type { ClosedPullRequest, IssueBoardState } from "./api.js";
 import { prKey } from "./detail.js";
-import { issueKey } from "./issueDetail.js";
-import { type Pos, reducedMotion } from "./motion.js";
-import { sameRepo } from "../../src/domain/repos.js";
+import { issueFlipKey, type Pos, reducedMotion } from "./motion.js";
+import { issueKey, sameRepo } from "../../src/domain/repos.js";
 
 /** The keys of the PRs merged since `before`: in `after` as merged and not in `before`; none for the first snapshot (`null`). */
 export function newlyMerged(before: ClosedPullRequest[] | null, after: ClosedPullRequest[]): string[] {
@@ -27,7 +26,7 @@ export type CompletedWatch = { shown: ClosedIssues | null; answer: ClosedIssues 
 export const NO_WATCH: CompletedWatch = { shown: null, answer: null };
 
 /**
- * The watch after the dashboard shows `next` (null while it shows no repo's issues), and the keys of the issues completed
+ * The watch after the dashboard shows `next` (null while it shows no repo's issues), and the FLIP keys of the cards of the issues completed
  * since the last poll answer: those in `next` as completed and not in that answer. Only a poll answer that follows another
  * one seen for the same repo counts, so neither the saved issues (perhaps hours old), nor the start of a poll (which carries
  * them as saved), nor opening a tab or the dashboard ever bursts for what closed while nobody looked.
@@ -37,7 +36,7 @@ export function watchCompleted(watch: CompletedWatch, next: ClosedIssues | null)
   if (!next || !shown || !sameRepo(shown.repo, next.repo)) return { watch: { shown: next, answer: null }, completed: [] };
   if (next.fetchedAt === null || next.fetchedAt === shown.fetchedAt) return { watch: { shown: next, answer }, completed: [] };
   const known = new Set(answer?.closed.map(issueKey));
-  const completed = answer ? next.closed.filter((issue) => issue.closedAs === "completed" && !known.has(issueKey(issue))).map(issueKey) : [];
+  const completed = answer ? next.closed.filter((issue) => issue.closedAs === "completed" && !known.has(issueKey(issue))).map(issueFlipKey) : [];
   return { watch: { shown: next, answer: next }, completed };
 }
 

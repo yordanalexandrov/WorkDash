@@ -1,4 +1,4 @@
-import type { ClosedIssue, Issue, IssueSnapshot, LinkedPullRequestStatus } from "../domain/issues.js";
+import type { ClosedAs, ClosedIssue, Issue, IssueSnapshot, LinkedPullRequestStatus, SubIssueProgress } from "../domain/issues.js";
 import type { Comment } from "../domain/types.js";
 import { postGraphQL } from "./client.js";
 import { PAGE_SIZE } from "./query.js";
@@ -46,7 +46,13 @@ fragment IssueFields on Issue {
   closedByPullRequestsReferences(first: ${LINKED_PULL_REQUESTS_PAGE_SIZE}) {
     nodes { number url state isDraft repository { nameWithOwner } }
   }
+  parent { number title repository { nameWithOwner } }
+  subIssuesSummary { total completed }
+  issueDependenciesSummary { blockedBy blocking totalBlockedBy totalBlocking }
 }`;
+
+/** GitHub's counts of an issue's sub-issues, open and closed: `completed` leaves out those closed as not planned. */
+export type SubIssuesSummaryNode = { total: number; completed: number };
 
 type IssueNode = {
   number: number;
@@ -62,6 +68,9 @@ type IssueNode = {
   comments: { totalCount: number };
   milestone: { title: string; dueOn: string | null } | null;
   closedByPullRequestsReferences: { nodes: LinkedPullRequestNode[] };
+  parent: { number: number; title: string; repository: { nameWithOwner: string } } | null;
+  subIssuesSummary: SubIssuesSummaryNode;
+  issueDependenciesSummary: { blockedBy: number; blocking: number; totalBlockedBy: number; totalBlocking: number };
 };
 
 type LinkedPullRequestNode = {
@@ -164,9 +173,18 @@ function toComments(nodes: CommentNode[]): Comment[] {
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
+/** How a closed issue was closed, by GitHub's state reason: not planned or a duplicate, else (null too) completed. */
+export function closedAs(stateReason: string | null): ClosedAs {
+  return stateReason === "NOT_PLANNED" || stateReason === "DUPLICATE" ? "not_planned" : "completed";
+}
+
+/** GitHub's `subIssuesSummary` as an issue's sub-issue progress. */
+export function subIssueProgress(summary: SubIssuesSummaryNode): SubIssueProgress {
+  return { total: summary.total, completed: summary.completed };
+}
+
 function toClosedIssue(repo: string, node: ClosedIssueNode): ClosedIssue {
-  const closedAs = node.stateReason === "NOT_PLANNED" || node.stateReason === "DUPLICATE" ? "not_planned" : "completed";
-  return { ...toIssue(repo, node), closedAt: node.closedAt, closedAs };
+  return { ...toIssue(repo, node), closedAt: node.closedAt, closedAs: closedAs(node.stateReason) };
 }
 
 function toIssue(repo: string, node: IssueNode): Issue {
@@ -188,6 +206,14 @@ function toIssue(repo: string, node: IssueNode): Issue {
       url: pr.url,
       status: linkedStatus(pr),
     })),
+    parent: node.parent && { repo: node.parent.repository.nameWithOwner, number: node.parent.number, title: node.parent.title },
+    subIssues: subIssueProgress(node.subIssuesSummary),
+    dependencies: {
+      blockedBy: node.issueDependenciesSummary.blockedBy,
+      totalBlockedBy: node.issueDependenciesSummary.totalBlockedBy,
+      blocking: node.issueDependenciesSummary.blocking,
+      totalBlocking: node.issueDependenciesSummary.totalBlocking,
+    },
     createdAt: node.createdAt,
     updatedAt: node.updatedAt,
     closedAt: node.closedAt,

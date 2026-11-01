@@ -2,8 +2,8 @@ import type { ClosedIssue, StagedIssue } from "../api.js";
 import type { ShownIssue } from "../issueDetail.js";
 import { assignedToMe, stageMark } from "../issueMarks.js";
 import { issueFlipKey } from "../motion.js";
-import { ISSUE_GROUPINGS, issueGroups, type IssueRow as Row, issueRows, issueTableColumns } from "../issueTable.js";
-import { type GroupBy, nextSort, type Sort, sortItems } from "../table.js";
+import { ISSUE_GROUPINGS, issueGroups, type IssueRow as Row, issueRows, issueTableColumns, parentGroupLabel } from "../issueTable.js";
+import { type Group, type GroupBy, nextSort, type Sort, sortItems } from "../table.js";
 import { Avatar } from "./Avatar.js";
 import type { GroupHeadLook } from "./GroupHead.js";
 import { ClosedIssueRow, IssueRow } from "./IssueRow.js";
@@ -45,14 +45,14 @@ type IssueTableProps = {
 
 /**
  * The open repo's issues as a table: the open ones sorted and grouped (by assignee, an issue in the group of each of its
- * assignees), then "Наскоро затворени" folded at the bottom in the server's order.
+ * assignees; by parent, under `#n` and the parent's title), then "Наскоро затворени" folded at the bottom in the server's order.
  */
 export function IssueTable({ issues, closed, stages, hue, viewer, message, query, sort, onSort, groupBy, onGroupBy, collapsed, onToggle, onOpen, openFlip, booted }: IssueTableProps) {
   const columns = issueTableColumns(stages);
   const sorted = sortItems(issues, columns, sort, (issue) => issue.updatedAt);
   const groups: TableGroup<TableRow>[] = issueRows(issueGroups(sorted, groupBy, stages), collapsed).map((group) => ({
     id: group.id,
-    ...(groupBy === "none" ? {} : { head: groupHead(groupBy, group.key) }),
+    ...(groupBy === "none" ? {} : { head: groupHead(groupBy, group) }),
     items: group.rows,
   }));
   if (closed.length) {
@@ -100,8 +100,13 @@ export function IssueTable({ issues, closed, stages, hue, viewer, message, query
   );
 }
 
-/** A stage's head in its accent with the label's name; an assignee's with the avatar; a milestone's with ⚑. The empty key is "Без …". */
-function groupHead(by: GroupBy, key: string): GroupHeadLook {
+/**
+ * A stage's head in its accent with the label's name; an assignee's with the avatar; a milestone's with ⚑; a parent's with
+ * `#n` and its title (`parentGroupLabel`). The empty key is "Без …".
+ */
+function groupHead(by: GroupBy, group: Group<StagedIssue>): GroupHeadLook {
+  const { key } = group;
+  if (by === "parent") return { color: key ? "var(--muted)" : "var(--faint)", label: parentGroupLabel(group, group.items[0]!.repo) };
   if (by === "stage") return { color: stageMark(key || null).accent, label: key || "Без етап" };
   if (by === "assignee") return key ? { color: "var(--text)", label: key, lead: <Avatar login={key} /> } : { color: "var(--faint)", label: "Без assignee" };
   return key ? { color: "var(--muted)", label: `⚑ ${key}` } : { color: "var(--faint)", label: "Без milestone" };

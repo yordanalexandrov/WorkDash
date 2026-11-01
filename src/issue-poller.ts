@@ -1,7 +1,8 @@
 import type { SnapshotStore } from "./db.js";
 import { answerIssueDemand, type IssueDemand, type IssuePollAnswer, nextIntervalPollAt } from "./domain/issue-poll.js";
 import { rateLimitLiftsAt } from "./domain/poll-mode.js";
-import { classifyPollError, type PollError } from "./domain/poll-error.js";
+import { classifyGitHubError } from "./domain/github-error.js";
+import type { PollError } from "./domain/poll-error.js";
 import { fetchIssues } from "./github/issues.js";
 import { repoKey } from "./domain/repos.js";
 
@@ -96,7 +97,7 @@ export function createIssuePoller(options: {
       if (rateLimit) liftedOrHit(repo, null);
       log.info(`issues: ${snapshot.issues.length} of ${snapshot.totalCount} open in ${repo}`);
     } catch (error) {
-      state.error = classifyPollError(error, new Date());
+      state.error = classifyGitHubError(error, new Date());
       if (state.error.kind === "rate_limit") liftedOrHit(repo, state.error);
       log.error(`issues of ${repo} failed (${state.error.kind}): ${state.error.message}`);
     }

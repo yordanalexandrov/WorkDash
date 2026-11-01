@@ -11,15 +11,19 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 
 type MermaidTheme = "dark" | "default";
 
+/** Mermaid's theme for the page's as it is now. */
+export const mermaidTheme = (): MermaidTheme => (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default");
+
 /** The SVG of each diagram drawn so far by theme and code, or null when it cannot be drawn; a sheet opened again reuses it. */
 const drawn = new Map<string, Promise<string | null>>();
 let renders = 0;
 
 /**
  * The SVG of `code` in `theme`, or null when it has an error. Mermaid is loaded the first time a diagram is drawn; if that
- * fails, the diagram shows as code this time and is tried again the next.
+ * fails, the diagram shows as code this time and is tried again the next. Every diagram is drawn through here, the
+ * Dependency graph's too, so mermaid's global config (strict security) is always the same.
  */
-function draw(code: string, theme: MermaidTheme): Promise<string | null> {
+export function draw(code: string, theme: MermaidTheme): Promise<string | null> {
   const key = `${theme}\n${code}`;
   let svg = drawn.get(key);
   if (!svg) {
@@ -56,7 +60,12 @@ function fill(placeholder: HTMLElement, code: string, svg: string | null): void 
   }
   placeholder.innerHTML = svg;
   placeholder.classList.add("drawn");
-  const image = placeholder.querySelector("svg");
+  atNaturalWidth(placeholder);
+}
+
+/** The diagram drawn in `box` at its natural width, which mermaid shrinks to the column: a wider one scrolls across. */
+export function atNaturalWidth(box: HTMLElement): void {
+  const image = box.querySelector("svg");
   const width = image?.viewBox.baseVal?.width;
   if (image && width) {
     image.style.maxWidth = "none";
@@ -85,7 +94,7 @@ export function Markdown({ text, class: className }: MarkdownProps) {
   useLayoutEffect(() => {
     if (!diagrams.length) return;
     let live = true;
-    const theme: MermaidTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
+    const theme = mermaidTheme();
     for (const { id, code } of diagrams) {
       void draw(code, theme).then((svg) => {
         const placeholder = root.current?.querySelector<HTMLElement>(`[data-diagram="${id}"]:not(.drawn)`);
