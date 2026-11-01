@@ -10,7 +10,8 @@ import { pathToFileURL } from "node:url";
 
 export type Leak = { line: number; kind: "email address" | "Jira instance" | "denylisted term" };
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+// The domain ends in letters, so a package at a version (`electron-builder@26.18.0`) is not taken for an address.
+const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}(?![\p{L}\p{N}-])/gu;
 const ALLOWED_EMAIL = /^(?:lamercian@gmail\.com|[\w.+-]+@users\.noreply\.github\.com|noreply@github\.com|support@github\.com|git@github\.com|[\w.+-]+@example\.(?:com|org|net))$/i;
 const JIRA = /([\p{L}\p{N}-]+)\.atlassian\.net/giu;
 const ESCAPE = /[.*+?^${}()|[\]\\]/g;
