@@ -19,6 +19,7 @@ jira:
 review:
   required_approvals: 1        # ползва се, когато repo-то няма branch protection за review
   recently_closed_window: 24h  # колко дълго се виждат merged/closed PR-и
+  hide_inactive_after_days: 90 # отворен PR без промяна от толкова дни не се показва; без ключа = всички
 
 notifications:                 # false изключва типа; събитието пак се записва, но не се показва
   review_requested: true

@@ -76,6 +76,8 @@ export const settingsSchema = z.object({
     .object({
       required_approvals: z.number().int().min(1).default(1),
       recently_closed_window: duration.default("24h"),
+      /** Open PRs not updated for this many days are left off the dashboard; null shows them all. */
+      hide_inactive_after_days: z.number().int().min(1).nullable().default(null),
     })
     .prefault({}),
   jira: z

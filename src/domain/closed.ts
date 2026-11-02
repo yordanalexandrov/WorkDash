@@ -14,6 +14,15 @@ export function withinWindow<T extends { closedAt: string }>(closed: T[], now: D
   return closed.filter((pr) => new Date(pr.closedAt).getTime() >= since);
 }
 
+const DAY_MS = 86_400_000;
+
+/** The open PRs updated within the last `days` days; all of them when `days` is null. */
+export function activeWithin<T extends { updatedAt: string }>(pullRequests: T[], now: Date, days: number | null): T[] {
+  if (days === null) return pullRequests;
+  const since = now.getTime() - days * DAY_MS;
+  return pullRequests.filter((pr) => new Date(pr.updatedAt).getTime() >= since);
+}
+
 /** The recently closed list after a poll, without reopened PRs and those before the window; newest first. */
 export function updateRecentlyClosed(options: {
   known: ClosedPullRequest[];
