@@ -52,6 +52,25 @@ describe("GET /api/prs", () => {
     });
   });
 
+  it("leaves off the PRs not updated within hide_inactive_after_days", async () => {
+    const store = openStore(":memory:");
+    const stale = pullRequest({ number: 4, ci: "FAILURE", updatedAt: "2024-01-01T10:00:00Z" });
+    const fresh = pullRequest({ number: 5, ci: "FAILURE", updatedAt: "2026-10-29T10:00:00Z" });
+    store.saveSnapshot({ viewer: "me", pullRequests: [stale, fresh] }, new Date("2026-10-30T10:00:00Z"));
+    const state = dashboardState({
+      store,
+      rules: () => rules,
+      pollIntervalMs: () => 60_000,
+      recentlyClosedWindowMs: () => DAY,
+      hideInactiveAfterDays: () => 30,
+      pollHealth: () => healthy,
+      configError: () => null,
+      now: () => new Date("2026-10-30T10:00:00Z"),
+    });
+
+    expect(state.sections[0]!.pullRequests.map(({ number }) => number)).toEqual([5]);
+  });
+
   it("links each PR to the Jira tickets it names", async () => {
     const store = openStore(":memory:");
     const jiraPr = pullRequest({ headRefName: "feature/ABC-1-login", title: "ABC-1: Add login", body: "See XYZ-9" });

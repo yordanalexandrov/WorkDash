@@ -3,13 +3,13 @@ import type { FastifyServerOptions } from "fastify";
 import { type Config, ConfigError, loadConfig, parseConfig, watchConfig } from "./config.js";
 import { type Legacy, openDataDir } from "./data-dir.js";
 import { openStore } from "./db.js";
-import { groupIntoSections, waitingOnMe } from "./domain/classify.js";
+import { waitingOnMe } from "./domain/classify.js";
 import type { Missing } from "./domain/settings.js";
 import { createIssuePoller } from "./issue-poller.js";
 import { createNotifier } from "./notifier.js";
 import { createIssueGraphs } from "./issue-graphs.js";
 import { type PollerSettings, startPoller } from "./poller.js";
-import { buildServer, type DashboardSource, dashboardState, type IssueSource, issueBoardState } from "./server.js";
+import { buildServer, type DashboardSource, dashboardSections, dashboardState, type IssueSource, issueBoardState } from "./server.js";
 import { createSettings } from "./settings.js";
 import { createEventHub } from "./sse.js";
 import type { TokenStore } from "./token-store.js";
@@ -95,6 +95,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     jira: () => config.jira,
     pollIntervalMs: () => config.github.pollIntervalMs,
     recentlyClosedWindowMs: () => config.review.recentlyClosedWindowMs,
+    hideInactiveAfterDays: () => config.review.hideInactiveAfterDays,
     pollHealth: () => poller.health(),
     poller: {
       mode: () => poller.mode(),
@@ -107,10 +108,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
   };
   // The Чака теб count, for whoever shows it outside the page (the desktop app's tray). Read from the store and the
   // rules alone, so it is right before the poller exists and with no browser open.
-  const countWaiting = () => {
-    const snapshot = store.loadSnapshot();
-    return waitingOnMe(groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", dashboard.rules(), store.loadSeen()));
-  };
+  const countWaiting = () => waitingOnMe(dashboardSections(dashboard));
   const waitingListeners = new Set<(count: number) => void>();
   let waiting = countWaiting();
   const refreshWaiting = () => {

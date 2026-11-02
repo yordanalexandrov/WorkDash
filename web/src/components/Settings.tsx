@@ -40,7 +40,7 @@ const FIELD_PATHS = [
   /^repos(\[\d+\])?$/,
   /^team(\[\d+\])?$/,
   /^jira\.(base_url|project_keys)(\[\d+\])?$/,
-  /^review\.(required_approvals|recently_closed_window)$/,
+  /^review\.(required_approvals|recently_closed_window|hide_inactive_after_days)$/,
   /^notifications\.quiet_hours$/,
   /^issues\.(columns|repos\..+\.columns)(\[\d+\])?$/,
 ];
@@ -296,6 +296,24 @@ export function Settings({ onClose }: { onClose(): void }) {
               class="set-input short"
               value={draft.review.recently_closed_window}
               onInput={(e) => edit({ review: { ...draft.review, recently_closed_window: e.currentTarget.value } })}
+            />
+          </Field>
+          <Field
+            label="Скрий неактивните след"
+            hint="Дни без промяна, след които отворен PR не се показва. Празно: всички."
+            issue={issueAt(issues, "review.hide_inactive_after_days")}
+          >
+            <input
+              class="set-input short"
+              type="number"
+              min={1}
+              step={1}
+              placeholder="—"
+              value={draft.review.hide_inactive_after_days ?? ""}
+              onInput={(e) => {
+                const days = e.currentTarget.valueAsNumber;
+                edit({ review: { ...draft.review, hide_inactive_after_days: Number.isNaN(days) ? null : days } });
+              }}
             />
           </Field>
         </Card>

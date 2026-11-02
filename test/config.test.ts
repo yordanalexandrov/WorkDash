@@ -43,7 +43,13 @@ describe("parseConfig", () => {
     const config = parseConfig(minimal);
 
     expect(config.team).toEqual([]);
-    expect(config.review).toEqual({ requiredApprovals: 1, recentlyClosedWindowMs: 24 * 3_600_000 });
+    expect(config.review).toEqual({ requiredApprovals: 1, recentlyClosedWindowMs: 24 * 3_600_000, hideInactiveAfterDays: null });
+  });
+
+  it("reads hide_inactive_after_days as a whole number of days", () => {
+    expect(parseConfig(`review: { hide_inactive_after_days: 90 }\n${minimal}`).review.hideInactiveAfterDays).toBe(90);
+    expect(() => parseConfig(`review: { hide_inactive_after_days: 0 }\n${minimal}`)).toThrow(/review\.hide_inactive_after_days/);
+    expect(() => parseConfig(`review: { hide_inactive_after_days: 1.5 }\n${minimal}`)).toThrow(/review\.hide_inactive_after_days/);
   });
 
   it("reads recently_closed_window as a duration", () => {
@@ -170,7 +176,7 @@ describe("settingsForm", () => {
       github: { poll_interval: "90s" },
       repos: ["my-org/repo-a"],
       team: [],
-      review: { required_approvals: 1, recently_closed_window: "24h" },
+      review: { required_approvals: 1, recently_closed_window: "24h", hide_inactive_after_days: null },
       jira: { base_url: null, project_keys: [] },
       notifications: { ...ALL_ENABLED.enabled, quiet_hours: null },
       issues: { columns: [], repos: {} },

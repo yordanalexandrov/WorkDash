@@ -10,7 +10,7 @@ export type Config = {
   github: { pollIntervalMs: number };
   repos: string[];
   team: string[];
-  review: { requiredApprovals: number; recentlyClosedWindowMs: number };
+  review: { requiredApprovals: number; recentlyClosedWindowMs: number; hideInactiveAfterDays: number | null };
   jira: JiraConfig;
   notifications: NotificationRules;
   issues: IssuesConfig;
@@ -28,6 +28,7 @@ function toConfig(raw: SettingsForm): Config {
     review: {
       requiredApprovals: raw.review.required_approvals,
       recentlyClosedWindowMs: durationMs(raw.review.recently_closed_window),
+      hideInactiveAfterDays: raw.review.hide_inactive_after_days,
     },
     jira: { baseUrl: raw.jira.base_url, projectKeys: raw.jira.project_keys },
     notifications: {
@@ -61,6 +62,7 @@ export function formFromConfig(config: Config): SettingsForm {
     review: {
       required_approvals: config.review.requiredApprovals,
       recently_closed_window: formatDuration(config.review.recentlyClosedWindowMs),
+      hide_inactive_after_days: config.review.hideInactiveAfterDays,
     },
     jira: { base_url: config.jira.baseUrl, project_keys: config.jira.projectKeys },
     notifications: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { updateRecentlyClosed, vanishedPullRequests, withinWindow } from "../src/domain/closed.js";
+import { activeWithin, updateRecentlyClosed, vanishedPullRequests, withinWindow } from "../src/domain/closed.js";
 import type { ClosedPullRequest } from "../src/domain/types.js";
 import { pullRequest } from "./fixtures.js";
 
@@ -77,5 +77,19 @@ describe("withinWindow", () => {
     const list = [closed(2, "2026-10-30T11:00:00Z"), closed(1, "2026-10-29T11:00:00Z")];
 
     expect(withinWindow(list, now, DAY)).toEqual([closed(2, "2026-10-30T11:00:00Z")]);
+  });
+});
+
+describe("activeWithin", () => {
+  const now = new Date("2026-10-30T12:00:00Z");
+  const fresh = pullRequest({ number: 1, updatedAt: "2026-10-20T12:00:00Z" });
+  const stale = pullRequest({ number: 2, updatedAt: "2026-07-01T12:00:00Z" });
+
+  it("keeps the PRs updated within the last days", () => {
+    expect(activeWithin([fresh, stale], now, 30)).toEqual([fresh]);
+  });
+
+  it("keeps every PR when there is no limit", () => {
+    expect(activeWithin([fresh, stale], now, null)).toEqual([fresh, stale]);
   });
 });

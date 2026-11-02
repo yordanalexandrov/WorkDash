@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController
 import { z } from "zod";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
-import { withinWindow } from "./domain/closed.js";
+import { activeWithin, withinWindow } from "./domain/closed.js";
 import { type JiraConfig, jiraLinks } from "./domain/jira.js";
 import { ISSUE_DEMANDS } from "./domain/issue-poll.js";
 import { type IssueBoardState, type IssuesConfig, stageOf, stagesFor } from "./domain/issues.js";
@@ -117,6 +117,8 @@ export type DashboardSource = {
   pollIntervalMs: () => number;
   /** How long a merged or closed PR stays listed. */
   recentlyClosedWindowMs: () => number;
+  /** After how many days without an update an open PR is left off; null or left out shows them all. */
+  hideInactiveAfterDays?: () => number | null;
   pollHealth: () => PollHealth;
   /** The poll mode and demands; a dashboard without one is Periodic and ignores demands. */
   poller?: PollControl;
@@ -127,19 +129,26 @@ export type DashboardSource = {
   now?: () => Date;
 };
 
+/** The saved open PRs in their sections, without those inactive for longer than `hide_inactive_after_days`. */
+export function dashboardSections({ store, rules, hideInactiveAfterDays = () => null, now = () => new Date() }: DashboardSource) {
+  const snapshot = store.loadSnapshot();
+  const shown = activeWithin(snapshot?.pullRequests ?? [], now(), hideInactiveAfterDays());
+  return groupIntoSections(shown, snapshot?.viewer ?? "", rules(), store.loadSeen());
+}
+
 /** What GET /api/prs returns and the `dashboard` event carries. */
-export function dashboardState({
-  store,
-  rules,
-  jira = () => NO_JIRA,
-  pollIntervalMs,
-  recentlyClosedWindowMs,
-  pollHealth,
-  poller = NO_POLLER,
-  configError,
-  missing = () => [],
-  now = () => new Date(),
-}: DashboardSource) {
+export function dashboardState(source: DashboardSource) {
+  const {
+    store,
+    jira = () => NO_JIRA,
+    pollIntervalMs,
+    recentlyClosedWindowMs,
+    pollHealth,
+    poller = NO_POLLER,
+    configError,
+    missing = () => [],
+    now = () => new Date(),
+  } = source;
   const snapshot = store.loadSnapshot();
   const { error, problems } = pollHealth();
   return {
@@ -153,7 +162,7 @@ export function dashboardState({
     pollMode: poller.mode(),
     /** Whether a poll is under way; every open page shows it. */
     polling: poller.polling(),
-    sections: groupIntoSections(snapshot?.pullRequests ?? [], snapshot?.viewer ?? "", rules(), store.loadSeen()).map(({ section, pullRequests }) => ({
+    sections: dashboardSections(source).map(({ section, pullRequests }) => ({
       section,
       pullRequests: pullRequests.map((pr) => ({ ...pr, jira: jiraLinks(pr, jira()) })),
     })),
