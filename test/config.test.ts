@@ -322,12 +322,12 @@ describe("exportSettings and importSettings", () => {
   });
 
   it("ignores a token in an imported file, wherever it is, and says which keys it dropped", () => {
-    const text = `token: ghp_secret1234\ngithub:\n  token: ghp_secret1234\n  token_env: GITHUB_TOKEN\n  poll_interval: 5m\n${minimal}`;
+    const text = `token: fake\ngithub:\n  token: fake\n  token_env: GITHUB_TOKEN\n  poll_interval: 5m\n${minimal}`;
 
     const result = importSettings(text);
 
     expect(result).toEqual({ ok: true, settings: { ...settingsForm(minimal), github: { poll_interval: "5m" } }, ignored: ["token", "github.token", "github.token_env"] });
-    expect(JSON.stringify(result)).not.toMatch(/ghp_secret/);
+    expect(JSON.stringify(result)).not.toMatch(/fake/);
   });
 
   it("keeps a repo whose name says token", () => {
