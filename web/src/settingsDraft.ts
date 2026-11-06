@@ -77,3 +77,12 @@ export function readQuiet(value: string | null): QuietRange {
 export function writeQuiet({ on, from, to }: QuietRange): string | null {
   return on ? `${from}-${to}` : null;
 }
+
+/**
+ * What the screen says once a settings file is in the draft: `ignored` are the token keys the file had and the import left
+ * out, `differs` whether the file's settings differ from the saved ones (when not, there is nothing to save).
+ */
+export function importedNote(fileName: string, ignored: string[], differs: boolean): string {
+  const note = differs ? `Настройките от ${fileName} са заредени. Прегледай ги и натисни „Запази“.` : `${fileName} е същият като записаните настройки: няма какво да се запази.`;
+  return ignored.length ? `${note} Токенът от файла е пропуснат (${ignored.join(", ")}): записаният остава.` : note;
+}

@@ -577,6 +577,41 @@ describe("the settings API", () => {
   });
 });
 
+describe("settings export and import", () => {
+  it("exports the saved settings as a YAML file to download, without the token", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    const response = await server.inject("/api/config/export");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toMatch(/^application\/yaml/);
+    expect(response.headers["content-disposition"]).toBe('attachment; filename="workdash-settings.yaml"');
+    expect(settingsForm(response.body)).toEqual(FORM);
+    expect(response.body).not.toMatch(/ghp_/);
+  });
+
+  it("reads an imported file into settings to review, saving nothing and leaving the token alone", async () => {
+    const { settings, saves, tokens } = fakeSettings();
+    const server = buildServer({ ...source(), settings });
+
+    const response = await server.inject({ method: "POST", url: "/api/config/import", payload: { text: "token: ghp_theirs\nrepos: [my-org/repo-a]\n" } });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ settings: FORM, ignored: ["token"] });
+    expect(saves).toEqual([]);
+    expect(tokens).toEqual([]);
+  });
+
+  it("answers 422 with what is wrong in an imported file", async () => {
+    const server = buildServer({ ...source(), settings: fakeSettings().settings });
+
+    const response = await server.inject({ method: "POST", url: "/api/config/import", payload: { text: "repos: [nope]\n" } });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ issues: [{ path: "repos[0]", message: 'expected "owner/name"' }] });
+  });
+});
+
 describe("requests from other sites", () => {
   it("refuses a write from another origin", async () => {
     const { settings, tokens } = fakeSettings();

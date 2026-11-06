@@ -2823,7 +2823,8 @@ kbd {
 }
 
 /* Settings: a full view in place of the board or table; glassy cards like the columns, one draft saved from the bar below. */
-.banner.setup {
+.banner.setup,
+.banner.info {
   --accent: var(--blue);
 }
 
@@ -2889,6 +2890,14 @@ kbd {
   margin: 0;
   font-size: 17px;
   letter-spacing: -0.01em;
+}
+
+/* Export and import of the settings as a file, before the ✕. */
+.set-file {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 8px;
 }
 
 .set-note {

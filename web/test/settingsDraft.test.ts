@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { labelHints, missingFrom, moved, onCommonList } from "../src/settingsDraft.js";
+import { importedNote, labelHints, missingFrom, moved, onCommonList } from "../src/settingsDraft.js";
 
 describe("moved", () => {
   it("moves an item one place up or down", () => {
@@ -48,5 +48,21 @@ describe("missingFrom", () => {
 
   it("doubts no repo GitHub did not answer about", () => {
     expect(missingFrom("doing", labels, ["my-org/repo-c", "my-org/repo-d"])).toEqual([]);
+  });
+});
+
+describe("importedNote", () => {
+  it("says the file is in the draft, waiting for a save", () => {
+    expect(importedNote("workdash-settings.yaml", [], true)).toBe("Настройките от workdash-settings.yaml са заредени. Прегледай ги и натисни „Запази“.");
+  });
+
+  it("says when the file holds the settings already saved", () => {
+    expect(importedNote("mine.yaml", [], false)).toBe("mine.yaml е същият като записаните настройки: няма какво да се запази.");
+  });
+
+  it("says a token in the file was left out", () => {
+    expect(importedNote("mine.yaml", ["token", "github.token"], true)).toBe(
+      "Настройките от mine.yaml са заредени. Прегледай ги и натисни „Запази“. Токенът от файла е пропуснат (token, github.token): записаният остава.",
+    );
   });
 });

@@ -169,3 +169,19 @@ export async function checkNames(names: { repos: string[]; team: string[] }): Pr
 export async function repoSuggestions(): Promise<string[]> {
   return (await json<{ repos: string[] }>(await fetch("/api/config/suggestions"))).repos;
 }
+
+/** The saved settings as a YAML file, without the token. */
+export async function exportSettings(): Promise<Blob> {
+  const response = await fetch("/api/config/export");
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.blob();
+}
+
+/** A settings file read by the server's rules, for the screen to take as its draft; nothing is saved. */
+export type ImportAnswer = { ok: true; settings: SettingsForm; ignored: string[] } | { ok: false; issues: FieldIssue[] };
+
+export async function importSettings(text: string): Promise<ImportAnswer> {
+  const response = await send("POST", "/api/config/import", { text });
+  if (response.status === 422) return { ok: false, issues: ((await response.json()) as { issues: FieldIssue[] }).issues };
+  return { ok: true, ...(await json<{ settings: SettingsForm; ignored: string[] }>(response)) };
+}
