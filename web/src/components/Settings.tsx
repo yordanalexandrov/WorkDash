@@ -4,7 +4,9 @@ import { EVENT_TYPES } from "../../../src/domain/events.js";
 import {
   checkNames,
   checkToken,
+  exportSettings,
   type FieldIssue,
+  importSettings,
   loadSettings,
   type NamesCheck,
   repoLabels,
@@ -20,6 +22,7 @@ import { useFlip } from "../motion.js";
 import { eventLabel } from "../notifications.js";
 import {
   changed,
+  importedNote,
   issueAt,
   labelHints,
   missingFrom,
@@ -60,6 +63,8 @@ export function Settings({ onClose }: { onClose(): void }) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [labels, setLabels] = useState<RepoLabels>({});
   const [tokenCheck, setTokenCheck] = useState<TokenCheck | "checking" | null>(null);
+  const [imported, setImported] = useState<string | null>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
 
   const dirty = read !== null && draft !== null && changed(draft, read.settings);
 
@@ -103,6 +108,7 @@ export function Settings({ onClose }: { onClose(): void }) {
     setIssues([]);
     setConflict(false);
     setFailure(null);
+    setImported(null);
     if (next.token.set) {
       verifyToken();
       lookUp(next.settings);
@@ -150,6 +156,7 @@ export function Settings({ onClose }: { onClose(): void }) {
         setRead({ ...read, settings: draft, hash: result.hash, invalid: null });
         setIssues([]);
         setSaved(true);
+        setImported(null);
       } else if (result.reason === "conflict") {
         setConflict(true);
       } else {
@@ -160,6 +167,43 @@ export function Settings({ onClose }: { onClose(): void }) {
       setFailure(`Не се записа: ${(error as Error).message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Downloads the saved settings as a file; the server builds it from the settings alone, so the token is never in it. */
+  const download = async () => {
+    try {
+      const url = URL.createObjectURL(await exportSettings());
+      const link = Object.assign(document.createElement("a"), { href: url, download: "workdash-settings.yaml", hidden: true });
+      document.body.append(link);
+      link.click();
+      link.remove();
+      // Some browsers start a blob's download later; a minute is long enough for any of them.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setFailure(null);
+    } catch (error) {
+      setFailure(`Настройките не се експортираха: ${(error as Error).message}`);
+    }
+  };
+
+  /** Puts a settings file in the draft: nothing is saved until "Запази", and the saved token stays. */
+  const upload = async (file: File) => {
+    if (dirty && !confirm("Има незаписани промени. Да се заменят ли с настройките от файла?")) return;
+    try {
+      const result = await importSettings(await file.text());
+      if (!result.ok) {
+        // The draft stays as it was, and so does what the screen said about it.
+        setFailure(`${file.name} не е внесен:\n${result.issues.map(({ path, message }) => `${path}: ${message}`).join("\n")}`);
+        return;
+      }
+      setDraft(result.settings);
+      setIssues([]);
+      setSaved(false);
+      setFailure(null);
+      setImported(importedNote(file.name, result.ignored, changed(result.settings, read.settings)));
+      if (read.token.set) lookUp(result.settings);
+    } catch (error) {
+      setFailure(`${file.name} не е внесен: ${(error as Error).message}`);
     }
   };
 
@@ -187,6 +231,25 @@ export function Settings({ onClose }: { onClose(): void }) {
     <section class="settings" aria-label="Настройки">
       <header class="set-head">
         <h2>Настройки</h2>
+        <div class="set-file">
+          <button type="button" class="chip" title={dirty ? "Записаните настройки, без незаписаните промени. Без токена." : "Записаните настройки като YAML файл, без токена"} onClick={() => void download()}>
+            Експорт
+          </button>
+          <button type="button" class="chip" title="Зарежда настройки от YAML файл; записват се чак със „Запази“. Токенът не се пипа." disabled={saving} onClick={() => filePicker.current?.click()}>
+            Импорт…
+          </button>
+          <input
+            ref={filePicker}
+            type="file"
+            accept=".yaml,.yml,application/yaml,text/yaml"
+            hidden
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              e.currentTarget.value = "";
+              if (file) void upload(file);
+            }}
+          />
+        </div>
         <button type="button" class="chip set-x" title="Затвори (Esc)" aria-label="Затвори" onClick={close}>
           ✕
         </button>
@@ -205,6 +268,7 @@ export function Settings({ onClose }: { onClose(): void }) {
           <span>Файлът на диска не е валиден, затова виждаш настройките в сила. „Запази“ ще го поправи. {read.invalid}</span>
         </p>
       )}
+      {imported && !failure && <p class="banner info set-note" role="status">{imported}</p>}
       {failure && <p class="banner bad set-note">{failure}</p>}
       {stray.length > 0 && (
         <p class="banner bad set-note">
@@ -402,7 +466,15 @@ export function Settings({ onClose }: { onClose(): void }) {
         <span class="set-state" aria-live="polite">
           {dirty ? "Незаписани промени" : saved ? "Запазено ✓ Влиза в сила веднага." : "Няма промени"}
         </span>
-        <button type="button" class="chip" disabled={!dirty || saving} onClick={() => setDraft(read.settings)}>
+        <button
+          type="button"
+          class="chip"
+          disabled={!dirty || saving}
+          onClick={() => {
+            setDraft(read.settings);
+            setImported(null);
+          }}
+        >
           Отказ
         </button>
         <button type="button" class="chip primary" disabled={!dirty || saving || conflict} onClick={() => void save()}>

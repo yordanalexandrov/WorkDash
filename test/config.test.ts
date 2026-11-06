@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { applySettings, ConfigError, formFromConfig, parseConfig, settingsForm } from "../src/config.js";
+import { applySettings, ConfigError, exportSettings, formFromConfig, importSettings, parseConfig, settingsForm } from "../src/config.js";
 import { validateSettings } from "../src/domain/settings.js";
 import { ALL_ENABLED } from "../src/domain/notify.js";
 
@@ -304,5 +304,64 @@ team: [colleague1]
 
     expect(parseConfig(text).repos).toEqual(["my-org/repo-b"]);
     expect(parseConfig(text).jira.projectKeys).toEqual(["ABC"]);
+  });
+});
+
+describe("exportSettings and importSettings", () => {
+  const form = settingsForm(readFileSync("config.example.yaml", "utf8"));
+
+  it("reads back an exported file as the same settings", () => {
+    expect(importSettings(exportSettings(form))).toEqual({ ok: true, settings: form, ignored: [] });
+  });
+
+  it("exports every setting, defaults too, and nothing about a token", () => {
+    const text = exportSettings(settingsForm(minimal));
+
+    expect(text).toMatch(/required_approvals: 1/);
+    expect(text.replace(/^#.*\n/gm, "")).not.toMatch(/token/i);
+  });
+
+  it("ignores a token in an imported file, wherever it is, and says which keys it dropped", () => {
+    const text = `token: ghp_secret1234\ngithub:\n  token: ghp_secret1234\n  token_env: GITHUB_TOKEN\n  poll_interval: 5m\n${minimal}`;
+
+    const result = importSettings(text);
+
+    expect(result).toEqual({ ok: true, settings: { ...settingsForm(minimal), github: { poll_interval: "5m" } }, ignored: ["token", "github.token", "github.token_env"] });
+    expect(JSON.stringify(result)).not.toMatch(/ghp_secret/);
+  });
+
+  it("keeps a repo whose name says token", () => {
+    const result = importSettings("repos: [my-org/token-service]\nissues:\n  repos:\n    my-org/token-service: { columns: [todo] }\n");
+
+    expect(result.ok && result.settings.issues.repos).toEqual({ "my-org/token-service": { columns: ["todo"] } });
+  });
+
+  it("drops a token key in any section, and keeps going", () => {
+    const result = importSettings(`jira:\n  base_url: https://example.atlassian.net/browse/\n  api_token: x\nnotifications:\n  token: x\n${minimal}`);
+
+    expect(result.ok && result.ignored).toEqual(["jira.api_token", "notifications.token"]);
+  });
+
+  it("refuses a file with none of the settings in it, so an import never empties them", () => {
+    const none = { ok: false, issues: [{ path: "(file)", message: "no WorkDash settings in this file" }] };
+
+    expect(importSettings("")).toEqual(none);
+    expect(importSettings("services:\n  app: { image: x }\n")).toEqual(none);
+    expect(importSettings("token: ghp_x\n")).toEqual(none);
+  });
+
+  it("refuses a file that is not YAML", () => {
+    const result = importSettings("repos: [unclosed\n");
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.issues[0]!.path).toBe("(file)");
+  });
+
+  it("refuses a file that is not a map of settings", () => {
+    expect(importSettings("- just\n- a list\n")).toEqual({ ok: false, issues: [{ path: "(file)", message: "expected a map of settings" }] });
+  });
+
+  it("names the fields that are wrong", () => {
+    expect(importSettings("repos: [nope]\n")).toEqual({ ok: false, issues: [{ path: "repos[0]", message: 'expected "owner/name"' }] });
   });
 });

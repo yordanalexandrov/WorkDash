@@ -1,10 +1,10 @@
 import { readFileSync, statSync } from "node:fs";
-import { isMap, isNode, isSeq, parse as parseYaml, parseDocument } from "yaml";
+import { isMap, isNode, isSeq, parse as parseYaml, parseDocument, stringify as stringifyYaml } from "yaml";
 import { EVENT_TYPES, type EventType } from "./domain/events.js";
 import type { IssuesConfig } from "./domain/issues.js";
 import type { JiraConfig } from "./domain/jira.js";
 import { type NotificationRules, parseQuietHours, type QuietHours } from "./domain/notify.js";
-import { durationMs, formatClock, formatDuration, type SettingsForm, settingsSchema, validateSettings } from "./domain/settings.js";
+import { durationMs, type FieldIssue, formatClock, formatDuration, type SettingsForm, settingsSchema, validateSettings } from "./domain/settings.js";
 
 export type Config = {
   github: { pollIntervalMs: number };
@@ -39,17 +39,71 @@ function toConfig(raw: SettingsForm): Config {
   };
 }
 
-/** Reads config.yaml content as the Settings screen shows it; a ConfigError when it is not valid. */
-export function settingsForm(text: string): SettingsForm {
-  let raw: unknown;
+/** config.yaml content as YAML, before its settings are checked; a ConfigError when it is not YAML. */
+function parseSettingsYaml(text: string): unknown {
   try {
-    raw = parseYaml(text);
+    return parseYaml(text) ?? {};
   } catch (error) {
     throw new ConfigError(`invalid YAML: ${(error as Error).message}`);
   }
-  const result = validateSettings(raw ?? {});
+}
+
+/** Reads config.yaml content as the Settings screen shows it; a ConfigError when it is not valid. */
+export function settingsForm(text: string): SettingsForm {
+  const result = validateSettings(parseSettingsYaml(text));
   if (!result.ok) throw new ConfigError(`invalid configuration:\n${result.issues.map(({ path, message }) => `  ${path}: ${message}`).join("\n")}`);
   return result.form;
+}
+
+/** A key that names or holds a token: never written to an exported file, and dropped from an imported one. */
+const TOKEN_KEY = /token/i;
+
+/**
+ * The settings as a file to take elsewhere: every key, defaults too, so it reads the same wherever the defaults change.
+ * Only the settings: the token lives in its own store and never goes in.
+ */
+export function exportSettings(form: SettingsForm): string {
+  return `# WorkDash settings. The GitHub token is not in this file.\n${stringifyYaml(form)}`;
+}
+
+export type ImportResult = { ok: true; settings: SettingsForm; ignored: string[] } | { ok: false; issues: FieldIssue[] };
+
+const isMapValue = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** `value` without the keys that look like a token, at any depth, each dropped key's path added to `ignored`. */
+function withoutTokens(value: unknown, path: string, ignored: string[]): unknown {
+  if (!isMapValue(value)) return value;
+  // The keys of a map keyed by name are repo names, never a token, however they are spelled.
+  const byName = KEYED_BY_NAME.has(path);
+  const kept: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value)) {
+    const at = path ? `${path}.${key}` : key;
+    if (!byName && TOKEN_KEY.test(key)) ignored.push(at);
+    else kept[key] = withoutTokens(inner, byName ? `${path}.*` : at, ignored);
+  }
+  return kept;
+}
+
+/**
+ * Reads an exported (or hand-written) settings file, checked by the same rules as config.yaml. A key that looks like a
+ * token, in any section, is dropped and named in `ignored`: an import never brings a token in. A file without any of the
+ * settings is refused, so a wrong file never empties them.
+ */
+export function importSettings(text: string): ImportResult {
+  const refuse = (message: string): ImportResult => ({ ok: false, issues: [{ path: "(file)", message }] });
+  let raw: unknown;
+  try {
+    raw = parseSettingsYaml(text);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    return refuse(error.message);
+  }
+  if (!isMapValue(raw)) return refuse("expected a map of settings");
+  const ignored: string[] = [];
+  const settings = withoutTokens(raw, "", ignored) as Record<string, unknown>;
+  if (!Object.keys(settingsSchema.shape).some((key) => Object.hasOwn(settings, key))) return refuse("no WorkDash settings in this file");
+  const result = validateSettings(settings);
+  return result.ok ? { ok: true, settings: result.form, ignored } : { ok: false, issues: result.issues };
 }
 
 /** The config in effect written back as settings, for when the file on disk is not valid. */

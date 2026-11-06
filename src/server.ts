@@ -2,6 +2,7 @@ import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyServerOptions, LogController } from "fastify";
 import { z } from "zod";
+import { exportSettings, importSettings } from "./config.js";
 import type { SnapshotStore } from "./db.js";
 import { type ClassifyRules, groupIntoSections } from "./domain/classify.js";
 import { activeWithin, withinWindow } from "./domain/closed.js";
@@ -43,6 +44,8 @@ const PollRequest = z.object({ demand: z.enum(DEMANDS) });
 const PollModeRequest = z.object({ mode: z.enum(POLL_MODES) });
 
 const SaveSettingsRequest = z.object({ settings: z.unknown(), hash: z.string() });
+
+const ImportSettingsRequest = z.object({ text: z.string().max(1_000_000) });
 
 const TokenRequest = z.object({ token: z.string().trim().min(1) });
 
@@ -322,6 +325,24 @@ function registerSettings(server: FastifyInstance, settings: Settings, timeZone:
     if (result.ok) return { hash: result.hash };
     if (result.reason === "conflict") return reply.code(409).send({ error: "config.yaml changed on disk since it was read" });
     return reply.code(422).send({ issues: result.issues });
+  });
+
+  // The saved settings as a file to take elsewhere; built from the settings alone, so the token cannot be in it.
+  server.get("/api/config/export", async (_request, reply) =>
+    reply
+      .type("application/yaml; charset=utf-8")
+      .header("content-disposition", 'attachment; filename="workdash-settings.yaml"')
+      .send(exportSettings(settings.read().settings)),
+  );
+
+  // Reads a settings file for the screen to take as its draft: nothing is saved until "Запази", and a token is dropped.
+  // Up to a million characters, each up to 4 bytes in UTF-8.
+  server.post("/api/config/import", { bodyLimit: 4 * 1024 * 1024 + 64 }, async (request, reply) => {
+    const parsed = ImportSettingsRequest.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const result = importSettings(parsed.data.text);
+    if (!result.ok) return reply.code(422).send({ issues: result.issues });
+    return { settings: result.settings, ignored: result.ignored };
   });
 
   server.get("/api/config/suggestions", async () => ({ repos: await settings.suggestions() }));

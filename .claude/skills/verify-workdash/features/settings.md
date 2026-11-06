@@ -41,6 +41,9 @@ Preconditions:
 - **Invalid value.** Run `$W browser fill --role textbox --name "Poll интервал" --value "soon"`, then click „Запази“ within `.set-actions`. `$W browser wait --text 'expected a duration such as "60s"'` passes (the message is in English), and `$W data` is unchanged.
 - **⚙ drops the draft.** Change the poll interval, then click ⚙ (`$W browser click --role button --name "Настройки" --exact`). Settings closes, no dialog is printed, and `$W data` is unchanged.
 - **Proof.** Save `screenshot` and `aria` before the save and after it, plus the `$W data` output and the reload screenshot, under `$($W evidence)/settings/`.
+- **Export.** `$W browser download --role button --name "Експорт" --dir $E/downloads`, then read the file: every key, the saved settings (not the draft), and no token anywhere but the header comment.
+- **Import.** Write a placeholder YAML with `token: ghp_notarealtoken…` and other repos, then `$W browser upload --role button --name "Импорт" --file <it>`. The blue banner says „са заредени“ and names the dropped token keys, the save bar says „Незаписани промени“, and `$W data` is unchanged until „Запази“. After it, `config.yaml` has the file's values and no `github-token` file appeared (or the old one is untouched).
+- **Import of a broken file.** A file that is not YAML (`repos: [nope`) gives the red banner „… не е внесен:“ with the reason, and the draft stays as it was.
 
 ## Gotchas
 

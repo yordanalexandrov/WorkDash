@@ -23,10 +23,14 @@
 //   cdp.mjs eval   <js-expression>              read-only inspection; never use it to cause a state change
 //   cdp.mjs url                                 the page's current URL
 //   cdp.mjs dialog accept|dismiss               answer a confirm()/alert() an earlier command left open
+//   cdp.mjs upload (--name N | --css S) --file F [...]
+//     clicks N, which opens a file picker, and picks F in it (the picker is intercepted, as a user would choose the file)
+//   cdp.mjs download (--name N | --css S) --dir D [--timeout MS] [...]
+//     clicks N and waits for the download it starts to land in D; prints the saved file's path
 // Any command: --dialog accept|dismiss answers a dialog that opens during it (default dismiss); --settle MS after acting.
 
-import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 const CDP_PORT = process.env.CDP_PORT;
 const BASE_URL = process.env.BASE_URL;
@@ -243,6 +247,36 @@ async function main() {
         await mouseClick(cdp, hit.x, hit.y);
         await sleep(SETTLE_MS);
         console.log(`clicked <${hit.tag}> "${hit.text}" (${hit.count} match${hit.count === 1 ? "" : "es"})`);
+        break;
+      }
+      case "upload": {
+        if (!flags.file || !existsSync(String(flags.file))) die(`upload needs --file of an existing file`);
+        await cdp.send("Page.setInterceptFileChooserDialog", { enabled: true });
+        const chooser = new Promise((done) => cdp.on((m) => m.method === "Page.fileChooserOpened" && done(m.params)));
+        const hit = await find(cdp, specFrom(flags));
+        if (hit.disabled) die(`<${hit.tag}> "${hit.text}" is disabled; a user could not click it`);
+        await mouseClick(cdp, hit.x, hit.y);
+        const opened = await Promise.race([chooser, sleep(5000).then(() => null)]);
+        if (!opened) die(`clicking "${hit.text}" opened no file picker`);
+        await cdp.send("DOM.setFileInputFiles", { files: [resolve(String(flags.file))], backendNodeId: opened.backendNodeId });
+        await sleep(SETTLE_MS);
+        console.log(`picked ${flags.file} in the file picker of "${hit.text}"`);
+        break;
+      }
+      case "download": {
+        if (!flags.dir) die("download needs --dir");
+        const dir = resolve(String(flags.dir));
+        mkdirSync(dir, { recursive: true });
+        const before = new Set(readdirSync(dir));
+        await cdp.send("Page.setDownloadBehavior", { behavior: "allow", downloadPath: dir });
+        const hit = await find(cdp, specFrom(flags));
+        if (hit.disabled) die(`<${hit.tag}> "${hit.text}" is disabled; a user could not click it`);
+        await mouseClick(cdp, hit.x, hit.y);
+        const deadline = Date.now() + Number(flags.timeout ?? 10000);
+        let saved;
+        while (!(saved = readdirSync(dir).find((f) => !before.has(f) && !f.endsWith(".crdownload"))) && Date.now() < deadline) await sleep(100);
+        if (!saved) die(`clicking "${hit.text}" downloaded nothing into ${dir}`);
+        console.log(`downloaded ${join(dir, saved)}`);
         break;
       }
       case "fill": {

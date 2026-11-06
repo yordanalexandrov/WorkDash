@@ -67,6 +67,8 @@ It is read-only and checks that the server pid is alive and is this worktree's `
 | `screenshot <file> [--full] [--scheme dark] [--reduced-motion]` | Saves a PNG of the 1440×900 viewport, or the whole page with `--full`. `--scheme` and `--reduced-motion` apply only to that shot. |
 | `aria [<file>]` | Writes the accessibility tree with checked/pressed/disabled states. Field values are left out, so a token can't leak. |
 | `eval <js>` | For reading only. Never use it to change state: that is not the user path. |
+| `upload --name N --file F` | Clicks N (a button that opens a file picker) and picks F in the picker, as a user choosing a file. Fails if no picker opens. |
+| `download --name N --dir D` | Clicks N and waits for the file it downloads to land in D; prints its path. |
 | `dialog accept\|dismiss` | Answers a `confirm()` an earlier command left open. Any command also takes `--dialog accept` to answer one that opens during it; the default is dismiss, and the dialog's text is printed. |
 
 A page with a `confirm()` nobody answered stays wedged, even across commands: `Runtime.evaluate` never returns. The helper answers every dialog it sees and gives up after its watchdog (`--timeout` + 15s) with a message. On that message, or on any hang, run `$W stop && $W start`: the doctor can't see a wedged page, because the processes are healthy.
