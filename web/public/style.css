@@ -248,6 +248,37 @@ h1 .live.ok::after {
   animation: spin 0.9s linear infinite;
 }
 
+/* The bar along the top of the window while a poll is under way: over everything, in nothing's way. */
+.poll-bar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 50;
+  height: 3px;
+  background: color-mix(in srgb, var(--blue) 20%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s linear;
+}
+
+.poll-bar.on {
+  opacity: 1;
+}
+
+.poll-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: var(--blue);
+  box-shadow: 0 0 8px var(--blue);
+  animation: poll-run 1.3s ease-in-out infinite;
+}
+
+/* Frozen rather than removed, so it does not jump as the bar fades out. */
+.poll-bar:not(.on)::before {
+  animation-play-state: paused;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -2789,6 +2820,15 @@ kbd {
   }
 }
 
+@keyframes poll-run {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(1turn);
@@ -3220,6 +3260,10 @@ kbd {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+
+  .poll-bar::before {
+    width: 100%;
   }
 
   .card,
