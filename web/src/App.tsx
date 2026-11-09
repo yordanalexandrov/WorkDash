@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import { Banners } from "./components/Banners.js";
 import { DashboardToggle } from "./components/DashboardToggle.js";
 import { ISSUE_DASHBOARD_KEPT, IssueDashboard } from "./components/IssueDashboard.js";
+import { PollBar } from "./components/PollBar.js";
 import { PollControls } from "./components/PollControls.js";
 import { PrDashboard } from "./components/PrDashboard.js";
 import { Settings } from "./components/Settings.js";
@@ -49,6 +50,7 @@ export function App() {
   const issues = useIssues(issueRepo, state?.pollMode === "periodic");
   // The status line, the error banner and "Обнови" (and `r`) are of the dashboard shown: the PRs, or the open repo's issues.
   const pollNowButton = pollButton(onIssues ? issues.state : state, polling.now);
+  const pollBusy = (onIssues ? issues.state : state)?.polling ?? false;
   const pollNow = () => !pollNowButton.disabled && (onIssues ? issues.pollNow() : polling.pollNow());
   const [view, setView] = useState<View>(() => readView(location.search));
   // The Issue dashboard's filter lives here: the dashboard unmounts behind the PRs and Settings, and the filter outlasts that.
@@ -109,6 +111,7 @@ export function App() {
         <i />
         <i />
       </div>
+      <PollBar busy={pollBusy} />
       <TopBar
         status={issueRepo ? issueStatusText(issues.state, polling.now) : statusText(state, polling.now)}
         stream={stream}
@@ -127,7 +130,7 @@ export function App() {
             <PollControls
               mode={state.pollMode}
               interval={intervalText(state.pollIntervalMs)}
-              busy={onIssues ? (issues.state?.polling ?? false) : state.polling}
+              busy={pollBusy}
               pollNowButton={pollNowButton}
               onMode={polling.setMode}
               onPollNow={pollNow}
