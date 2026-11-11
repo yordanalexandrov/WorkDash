@@ -4,12 +4,16 @@ import type { PrEvent } from "./domain/events.js";
 import type { IssueSnapshot } from "./domain/issues.js";
 import { POLL_MODES, type PollMode } from "./domain/poll-mode.js";
 import type { ClosedPullRequest, PullRequest, Snapshot } from "./domain/types.js";
+import type { WorkItem } from "./domain/work-log.js";
 import { repoKey } from "./domain/repos.js";
 
 export type StoredSnapshot = Snapshot & { fetchedAt: string };
 
 /** The issues of one repo as the last successful poll of it saved them, and when it fetched them. */
 export type StoredIssueSnapshot = IssueSnapshot & { fetchedAt: string };
+
+/** The work log as its last successful search saved it: whose it is, its PRs, and when it was fetched. */
+export type StoredWorkLog = { viewer: string; items: WorkItem[]; fetchedAt: string };
 
 export type SnapshotStore = {
   saveSnapshot(snapshot: Snapshot, fetchedAt: Date): void;
@@ -25,6 +29,10 @@ export type SnapshotStore = {
   saveIssues(snapshot: IssueSnapshot, fetchedAt: Date): void;
   /** The issues of `repo` (in any case) as last saved; null before its first poll. */
   loadIssues(repo: string): StoredIssueSnapshot | null;
+  /** Replaces the work log with what a search found. */
+  saveWorkLog(log: { viewer: string; items: WorkItem[] }, fetchedAt: Date): void;
+  /** The work log as last saved; null before its first search. */
+  loadWorkLog(): StoredWorkLog | null;
   /** Records that I have seen a PR as it was at `seenAt`; a later mark wins over an earlier one. */
   markSeen(repo: string, number: number, seenAt: Date): void;
   /** Marks PRs without a seen mark as seen at `at`, when first observed, so only later comments are unread. */
@@ -66,6 +74,12 @@ const SCHEMA = `
     data_json  TEXT NOT NULL,
     fetched_at TEXT NOT NULL
   );
+  -- One row: the work log of its last successful search.
+  CREATE TABLE IF NOT EXISTS work_log (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    data_json  TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS poll (
     id         INTEGER PRIMARY KEY CHECK (id = 1),
     viewer     TEXT NOT NULL,
@@ -99,7 +113,7 @@ const SCHEMA = `
  * Bumped whenever the stored PullRequest or Issue shape changes. A snapshot in an older format is
  * dropped on open: it is only a cache, and the poller refetches it right away.
  */
-const SNAPSHOT_FORMAT = 12;
+const SNAPSHOT_FORMAT = 13;
 
 /** Opens (and creates if needed) the SQLite file that holds the latest snapshot. */
 export function openStore(path: string): SnapshotStore {
@@ -107,7 +121,7 @@ export function openStore(path: string): SnapshotStore {
   db.pragma("journal_mode = WAL");
   db.exec(SCHEMA);
   if (db.pragma("user_version", { simple: true }) !== SNAPSHOT_FORMAT) {
-    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM issue_repo; DELETE FROM issue_snapshot; DELETE FROM poll;");
+    db.exec("DELETE FROM pr_snapshot; DELETE FROM pr_closed; DELETE FROM issue_repo; DELETE FROM issue_snapshot; DELETE FROM work_log; DELETE FROM poll;");
     db.pragma(`user_version = ${SNAPSHOT_FORMAT}`);
   }
 
@@ -140,6 +154,10 @@ export function openStore(path: string): SnapshotStore {
     "INSERT INTO issue_snapshot (repo, data_json, fetched_at) VALUES (?, ?, ?) ON CONFLICT (repo) DO UPDATE SET data_json = excluded.data_json, fetched_at = excluded.fetched_at",
   );
   const selectIssues = db.prepare<[string], { data_json: string; fetched_at: string }>("SELECT data_json, fetched_at FROM issue_snapshot WHERE repo = ?");
+  const upsertWorkLog = db.prepare(
+    "INSERT INTO work_log (id, data_json, fetched_at) VALUES (1, ?, ?) ON CONFLICT (id) DO UPDATE SET data_json = excluded.data_json, fetched_at = excluded.fetched_at",
+  );
+  const selectWorkLog = db.prepare<[], { data_json: string; fetched_at: string }>("SELECT data_json, fetched_at FROM work_log WHERE id = 1");
   // Both sides come from Date.toISOString, so comparing the strings compares the instants.
   const upsertSeen = db.prepare(
     "INSERT INTO pr_seen (repo, number, seen_at) VALUES (?, ?, ?) ON CONFLICT (repo, number) DO UPDATE SET seen_at = MAX(seen_at, excluded.seen_at)",
@@ -199,6 +217,13 @@ export function openStore(path: string): SnapshotStore {
     loadIssues(repo) {
       const row = selectIssues.get(repoKey(repo));
       return row ? { ...(JSON.parse(row.data_json) as IssueSnapshot), fetchedAt: row.fetched_at } : null;
+    },
+    saveWorkLog(log, fetchedAt) {
+      upsertWorkLog.run(JSON.stringify(log), fetchedAt.toISOString());
+    },
+    loadWorkLog() {
+      const row = selectWorkLog.get();
+      return row ? { ...(JSON.parse(row.data_json) as { viewer: string; items: WorkItem[] }), fetchedAt: row.fetched_at } : null;
     },
     markSeen(repo, number, seenAt) {
       upsertSeen.run(repo, number, seenAt.toISOString());

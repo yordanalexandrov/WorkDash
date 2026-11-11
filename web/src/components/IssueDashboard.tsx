@@ -85,6 +85,8 @@ type IssueDashboardProps = {
   /** The effects layer, for the confetti of an issue completed while the board shows. */
   fx: RefObject<HTMLDivElement | null>;
   booted: boolean;
+  /** Whether something lies over it (Свършено): its keys are then the cover's. */
+  covered?: boolean;
 };
 
 /** Confetti from an issue completed while the board shows: as many pieces as from a merged PR's card. */
@@ -119,7 +121,7 @@ function boardMessage(open: string | null, fetched: boolean, issues: IssueBoardS
  * table, and the detail sheet of one issue. Its own keys (`/` and Esc for the filter; Esc and `f` while the sheet is open,
  * which also takes `/`, `t`, `i` and `r`) come before the app's.
  */
-export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, kept, onKept, view, topSlot, fx, booted }: IssueDashboardProps) {
+export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo, filter, onFilter, viewer, kept, onKept, view, topSlot, fx, booted, covered = false }: IssueDashboardProps) {
   const tabs = useMemo(() => issueTabs(issueRepos), [issueRepos]);
   const open = pickRepo(tabs, repo);
   // Only the open repo's issues: the state of the repo left behind shows until the new one comes.
@@ -158,16 +160,18 @@ export function IssueDashboard({ issueRepos, fetched, issues, hues, repo, onRepo
   useEffect(() => setSheet(null), [open]);
 
   useShortcuts(
-    sheet
-      ? [
-          { matches: ESCAPE, run: closeSheet },
-          { matches: F, run: () => !sheet.closing && setExpanded((current) => !current) },
-          { matches: (event) => SLASH(event) || T(event) || I(event) || R(event), run: () => {} },
-        ]
-      : [
-          { matches: SLASH, run: () => filterInput.current?.focus() },
-          { matches: ESCAPE, run: () => onFilter({ ...filter, query: "" }) },
-        ],
+    covered
+      ? []
+      : sheet
+        ? [
+            { matches: ESCAPE, run: closeSheet },
+            { matches: F, run: () => !sheet.closing && setExpanded((current) => !current) },
+            { matches: (event) => SLASH(event) || T(event) || I(event) || R(event), run: () => {} },
+          ]
+        : [
+            { matches: SLASH, run: () => filterInput.current?.focus() },
+            { matches: ESCAPE, run: () => onFilter({ ...filter, query: "" }) },
+          ],
     { first: true },
   );
   const hue = open ? repoHue(hues, open) : 0;

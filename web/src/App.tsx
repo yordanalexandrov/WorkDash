@@ -8,6 +8,7 @@ import { PrDashboard } from "./components/PrDashboard.js";
 import { Settings } from "./components/Settings.js";
 import { TopBar } from "./components/TopBar.js";
 import { ViewToggle } from "./components/ViewToggle.js";
+import { WORK_LOG_KEPT, WorkLogPanel } from "./components/WorkLogPanel.js";
 import type { DashboardState } from "./api.js";
 import { type Dashboard, type DashboardPlace, issueTabs, pickRepo, readDashboard, settledPlace, writeDashboard } from "./dashboard.js";
 import { NO_FILTER } from "./filter.js";
@@ -19,7 +20,8 @@ import { useIssues } from "./useIssues.js";
 import { useNotifications } from "./useNotifications.js";
 import { usePolling } from "./usePolling.js";
 import { useSettingsRoute } from "./useSettingsRoute.js";
-import { F, I, R, SLASH, T, useShortcuts } from "./useShortcuts.js";
+import { F, I, R, SLASH, T, useShortcuts, W } from "./useShortcuts.js";
+import { useWorkLog } from "./useWorkLog.js";
 import { readView, type View, writeView } from "./view.js";
 
 /**
@@ -58,6 +60,10 @@ export function App() {
   // So do its table settings and the size of its detail sheet.
   const [issueKept, setIssueKept] = useState(ISSUE_DASHBOARD_KEPT);
   const hues = useMemo(() => projectHues(state), [state]);
+  // Свършено, the work log: a sidebar over whatever shows, with what it keeps while closed.
+  const [workLogOpen, setWorkLogOpen] = useState(false);
+  const [workLogKept, setWorkLogKept] = useState(WORK_LOG_KEPT);
+  const workLog = useWorkLog(workLogOpen);
   // Where each dashboard puts its part of the top bar (the toolbar, the repo tabs), under the toggles.
   const [topSlot, setTopSlot] = useState<HTMLDivElement | null>(null);
   const viewRoot = useRef<HTMLDivElement>(null);
@@ -95,8 +101,14 @@ export function App() {
   // While Settings is open, it takes Esc itself and the dashboards' keys do nothing.
   useShortcuts(
     settings.open
-      ? [{ matches: (event) => SLASH(event) || T(event) || I(event) || R(event) || F(event), run: () => {} }]
-      : [
+      ? [{ matches: (event) => SLASH(event) || T(event) || I(event) || R(event) || F(event) || W(event), run: () => {} }]
+      : workLogOpen
+        ? [
+            { matches: W, run: () => setWorkLogOpen(false) },
+            { matches: (event) => SLASH(event) || T(event) || I(event) || R(event) || F(event), run: () => {} },
+          ]
+        : [
+          { matches: W, run: () => setWorkLogOpen(!workLogOpen) },
           { matches: T, run: () => switchView(view === "board" ? "table" : "board") },
           { matches: I, run: () => switchDashboard(place.dashboard === "prs" ? "issues" : "prs") },
           { matches: R, run: pollNow },
@@ -121,6 +133,15 @@ export function App() {
             <>
               <DashboardToggle dashboard={place.dashboard} onChange={switchDashboard} />
               <ViewToggle view={view} onChange={switchView} />
+              <button
+                type="button"
+                class={`chip work-log${workLogOpen ? " on" : ""}`}
+                aria-pressed={workLogOpen}
+                title="Свършено: моята работа по дни (w)"
+                onClick={() => setWorkLogOpen(!workLogOpen)}
+              >
+                ✔ Свършено
+              </button>
             </>
           )
         }
@@ -155,6 +176,7 @@ export function App() {
             state={state}
             seen={seen}
             shown={!settings.open && place.dashboard === "prs"}
+            covered={workLogOpen}
             view={view}
             hues={hues}
             topSlot={topSlot}
@@ -179,10 +201,14 @@ export function App() {
             topSlot={topSlot}
             fx={fx}
             booted={booted}
+            covered={workLogOpen}
           />
         )}
       </div>
       <div class="fx" ref={fx} aria-hidden="true" />
+      {workLogOpen && !settings.open && (
+        <WorkLogPanel workLog={workLog} hues={hues} kept={workLogKept} onKept={setWorkLogKept} onClose={() => setWorkLogOpen(false)} />
+      )}
     </>
   );
 }

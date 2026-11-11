@@ -13,6 +13,7 @@ import { buildServer, type DashboardSource, dashboardSections, dashboardState, t
 import { createSettings } from "./settings.js";
 import { createEventHub } from "./sse.js";
 import type { TokenStore } from "./token-store.js";
+import { createWorkLogs } from "./work-log.js";
 
 /** How often to check whether quiet hours are over, so the missed events reach an open browser without waiting for a poll. */
 const MISSED_CHECK_MS = 60_000;
@@ -188,6 +189,7 @@ export async function startWorkDash(options: WorkDashOptions): Promise<WorkDash>
     settings,
     timeZone,
     issues,
+    workLog: createWorkLogs({ store, repos: () => config.repos, token: () => token, jira: () => config.jira }),
     webRoot: options.webRoot,
     logger: options.logger,
   });

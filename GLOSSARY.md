@@ -86,5 +86,9 @@ _Avoid_: Modal, drawer, details page
 My mark that I have looked at a pull request as it is now; it takes the pull request out of Чака теб until something new happens.
 _Avoid_: Read, acknowledged, dismissed
 
+**Work log** (Свършено):
+What I did on the pull requests of the followed repos over the last days, day by day: PRs I opened, others' I reviewed or commented on, and my commits, reviews and comments on them; shown in a panel beside the dashboards, to copy for logging time.
+_Avoid_: Timesheet, activity, history
+
 **Jira ticket**:
 A Jira issue a pull request names in its title or branch, shown as a link.
