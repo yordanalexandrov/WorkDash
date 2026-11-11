@@ -66,11 +66,17 @@ function Row({ row, by, group, hue }: { row: WorkRow; by: WorkGroupBy; group: st
       </div>
       {pr.jira.length > 0 && (
         <div class="jira">
-          {pr.jira.map((link) => (
-            <a key={link.key} href={link.url} target="_blank" rel="noopener" title={`Jira ${link.key}`}>
-              {link.key}
-            </a>
-          ))}
+          {pr.jira.map((link) =>
+            link.url ? (
+              <a key={link.key} href={link.url} target="_blank" rel="noopener" title={`Jira ${link.key}`}>
+                {link.key}
+              </a>
+            ) : (
+              <span key={link.key} title="Без Jira адрес в Настройки: само ключът">
+                {link.key}
+              </span>
+            ),
+          )}
         </div>
       )}
       <div class="wl-actions">

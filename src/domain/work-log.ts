@@ -1,6 +1,6 @@
 import { sameLogin } from "./activity.js";
 import type { GitHubFailure } from "./github-error.js";
-import { type JiraConfig, type JiraLink, jiraLinks } from "./jira.js";
+import { extractJiraKeys, type JiraConfig } from "./jira.js";
 import type { ReviewState } from "./types.js";
 
 /** Whose PR it is to me: one I opened ("Мои PR-и"), or someone else's I reviewed or commented on ("Review-та"). */
@@ -47,8 +47,11 @@ export type WorkItem = {
   events: WorkEvent[];
 };
 
+/** A Jira ticket a PR names; without a Jira base URL in the settings, its key alone. */
+export type WorkTicket = { key: string; url: string | null };
+
 /** A PR of the work log as served: its Jira tickets instead of the texts they are read from. */
-export type WorkLogPr = Omit<WorkItem, "headRefName" | "body"> & { jira: JiraLink[] };
+export type WorkLogPr = Omit<WorkItem, "headRefName" | "body"> & { jira: WorkTicket[] };
 
 const VERDICTS: Record<ReviewState, ReviewVerdict> = { APPROVED: "approved", CHANGES_REQUESTED: "changes", COMMENTED: "commented", DISMISSED: "commented" };
 
@@ -80,9 +83,15 @@ export function workItem(pr: WorkSource, me: string, since: Date): WorkItem | nu
   return { repo, number, title, url, role: mine ? "author" : "review", headRefName, body, events: kept };
 }
 
-/** The work log's PRs with links to their Jira tickets, by the Jira settings in effect now. */
+/**
+ * The work log's PRs with their Jira tickets, by the Jira settings in effect now. Unlike the dashboard, a key shows even
+ * without a base URL to link it to: the tickets are what the time is logged against.
+ */
 export function servedItems(items: WorkItem[], jira: JiraConfig): WorkLogPr[] {
-  return items.map(({ headRefName, body, ...item }) => ({ ...item, jira: jiraLinks({ headRefName, title: item.title, body }, jira) }));
+  return items.map(({ headRefName, body, ...item }) => ({
+    ...item,
+    jira: extractJiraKeys({ headRefName, title: item.title, body }, jira).map((key) => ({ key, url: jira.baseUrl ? jira.baseUrl + key : null })),
+  }));
 }
 
 /** What GET /api/work-log returns: the saved work log, of the followed repos only, and how its search goes. */

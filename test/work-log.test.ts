@@ -103,6 +103,12 @@ describe("workItem", () => {
 });
 
 describe("servedItems", () => {
+  it("names the tickets by their keys alone without a Jira base URL", () => {
+    const item = workItem(source(), "me", SINCE)!;
+
+    expect(servedItems([item], { baseUrl: null, projectKeys: [] })[0]?.jira).toEqual([{ key: "ABC-123", url: null }]);
+  });
+
   it("links the Jira tickets the branch, title or description name, and drops those texts", () => {
     const item = workItem(source({ body: "Also ABC-124." }), "me", SINCE)!;
 
