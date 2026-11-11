@@ -9,6 +9,9 @@ import type { Demand, DemandAnswer, PollMode } from "../../src/domain/poll-mode.
 import type { FieldIssue, Missing, SaveResult, SettingsForm, TokenStatus } from "../../src/domain/settings.js";
 import type { ClosedPullRequest } from "../../src/domain/types.js";
 import type { NamesCheck, TokenCheck } from "../../src/github/rest.js";
+import type { WorkEvent, WorkLogPr, WorkLogState, WorkRole } from "../../src/domain/work-log.js";
+
+export type { WorkEvent, WorkLogPr, WorkLogState, WorkRole };
 
 export type { ClassifiedPullRequest, ClosedIssue, ClosedPullRequest, Demand, FieldIssue, IssueBoardState, IssueFamily, IssueLabel, JiraLink, StagedIssue, NamesCheck, PollError, PollMode, Section, SettingsForm, TokenCheck, TokenStatus };
 
@@ -135,6 +138,16 @@ async function send(method: "PUT" | "POST", url: string, body: unknown): Promise
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return (await response.json()) as T;
+}
+
+/** The work log of the Свършено panel as last saved, without searching GitHub. */
+export async function loadWorkLog(): Promise<WorkLogState> {
+  return json(await fetch("/api/work-log"));
+}
+
+/** Searches GitHub for the work log again (the server does at most once a minute) and answers when it is done. */
+export async function refreshWorkLog(): Promise<WorkLogState> {
+  return json(await send("POST", "/api/work-log/refresh", {}));
 }
 
 export async function loadSettings(): Promise<SettingsRead> {

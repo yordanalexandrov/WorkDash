@@ -21,6 +21,8 @@ export const R = (event: KeyboardEvent) => event.key === "r" || event.code === "
 /** `i`, also on a Bulgarian layout, where the key types "и" or "ш". */
 export const I = (event: KeyboardEvent) => event.key === "i" || event.code === "KeyI";
 
+export const W = (event: KeyboardEvent) => event.key === "w" || event.code === "KeyW";
+
 export const ESCAPE = (event: KeyboardEvent) => event.key === "Escape";
 
 /** Whether the key press is typing into a field rather than a shortcut. */

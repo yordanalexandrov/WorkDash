@@ -19,6 +19,7 @@ import type { Settings } from "./settings.js";
 import type { Missing } from "./domain/settings.js";
 import { createEventHub, type EventHub, type ServerEvent } from "./sse.js";
 import { sameRepo } from "./domain/repos.js";
+import type { WorkLogs } from "./work-log.js";
 
 const NO_JIRA: JiraConfig = { baseUrl: null, projectKeys: [] };
 
@@ -199,6 +200,8 @@ export function buildServer(
     webRoot?: string;
     /** The Issue dashboard's side; without it no repo's issues are served. */
     issues?: IssueSource;
+    /** The Свършено panel's work log; without it there is no /api/work-log. */
+    workLog?: WorkLogs;
     logger?: FastifyServerOptions["logger"];
   },
 ): FastifyInstance {
@@ -262,6 +265,8 @@ export function buildServer(
 
   registerIssues(server, options.store, options.issues ?? NO_ISSUES);
 
+  if (options.workLog) registerWorkLog(server, options.workLog);
+
   if (options.settings) registerSettings(server, options.settings, options.timeZone);
 
   server.get("/api/events", (request, reply) => {
@@ -312,6 +317,15 @@ function registerIssues(server: FastifyInstance, store: SnapshotStore, source: I
       return reply.code(502).send({ error: classifyGitHubError(error, new Date()) });
     }
   });
+}
+
+/**
+ * The Свършено panel's API: the saved work log, and a search for a new one (at most once a minute), answered when it is
+ * done. A failure is told to the panel in the answer's `error`, and to nobody else.
+ */
+function registerWorkLog(server: FastifyInstance, workLog: WorkLogs): void {
+  server.get("/api/work-log", async () => workLog.state());
+  server.post("/api/work-log/refresh", async () => workLog.refresh());
 }
 
 /** The Settings screen's API. The token goes in, never out: only whether one is saved and its masked form. */
