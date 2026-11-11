@@ -95,6 +95,8 @@ type PrDashboardProps = {
   seen(pr: { repo: string; number: number }): Promise<void>;
   /** Whether it shows: it stays mounted behind Settings and the Issue dashboard, so its table, counts and confetti outlast them. */
   shown: boolean;
+  /** Whether something lies over it (Свършено): it still shows, but its keys are the cover's. */
+  covered?: boolean;
   view: View;
   /** The project colours, shared with the Issue dashboard so a repo has one colour on both. */
   hues: Map<string, number>;
@@ -109,7 +111,7 @@ type PrDashboardProps = {
  * The PR dashboard: the toolbar, the board or the table of the PRs, the detail sheet, the "видях" drop zone and "Пусни деня".
  * Its own keys (`/`, Esc, and `f` while the sheet is open) come before the app's; while the sheet is open it takes `t`, `i` and `r` too.
  */
-export function PrDashboard({ state, seen, shown, view, hues, topSlot, fx, booted }: PrDashboardProps) {
+export function PrDashboard({ state, seen, shown, covered = false, view, hues, topSlot, fx, booted }: PrDashboardProps) {
   // The filter is not kept between visits, so the board never opens hiding something that waits on me.
   const [filter, setFilter] = useState(NO_FILTER);
   // The table's sort, grouping and folded groups live here, so they outlast a trip to the board; they are not kept between visits.
@@ -139,9 +141,9 @@ export function PrDashboard({ state, seen, shown, view, hues, topSlot, fx, boote
   const drag = useDrag(fx, dropZone);
   const spark = (at: Pos) => fx.current && sparks(fx.current, at.x, at.y, "✓ видях");
   // While the sheet is open, Esc closes it, `f` expands or shrinks it and `/`, `t`, `i` and `r` do nothing. While a card is
-  // dragged, Esc puts it back (`useDrag`). Hidden, it has no keys.
+  // dragged, Esc puts it back (`useDrag`). Hidden or covered, it has no keys.
   useShortcuts(
-    !shown
+    !shown || covered
       ? []
       : sheet
         ? [

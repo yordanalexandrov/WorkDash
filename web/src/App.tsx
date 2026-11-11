@@ -102,7 +102,12 @@ export function App() {
   useShortcuts(
     settings.open
       ? [{ matches: (event) => SLASH(event) || T(event) || I(event) || R(event) || F(event) || W(event), run: () => {} }]
-      : [
+      : workLogOpen
+        ? [
+            { matches: W, run: () => setWorkLogOpen(false) },
+            { matches: (event) => SLASH(event) || T(event) || I(event) || R(event) || F(event), run: () => {} },
+          ]
+        : [
           { matches: W, run: () => setWorkLogOpen(!workLogOpen) },
           { matches: T, run: () => switchView(view === "board" ? "table" : "board") },
           { matches: I, run: () => switchDashboard(place.dashboard === "prs" ? "issues" : "prs") },
@@ -171,6 +176,7 @@ export function App() {
             state={state}
             seen={seen}
             shown={!settings.open && place.dashboard === "prs"}
+            covered={workLogOpen}
             view={view}
             hues={hues}
             topSlot={topSlot}
@@ -195,6 +201,7 @@ export function App() {
             topSlot={topSlot}
             fx={fx}
             booted={booted}
+            covered={workLogOpen}
           />
         )}
       </div>
